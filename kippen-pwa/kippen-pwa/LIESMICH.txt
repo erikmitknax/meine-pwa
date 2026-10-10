@@ -1,0 +1,24 @@
+Kippen-Tracker als App (PWA)
+
+Inhalt:
+  index.html            die App
+  manifest.webmanifest  Name, Symbol, Vollbild
+  sw.js                 macht die App offline nutzbar
+  icons/                App-Symbole
+
+So kommt die App aufs Handy:
+1. Den Ordner (entpackt) auf einen Webspace mit https legen, z. B.:
+   - Netlify Drop: am PC https://app.netlify.com/drop öffnen und den Ordner "kippen-pwa" ins Fenster ziehen.
+   - oder GitHub Pages: neues Repository, die Dateien hochladen, unter Settings > Pages einschalten.
+2. Den Link auf dem Android-Handy in Chrome öffnen.
+3. Menü (drei Punkte) > "App installieren" bzw. "Zum Startbildschirm hinzufügen".
+   In der App gibt es unten unter "Daten & Einstellungen" auch einen Knopf "App installieren".
+
+Speichern:
+- Jeder Eintrag wird sofort automatisch auf dem Handy gespeichert, auch offline.
+- Beim ersten Start sind deine 309 Einträge (Stand 9.10.2026) schon drin.
+- Die Daten liegen nur auf diesem Handy. Mach ab und zu "Backup (JSON)" und leg die Datei z. B. in Google Drive.
+  Die App erinnert dich, wenn das letzte Backup älter als 14 Tage ist.
+- Neues Handy: App installieren, dann "Importieren ..." und die Backup-Datei wählen.
+
+Wichtig: Immer denselben Link benutzen. Unter einer anderen Adresse startet die App mit eigenem Speicher.
