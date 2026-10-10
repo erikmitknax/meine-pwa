@@ -11,6 +11,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon-192.png">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
+<script src="settings-theme.js"></script>
 <style>html{padding-top:env(safe-area-inset-top,0px)}body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style>
 </head>
 <body>
@@ -29,6 +30,7 @@
   --muted:#958E81;
   --gold:#C9A44C;
   --gold-soft:rgba(201,164,76,.14);
+  --on-accent:#0A0A09;
   --danger:#E07462;
   --display:'Barlow Condensed','Arial Narrow',sans-serif;
   --body:'Barlow',system-ui,-apple-system,sans-serif;
@@ -59,8 +61,8 @@ h2:first-child{margin-top:4px}
 
 /* buttons */
 .btn{border:1px solid var(--line);background:var(--surface-2);border-radius:10px;padding:10px 14px;min-height:44px;font-weight:600;font-size:15px}
-.btn:hover{border-color:#4a453c}
-.btn.gold{background:var(--gold);border-color:var(--gold);color:#0A0A09}
+.btn:hover{border-color:color-mix(in srgb,var(--line),var(--fg) 18%)}
+.btn.gold{background:var(--gold);border-color:var(--gold);color:var(--on-accent)}
 .btn.ghost{background:transparent}
 .btn.danger{color:var(--danger);border-color:rgba(224,116,98,.4);background:transparent}
 .btn.sm{min-height:36px;padding:6px 11px;font-size:14px}
@@ -79,7 +81,7 @@ h2:first-child{margin-top:4px}
 .field label,.lbl{font-size:12px;color:var(--muted);letter-spacing:.08em;text-transform:uppercase;font-weight:500}
 .in,select,textarea,input[type=date]{background:var(--surface-2);border:1px solid var(--line);border-radius:10px;padding:10px 12px;min-height:44px;font-size:16px;width:100%}
 textarea{min-height:84px;resize:vertical}
-.in::placeholder,textarea::placeholder{color:#5f5a51}
+.in::placeholder,textarea::placeholder{color:color-mix(in srgb,var(--muted) 65%,var(--bg))}
 .in:focus,select:focus,textarea:focus,input[type=date]:focus{border-color:var(--gold);outline:none}
 
 /* plan starter */
@@ -101,7 +103,7 @@ textarea{min-height:84px;resize:vertical}
 .ex-name:focus{border-color:var(--line);background:var(--surface-2);outline:none}
 .tools{display:flex;gap:4px;flex:none}
 .ic{width:38px;height:38px;border-radius:9px;border:1px solid var(--line);background:transparent;display:grid;place-items:center;color:var(--muted)}
-.ic:hover{color:var(--fg);border-color:#4a453c}
+.ic:hover{color:var(--fg);border-color:color-mix(in srgb,var(--line),var(--fg) 18%)}
 .ic svg{width:16px;height:16px}
 .ic:disabled{opacity:.3;cursor:default}
 .last{font-size:13px;color:var(--muted);margin:2px 8px 8px}
@@ -115,7 +117,7 @@ textarea{min-height:84px;resize:vertical}
 .set .in{text-align:center;font-variant-numeric:tabular-nums;font-size:18px;font-weight:600;padding:8px}
 .bw{display:grid;place-items:center;min-height:44px;border-radius:10px;border:1px dashed var(--line);color:var(--muted);font-size:13px}
 .bw.w{border-style:solid;border-color:var(--gold);color:var(--gold)}
-.cyc{min-height:44px;border-radius:10px;border:1px solid var(--line);background:var(--surface-2);font-weight:600;font-size:16px;color:#5f5a51}
+.cyc{min-height:44px;border-radius:10px;border:1px solid var(--line);background:var(--surface-2);font-weight:600;font-size:16px;color:color-mix(in srgb,var(--muted) 65%,var(--bg))}
 .cyc.on{color:var(--fg)}
 .ex-foot{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
 .addbox{margin-top:16px;background:var(--surface);border:1px dashed var(--line);border-radius:14px;padding:12px}
@@ -178,7 +180,7 @@ td:first-child{white-space:nowrap;color:var(--muted)}
 .confirm{display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:14px}
 
 /* tab bar */
-.tabs{position:fixed;left:0;right:0;bottom:0;background:rgba(10,10,9,.94);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom,0px);z-index:5}
+.tabs{position:fixed;left:0;right:0;bottom:0;background:color-mix(in srgb,var(--bg) 94%,transparent);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom,0px);z-index:5}
 .tabs-in{max-width:680px;margin:0 auto;display:grid;grid-template-columns:repeat(3,1fr)}
 .tab{background:none;border:0;padding:14px 2px 15px;font-family:var(--display);font-size:15px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);position:relative}
 .tab.on{color:var(--fg)}
@@ -193,18 +195,18 @@ td:first-child{white-space:nowrap;color:var(--muted)}
 .ex-sub .ic{width:36px;height:36px}
 /* rest timer */
 .ex{position:relative;overflow:hidden;transition:background-color .3s,border-color .3s}
-.ex.resting{background:#1C1810;border-color:rgba(201,164,76,.55)}
+.ex.resting{background:color-mix(in srgb,var(--gold) 8%,var(--surface));border-color:color-mix(in srgb,var(--gold) 55%,transparent)}
 .ex.resting::before{content:"";position:absolute;left:0;top:0;height:4px;width:calc(var(--p,1)*100%);background:var(--gold);transition:width .25s linear}
-.ex.rest-done{background:#33290F;border-color:var(--gold);animation:restPulse 1s ease-in-out 3}
-@keyframes restPulse{50%{background:#4A3B14}}
+.ex.rest-done{background:color-mix(in srgb,var(--gold) 22%,var(--bg));border-color:var(--gold);animation:restPulse 1s ease-in-out 3}
+@keyframes restPulse{50%{background:color-mix(in srgb,var(--gold) 36%,var(--bg))}}
 .tpill{flex:none;min-width:52px;height:36px;border-radius:999px;border:1px solid var(--line);background:transparent;color:var(--muted);font-weight:600;font-size:14px;font-variant-numeric:tabular-nums;padding:0 10px}
-.tpill.run{background:var(--gold);border-color:var(--gold);color:#0A0A09}
+.tpill.run{background:var(--gold);border-color:var(--gold);color:var(--on-accent)}
 .tedit{margin:4px 8px 10px;padding:10px 12px;border-radius:10px;background:var(--surface-2);border:1px solid var(--line);display:grid;grid-template-columns:minmax(0,1fr);gap:10px}
 .tval{font-family:var(--display);font-size:22px;min-width:3.2em;text-align:center}
 .restbar{position:fixed;left:50%;transform:translateX(-50%);width:min(648px,calc(100% - 32px));bottom:calc(58px + env(safe-area-inset-bottom,0px));z-index:6;display:flex;align-items:center;gap:12px;padding:10px 10px 10px 14px;border-radius:12px;border:1px solid var(--gold);color:var(--fg);overflow:hidden;
-  background:linear-gradient(90deg,#3E331A calc(var(--p,0)*100%),#16130D calc(var(--p,0)*100%))}
+  background:linear-gradient(90deg,color-mix(in srgb,var(--gold) 28%,var(--bg)) calc(var(--p,0)*100%),color-mix(in srgb,var(--gold) 7%,var(--bg)) calc(var(--p,0)*100%))}
 .restbar[hidden],.toast[hidden]{display:none}
-.restbar.done{background:var(--gold);color:#0A0A09}
+.restbar.done{background:var(--gold);color:var(--on-accent)}
 .rb-name{flex:1 1 auto;min-width:0;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .rb-time{font-family:var(--display);font-size:26px;font-weight:700;line-height:1}
 .rb-stop{border:1px solid currentColor;background:transparent;color:inherit;border-radius:8px;padding:6px 10px;font-weight:600;font-size:13px}
@@ -212,7 +214,7 @@ td:first-child{white-space:nowrap;color:var(--muted)}
 /* exercise hint */
 .info-btn{border-radius:50%;font-family:Georgia,'Times New Roman',serif;font-style:italic;font-weight:700;font-size:17px;line-height:1}
 .info-btn.has{border-color:var(--gold);color:var(--gold)}
-.info{margin:4px 8px 10px;padding:10px 12px;border-radius:10px;background:var(--gold-soft);border:1px solid rgba(201,164,76,.35);display:grid;grid-template-columns:minmax(0,1fr);gap:8px;min-width:0}
+.info{margin:4px 8px 10px;padding:10px 12px;border-radius:10px;background:var(--gold-soft);border:1px solid color-mix(in srgb,var(--gold) 35%,transparent);display:grid;grid-template-columns:minmax(0,1fr);gap:8px;min-width:0}
 .info p{margin:0;white-space:pre-wrap;font-size:15px}
 .info .link{justify-self:start;padding:0}
 .info textarea{min-height:70px;min-width:0}
@@ -237,15 +239,40 @@ button.draft-title{background:none;border:0;padding:0;text-align:left;display:bl
   .imp{grid-template-columns:1fr}
 }
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+
+/* settings: gear + page */
+.brand{display:flex;align-items:center;gap:10px}
+.brand-logo{display:inline-flex;color:var(--gold);line-height:0}
+.gear{position:fixed;z-index:7;top:calc(env(safe-area-inset-top,0px) + 10px);right:max(12px,calc((100vw - 680px)/2 + 12px));width:44px;height:44px;border-radius:50%;border:1px solid var(--line);background:color-mix(in srgb,var(--surface) 88%,transparent);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);color:var(--muted);display:grid;place-items:center;padding:0}
+.gear:hover,.gear.on{color:var(--gold);border-color:color-mix(in srgb,var(--gold) 55%,transparent)}
+.set-sec{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:14px;margin:0 0 14px}
+.set-sec h2{margin-top:0}
+.swatches{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+.sw{border:1px solid var(--line);background:var(--surface-2);border-radius:12px;padding:8px 6px 6px;display:grid;gap:6px;justify-items:center;min-width:0}
+.sw.on{border-color:var(--gold);box-shadow:0 0 0 1px var(--gold) inset}
+.sw-prev{width:100%;height:34px;border-radius:8px;border:2px solid;display:flex;align-items:center;justify-content:center;gap:5px}
+.sw-prev i{width:12px;height:12px;border-radius:50%;display:block}
+.sw-name{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+.colrows{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:12px}
+.colrow{display:flex;align-items:center;justify-content:space-between;gap:8px;border:1px solid var(--line);border-radius:10px;padding:6px 6px 6px 12px;background:var(--surface-2);font-size:14px}
+.colrow input[type=color]{width:40px;height:32px;border:0;padding:0;background:none;border-radius:6px}
+.logos{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+.lg{border:1px solid var(--line);background:var(--surface-2);border-radius:12px;min-height:64px;display:grid;place-items:center;gap:2px;padding:8px 4px;color:var(--gold);font-size:11px;position:relative;min-width:0}
+.lg small{color:var(--muted);font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+.lg.on{border-color:var(--gold);box-shadow:0 0 0 1px var(--gold) inset}
+.lg input{position:absolute;inset:0;opacity:0;cursor:pointer}
+.set-sec .lbl{display:block;margin:12px 0 6px}
+.set-sec .chips{display:flex;flex-wrap:wrap;gap:6px}
 </style>
 
 <div class="app">
   <header class="top">
-    <div class="brand">Trainings<b>buch</b></div>
+    <div class="brand"><span class="brand-logo" id="brandLogo" hidden></span><span>Trainings<b>buch</b></span></div>
     
   </header>
   <main id="view"><p class="empty">Lade deine Trainings …</p></main>
 </div>
+<button class="gear" id="gearBtn" data-act="tab" data-tab="settings" aria-label="Einstellungen"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3.2"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button>
 <nav class="tabs" aria-label="Bereiche"><div class="tabs-in" id="tabs"></div></nav>
 <datalist id="exlist"></datalist>
 <div id="restbar" class="restbar" hidden><span class="rb-name"></span><b class="rb-time num"></b><button class="rb-stop" data-act="stopRest">Stopp</button></div>
@@ -353,30 +380,38 @@ async function wake(){try{if(!wakeLock&&navigator.wakeLock)wakeLock=await naviga
 function unwake(){try{wakeLock&&wakeLock.release()}catch(e){}wakeLock=null}
 /* ---------- Android-App: Pausenende auch bei gesperrtem Handy (nur in der APK aktiv) ---------- */
 const LN=()=>{try{return (window.Capacitor&&Capacitor.isNativePlatform&&Capacitor.isNativePlatform()&&Capacitor.Plugins&&Capacitor.Plugins.LocalNotifications)||null}catch(e){return null}};
-let lnReady=false;
-async function lnSetup(ln){
-  if(lnReady)return true;
-  try{
-    let p=await ln.checkPermissions();
-    if(p.display!=='granted')p=await ln.requestPermissions();
-    if(p.display!=='granted'){toast('Benachrichtigungen sind aus. Erlaube sie in den Android-Einstellungen für die App.');return false}
-    await ln.createChannel({id:'pause3',name:'Pausentimer',description:'Meldet das Ende der Pause per Vibration',importance:4,visibility:1,vibration:true,sound:'silent.wav'});
-    lnReady=true;return true;
-  }catch(e){return false}
+const lnMade=new Set();
+const SETG=()=>window.TBSettings?TBSettings.get():{vib:'lang',snd:'still'};
+function signalNow(){const st=SETG();const pat=window.TBSettings?TBSettings.vibPattern(st.vib):[1200,150,1200,150,1200,150,1200];if(pat)buzz(pat);if(window.TBSettings&&st.snd!=='still')TBSettings.playSound(st.snd)}
+async function lnPerm(ln){let p=await ln.checkPermissions();if(p.display!=='granted')p=await ln.requestPermissions();if(p.display!=='granted'){toast('Benachrichtigungen sind aus. Erlaube sie in den Android-Einstellungen für die App.');return false}return true}
+async function lnEnsure(ln){
+  if(!await lnPerm(ln))return null;
+  const st=SETG(),id='tb-'+st.vib+'-'+(st.snd==='still'?'still':'ton')+'-';
+  if(!lnMade.has(id)){
+    const vn=((window.TBSettings&&TBSettings.VIBS.find(v=>v.id===st.vib))||{name:st.vib}).name;
+    const o={id,name:'Pausentimer: '+vn+(st.snd==='still'?', lautlos':', mit Ton'),description:'Meldet das Ende der Pause',importance:4,visibility:1,vibration:st.vib!=='aus'};
+    if(st.snd==='still')o.sound='silent.wav';
+    await ln.createChannel(o);lnMade.add(id);
+    if(!lnMade.has('_clean')){lnMade.add('_clean');['pause2','pause3'].forEach(x=>{try{ln.deleteChannel({id:x}).catch(()=>{})}catch(e){}})}
+  }
+  return id;
 }
-async function lnSchedule(endMs,name){
-  const ln=LN();if(!ln)return;
+async function lnSchedule(endMs,name,nid){
+  const ln=LN();if(!ln)return false;
   try{
-    if(!await lnSetup(ln))return;
-    await ln.cancel({notifications:[{id:1},{id:2},{id:3}]});
-    await ln.schedule({notifications:[{id:1,title:'Pause vorbei',body:name,channelId:'pause3',sound:'silent.wav',schedule:{at:new Date(endMs),allowWhileIdle:true}}]});
-  }catch(e){}
+    const ch=await lnEnsure(ln);if(!ch)return false;
+    const id=nid||1;
+    await ln.cancel({notifications:[{id}]});
+    const n={id,title:nid?'Test: Pause vorbei':'Pause vorbei',body:name,channelId:ch,schedule:{at:new Date(endMs),allowWhileIdle:true}};
+    if(SETG().snd==='still')n.sound='silent.wav';
+    await ln.schedule({notifications:[n]});return true;
+  }catch(e){return false}
 }
 function lnCancel(){const ln=LN();if(!ln)return;try{ln.cancel({notifications:[{id:1},{id:2},{id:3}]}).catch(()=>{});ln.removeAllDeliveredNotifications().catch(()=>{})}catch(e){}}
 function startRest(ei,si){
   if(!S.draft)return;const e=S.draft.exercises[ei];if(!e)return;
   const dur=restFor(e.name);if(!dur)return;
-  T={name:e.name,si,dur,end:Date.now()+dur*1000,done:false,buzzed:0};wake();buzz(30);lnSchedule(T.end,e.name);paintRest();
+  T={name:e.name,si,dur,end:Date.now()+dur*1000,done:false,buzzed:0};wake();if(window.TBSettings){TBSettings.audioUnlock();if(TBSettings.get().vib!=='aus')buzz(30)}else buzz(30);lnSchedule(T.end,e.name);paintRest();
 }
 function lastFilledSet(e){let k=0;(e.sets||[]).forEach((st,j)=>{if(String(st.r||'').trim()||String(st.w||'').trim())k=j});return k}
 function buzz(p){try{if(navigator.vibrate)return navigator.vibrate(p)}catch(e){}return false}
@@ -385,7 +420,7 @@ function tickRest(){
   if(!T)return;
   const left=T.end-Date.now();
   if(left<-20000){stopRest();return}
-  if(left<=0&&!T.done){T.done=true;T.doneAt=Date.now();buzz([1200,150,1200,150,1200,150,1200])}
+  if(left<=0&&!T.done){T.done=true;T.doneAt=Date.now();signalNow()}
   if(T.done&&Date.now()-T.doneAt>10000){stopRest();return}
   paintRest();
 }
@@ -799,6 +834,65 @@ function viewData(){
   ${window.DropboxBackup?DropboxBackup.html('btn'):''}`;
 }
 
+/* ---------- Einstellungen ---------- */
+function viewSettings(){
+  const TS=window.TBSettings;
+  if(!TS)return '<p class="empty">Einstellungen konnten nicht geladen werden. Öffne die App einmal mit Internet.</p>';
+  const st=TS.get(),c=TS.baseColors(),native=!!LN();
+  const sw=TS.THEMES.map(t=>`<button class="sw ${!st.colors&&st.theme===t.id?'on':''}" data-set="theme" data-v="${t.id}" aria-pressed="${!st.colors&&st.theme===t.id}"><span class="sw-prev" style="background:${t.bg};border-color:${t.surface}"><i style="background:${t.accent}"></i><i style="background:${t.fg}"></i></span><span class="sw-name">${esc(t.name)}</span></button>`).join('');
+  const cols=[['accent','Akzent'],['bg','Hintergrund'],['surface','Flächen'],['fg','Schrift']].map(([k,l])=>`<label class="colrow"><span>${l}</span><input type="color" data-col="${k}" value="${c[k]}" aria-label="${l}"></label>`).join('');
+  const logos=TS.LOGOS.map(l=>`<button class="lg ${st.logo===l.id?'on':''}" data-set="logo" data-v="${l.id}" aria-pressed="${st.logo===l.id}">${l.svg?TS.logoSvg(l.id,30):'<span style="font-size:20px;color:var(--muted)">–</span>'}<small>${esc(l.name)}</small></button>`).join('')
+    +`<label class="lg ${st.logo==='custom'?'on':''}">${st.logoData?`<img src="${st.logoData}" width="30" height="30" alt="" style="border-radius:7px;object-fit:cover">`:'<span style="font-size:22px">+</span>'}<small>Eigenes Bild</small><input type="file" accept="image/*" id="logoFile" aria-label="Eigenes Logo hochladen"></label>`;
+  const chip=(kind,list,curv)=>list.map(o=>`<button class="chip ${curv===o.id?'on':''}" data-set="${kind}" data-v="${o.id}" aria-pressed="${curv===o.id}">${esc(o.name)}</button>`).join('');
+  return `<div class="set-sec"><h2>Design</h2>
+    <p class="hint" style="margin-top:0">Wähle eine Vorlage und pass danach einzelne Farben an.</p>
+    <div class="swatches">${sw}</div>
+    <div class="colrows">${cols}</div>
+    <p class="hint">${st.colors?'Eigene Farben aktiv, Grundlage: '+esc((TS.THEMES.find(t=>t.id===st.theme)||{}).name||''):'Vorlage aktiv.'}</p>
+    <div class="row"><button class="btn sm" data-set="resetDesign">Design zurücksetzen</button></div>
+  </div>
+  <div class="set-sec"><h2>Logo</h2>
+    <div class="logos">${logos}</div>
+    <p class="hint">Das Logo erscheint oben in der App und im Browser-Tab. Das Symbol auf dem Startbildschirm kann die App nicht selbst ändern.</p>
+  </div>
+  <div class="set-sec"><h2>Signal am Pausenende</h2>
+    <span class="lbl">Vibration</span><div class="chips">${chip('vib',TS.VIBS,st.vib)}</div>
+    <span class="lbl">Ton</span><div class="chips">${chip('snd',TS.SOUNDS,st.snd)}</div>
+    <p class="hint">${native?'Bei gesperrtem Handy kommt eine Benachrichtigung mit dem gewählten Vibrationsmuster. Ist ein Ton gewählt, spielt Android dann seinen Benachrichtigungston, den gewählten Ton gibt es nur bei offener App.':'Ton und Vibration kommen, solange die App offen ist und der Bildschirm an ist. Bei gesperrtem Handy hilft nur die Android-App.'}</p>
+    <div class="row"><button class="btn" data-set="test">Signal testen</button>${native?'<button class="btn" data-set="testLock">Test in 10 s</button>':''}</div>
+    ${native?'<p class="hint">„Test in 10 s“: tippen, Handy sperren, warten.</p>':''}
+  </div>
+  <p class="hint" style="text-align:center">Weitere Einstellungen kommen nach und nach hierher.</p>`;
+}
+function settingsRerender(){if(S.tab==='settings'){const y=window.scrollY;render();window.scrollTo(0,y)}}
+document.addEventListener('click',ev=>{
+  const b=ev.target.closest&&ev.target.closest('[data-set]');if(!b||!window.TBSettings)return;
+  const TS=TBSettings,k=b.dataset.set,v=b.dataset.v;
+  if(k==='theme'){TS.set({theme:v,colors:null});settingsRerender()}
+  else if(k==='resetDesign'){TS.reset(['theme','colors']);settingsRerender();toast('Design zurückgesetzt')}
+  else if(k==='logo'){TS.set({logo:v});settingsRerender()}
+  else if(k==='vib'){TS.set({vib:v});settingsRerender();const pat=TS.vibPattern(v);if(pat)buzz(pat)}
+  else if(k==='snd'){TS.set({snd:v});settingsRerender();TS.playSound(v)}
+  else if(k==='test'){TS.audioUnlock();signalNow()}
+  else if(k==='testLock'){lnSchedule(Date.now()+10000,'Testsignal',2).then(ok=>toast(ok?'Kommt in 10 Sekunden. Handy jetzt sperren.':'Test nicht möglich. Sind Benachrichtigungen erlaubt?'))}
+});
+document.addEventListener('input',ev=>{
+  const t=ev.target;if(!t.dataset||!t.dataset.col||!window.TBSettings)return;
+  const TS=TBSettings,cols=Object.assign({},TS.baseColors(),TS.get().colors||{});cols[t.dataset.col]=t.value.toUpperCase();
+  TS.set({colors:cols});
+});
+document.addEventListener('change',ev=>{
+  const t=ev.target;if(!window.TBSettings)return;
+  if(t.dataset&&t.dataset.col){settingsRerender();return}
+  if(t.id==='logoFile'&&t.files&&t.files[0]){
+    TBSettings.readLogoFile(t.files[0],(err,data)=>{
+      if(err){toast(err.message);return}
+      if(!TBSettings.set({logo:'custom',logoData:data}))toast('Bild zu groß zum Speichern.');
+      settingsRerender();
+    });
+  }
+});
+
 /* ---------- render ---------- */
 function renderTabs(){
   $('#tabs').innerHTML=TABS.map(([k,l])=>`<button class="tab ${(S.tab===k||(k==='log'&&['plans','data'].includes(S.tab)))?'on':''}" data-act="tab" data-tab="${k}" ${S.tab===k?'aria-current="page"':''}>${esc(l)}${k==='log'&&S.draft&&!['log','plans','data'].includes(S.tab)?'<span class="dot" aria-label="offen"></span>':''}</button>`).join('');
@@ -812,9 +906,10 @@ function renderDatalist(){$('#exlist').innerHTML=catalog(null).map(n=>`<option v
 function render(){
   LS.set('tb_tab',S.tab);
   renderTabs();renderSync();renderDatalist();
-  const tabOn=S.tab;const v={log:viewLog,hist:viewHist,prog:viewProg,plans:viewPlans,data:viewData}[S.tab]||viewLog;
+  const tabOn=S.tab;const v={log:viewLog,hist:viewHist,prog:viewProg,plans:viewPlans,data:viewData,settings:viewSettings}[S.tab]||viewLog;
+  const gb=$('#gearBtn');if(gb){gb.classList.toggle('on',S.tab==='settings');if(S.tab==='settings')gb.setAttribute('aria-current','page');else gb.removeAttribute('aria-current')}
   setTimeout(paintRest,0);
-  $('#view').innerHTML=(S.tab==='plans'||S.tab==='data'?'<button class="link back" data-act="tab" data-tab="log">‹ Zurück zum Training</button>':'')+v();
+  $('#view').innerHTML=(S.tab==='plans'||S.tab==='data'||S.tab==='settings'?'<button class="link back" data-act="tab" data-tab="log">‹ Zurück zum Training</button>':'')+v();
 }
 function softRender(){
   // keep focus while typing in an open training or plan form

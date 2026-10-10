@@ -64,10 +64,25 @@ jp = cands[0]
 j = open(jp, encoding='utf-8').read()
 needle = 'notificationChannel.enableVibration(channel.getBool(CHANNEL_VIBRATE));'
 assert needle in j, 'Vibrations-Zeile im Plugin nicht gefunden'
+# Muster je Kanal-ID (tb-<muster>-<ton>-), passend zu settings-theme.js
+PATTERNS = {
+    'kurz':  [600],
+    'lang':  [1200, 150, 1200, 150, 1200, 150, 1200],
+    'dauer': [6000],
+    'puls':  [250, 150] * 7 + [250],
+    'herz':  [180, 120, 500, 600, 180, 120, 500, 600, 180, 120, 500],
+    'sos':   [150, 100, 150, 100, 150, 300, 500, 100, 500, 100, 500, 300, 150, 100, 150, 100, 150],
+}
+def jarr(a):
+    return 'new long[]{0, ' + ', '.join(str(x) for x in a) + '}'
+java = ('if (channel.getBool(CHANNEL_VIBRATE)) { String cidv = channel.getString(CHANNEL_ID); long[] pat = %s; ' % jarr(PATTERNS['lang'])
+        + 'if (cidv != null) { '
+        + ' else '.join('if (cidv.contains("-%s-")) pat = %s;' % (k, jarr(v)) for k, v in PATTERNS.items())
+        + ' } notificationChannel.setVibrationPattern(pat); }')
 if 'setVibrationPattern' not in j:
-    j = j.replace(needle, needle + '\n            if (channel.getBool(CHANNEL_VIBRATE)) { notificationChannel.setVibrationPattern(new long[]{0, 1200, 150, 1200, 150, 1200, 150, 1200}); }', 1)
+    j = j.replace(needle, needle + '\n            ' + java, 1)
     open(jp, 'w', encoding='utf-8').write(j)
-    print('Vibrationsmuster im Plugin gesetzt')
+    print('Vibrationsmuster je Kanal im Plugin gesetzt')
 
 # 6) Festen Signaturschluessel direkt in der Gradle-Konfiguration eintragen
 ks = os.path.join(RES_SRC, 'debug.keystore').replace('\\', '/')

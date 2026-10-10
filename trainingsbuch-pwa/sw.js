@@ -1,6 +1,6 @@
 // Version bei jedem Update hochzählen
-const VERSION = 'tb-v5';
-const SHELL = ['./', './index.html', './manifest.webmanifest', './dropbox-backup.js', './icon-192.png', './icon-512.png', './apple-touch-icon.png'];
+const VERSION = 'tb-v6';
+const SHELL = ['./', './index.html', './manifest.webmanifest', './dropbox-backup.js', './settings-theme.js', './icon-192.png', './icon-512.png', './apple-touch-icon.png'];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(VERSION).then(c => c.addAll(SHELL)).then(() => self.skipWaiting()));
