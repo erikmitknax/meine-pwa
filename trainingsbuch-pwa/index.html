@@ -354,14 +354,19 @@ function unwake(){try{wakeLock&&wakeLock.release()}catch(e){}wakeLock=null}
 function startRest(ei,si){
   if(!S.draft)return;const e=S.draft.exercises[ei];if(!e)return;
   const dur=restFor(e.name);if(!dur)return;
-  if(T&&!T.done&&T.name===e.name&&T.si===si)return;
-  T={name:e.name,si,dur,end:Date.now()+dur*1000,done:false};wake();paintRest();
+  T={name:e.name,si,dur,end:Date.now()+dur*1000,done:false,buzzed:0};wake();buzz(30);paintRest();
 }
+function lastFilledSet(e){let k=0;(e.sets||[]).forEach((st,j)=>{if(String(st.r||'').trim()||String(st.w||'').trim())k=j});return k}
+function buzz(p){try{if(navigator.vibrate)return navigator.vibrate(p)}catch(e){}return false}
 function stopRest(){T=null;unwake();paintRest()}
 function tickRest(){
   if(!T)return;
   const left=T.end-Date.now();
-  if(left<=0&&!T.done){T.done=true;T.doneAt=Date.now();try{if(navigator.vibrate)navigator.vibrate([400,150,400,150,400])}catch(e){}}
+  if(left<-20000){stopRest();return}
+  if(left<=0&&!T.done){T.done=true;T.doneAt=Date.now();T.buzzed=1;buzz([500,200,500,200,500])}
+  if(T.done){const since=Date.now()-T.doneAt;
+    if(T.buzzed===1&&since>3000){T.buzzed=2;buzz([500,200,500,200,500])}
+    else if(T.buzzed===2&&since>6000){T.buzzed=3;buzz([500,200,500,200,500])}}
   if(T.done&&Date.now()-T.doneAt>9000){stopRest();return}
   paintRest();
 }
@@ -372,6 +377,7 @@ function paintRest(){
     c.classList.remove('resting','rest-done');
     const e=d&&d.exercises[+c.dataset.ei];const pill=c.querySelector('.tpill');
     if(!e||!pill)return;
+    const sb=c.querySelector('.rest-start');if(sb)sb.textContent=(T&&T.name===e.name&&!T.done)?'■ Pause stoppen':'▶ Pause starten';
     if(T&&T.name===e.name&&S.tab==='log'){
       const left=Math.max(0,Math.ceil((T.end-Date.now())/1000));
       c.classList.add(T.done?'rest-done':'resting');c.style.setProperty('--p',T.done?0:left/T.dur);
@@ -386,10 +392,6 @@ function paintRest(){
 }
 setInterval(tickRest,250);
 document.addEventListener('visibilitychange',()=>{if(!document.hidden){tickRest();if(T&&!T.done)wake()}});
-document.addEventListener('focusin',ev=>{
-  const t=ev.target;if(!S.draft||!t.matches||!t.matches('.set input[data-f]'))return;
-  startRest(+t.dataset.ei,+t.dataset.si);
-});
 
 /* ---------- derived data ---------- */
 function sessionsDesc(){return [...S.sessions].map(([id,s])=>Object.assign({id},s)).sort((a,b)=>a.date<b.date?1:a.date>b.date?-1:(b.updatedAt||0)-(a.updatedAt||0))}
@@ -530,7 +532,7 @@ function exCard(e,i,d){
       <span class="lbl">Pause nach jedem Satz</span>
       <div class="chips">${[0,45,60,90,120,180].map(v=>`<button class="chip ${restFor(e.name)===v?'on':''}" data-act="restSet" data-v="${v}" data-ei="${i}">${esc(fmtSec(v))}</button>`).join('')}</div>
       <div class="row"><button class="btn sm" data-act="restStep" data-v="-15" data-ei="${i}">− 15 s</button><b class="num tval">${esc(fmtSec(restFor(e.name)))}</b><button class="btn sm" data-act="restStep" data-v="15" data-ei="${i}">+ 15 s</button><span class="grow"></span><button class="link" data-act="timerClose">Fertig</button></div>
-      <p class="hint" style="margin:0">Startet, sobald du in ein Feld dieser Übung tippst.${S.vibOK===false?' Vibration ist hier gerade nicht verfügbar, die Karte leuchtet dann nur gold auf.':''}</p>
+      <p class="hint" style="margin:0">Startet nur, wenn du auf „Pause starten“ tippst.${S.vibOK===false?' Vibration ist hier gerade nicht verfügbar, die Karte leuchtet dann nur gold auf.':''}</p>
     </div>`:''}
     ${infoOpen?((info&&!S.infoEdit)?`<div class="info"><p>${esc(info)}</p><button class="link" data-act="infoEditOn">Bearbeiten</button></div>`
       :`<div class="info"><textarea id="infoText" placeholder="z. B. Sitz 5, Lehne Loch 3, langsam ablassen …">${esc(info)}</textarea><div class="row"><button class="btn sm gold" data-act="infoSave" data-ei="${i}">Hinweis speichern</button><button class="btn sm ghost" data-act="infoClose">Schließen</button></div></div>`):''}
@@ -546,6 +548,7 @@ function exCard(e,i,d){
     </div>`:''}
     <div class="sets">${rows}</div>
     <div class="ex-foot">
+      <button class="btn sm gold rest-start" data-act="restStart" data-ei="${i}">${(T&&T.name===e.name&&!T.done)?'■ Pause stoppen':'▶ Pause starten'}</button>
       <button class="btn sm ghost" data-act="addSet" data-ei="${i}">+ Satz</button>
       ${e.sets.length>1?`<button class="btn sm ghost" data-act="popSet" data-ei="${i}">− Satz</button>`:''}
     </div>
@@ -814,6 +817,10 @@ document.addEventListener('click',async ev=>{
     case 'startUnit':startDraft(b.dataset.unit,null);break;
     case 'addEx':{const i=$('#addEx');addExToDraft(i&&i.value);break}
     case 'addExName':addExToDraft(b.dataset.name);break;
+    case 'restStart':{const e=d&&d.exercises[ei];if(!e)break;
+      if(T&&T.name===e.name&&!T.done){stopRest();break}
+      if(!restFor(e.name)){toast('Pause ist auf „Aus“. Stell oben beim Zeitfeld eine Zeit ein.');break}
+      startRest(ei,lastFilledSet(e));break}
     case 'addSet':d.exercises[ei].sets.push({w:'',r:''});persistDraft();render();break;
     case 'timerEdit':S.timerOpen=S.timerOpen===ei?null:ei;S.infoOpen=null;S.exMenu=null;render();break;
     case 'timerClose':S.timerOpen=null;render();break;
@@ -831,7 +838,7 @@ document.addEventListener('click',async ev=>{
     case 'showNote':S.showNote=true;render();{const t=$('#dNote');if(t)t.focus()}break;
     case 'openSess':S.openSess=S.openSess===b.dataset.id?null:b.dataset.id;S.confirm=null;render();break;
     case 'showTbl':S.showTbl=true;render();break;
-    case 'cyc':{const e=d.exercises[ei];startRest(ei,si);const vals=['',...weightKinds(e.name).text];const cur=vals.indexOf(e.sets[si].w);e.sets[si].w=vals[(cur+1)%vals.length];persistDraft();
+    case 'cyc':{const e=d.exercises[ei];const vals=['',...weightKinds(e.name).text];const cur=vals.indexOf(e.sets[si].w);e.sets[si].w=vals[(cur+1)%vals.length];persistDraft();
       b.textContent=e.sets[si].w||'wählen';b.classList.toggle('on',!!e.sets[si].w);break}
     case 'flag':{const e=d.exercises[ei];e[b.dataset.k]=!e[b.dataset.k];persistDraft();render();break}
     case 'copyW':{const e=d.exercises[ei];const last=lastFor(e.name,d.id,d.date);if(!last)break;

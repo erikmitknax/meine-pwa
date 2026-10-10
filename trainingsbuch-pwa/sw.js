@@ -1,5 +1,5 @@
 // Version bei jedem Update hochzählen
-const VERSION = 'tb-v2';
+const VERSION = 'tb-v3';
 const SHELL = ['./', './index.html', './manifest.webmanifest', './dropbox-backup.js', './icon-192.png', './icon-512.png', './apple-touch-icon.png'];
 
 self.addEventListener('install', e => {
