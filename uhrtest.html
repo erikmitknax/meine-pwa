@@ -1,0 +1,14 @@
+<!doctype html>
+<html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Uhr-Timer-Test</title>
+<style>body{font:18px system-ui,sans-serif;margin:0;padding:20px;background:#111;color:#eee}a{display:block;margin:12px 0;padding:18px;font-size:18px;border-radius:12px;border:1px solid #666;background:#222;color:#fff;text-decoration:none}small{display:block;color:#aaa;font-size:14px;margin-top:4px}</style></head>
+<body>
+<h1>Uhr-Timer-Test</h1>
+<p>Tippe nacheinander auf die Varianten und merke dir, welche funktioniert (die Uhr-App öffnet sich mit einem laufenden 60-Sekunden-Timer).</p>
+<a href="intent:#Intent;action=android.intent.action.SET_TIMER;i.android.intent.extra.alarm.LENGTH=60;S.android.intent.extra.alarm.MESSAGE=Pause;end">Variante 1<small>Standard, Uhr-App zeigt den Timer</small></a>
+<a href="intent:#Intent;action=android.intent.action.SET_TIMER;package=com.google.android.deskclock;i.android.intent.extra.alarm.LENGTH=60;S.android.intent.extra.alarm.MESSAGE=Pause;end">Variante 2<small>mit Google-Uhr direkt angesprochen</small></a>
+<a href="intent:#Intent;action=android.intent.action.SET_TIMER;i.android.intent.extra.alarm.LENGTH=60;S.android.intent.extra.alarm.MESSAGE=Pause;B.android.intent.extra.alarm.SKIP_UI=true;end">Variante 3<small>ohne Uhr-App zu öffnen (braucht Sonderrecht, klappt oft nicht)</small></a>
+<a href="intent:#Intent;action=android.intent.action.SHOW_TIMERS;end">Variante 4<small>öffnet nur die Timer-Seite der Uhr</small></a>
+<p id="ua"></p>
+<script>document.getElementById('ua').textContent=navigator.userAgent</script>
+</body></html>
