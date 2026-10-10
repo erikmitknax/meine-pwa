@@ -251,6 +251,7 @@ button.draft-title{background:none;border:0;padding:0;text-align:left;display:bl
 <div id="restbar" class="restbar" hidden><span class="rb-name"></span><b class="rb-time num"></b><button class="rb-stop" data-act="stopRest">Stopp</button></div>
 <div id="toast" class="toast" hidden></div>
 
+<script src="dropbox-backup.js"></script>
 <script>
 (function(){
 const UNITS=['Bauch','Unterer Rücken','Pull','Push','Beine'];
@@ -772,7 +773,8 @@ function viewData(){
   <h2>Exportieren</h2>
   <p class="hint">${total} Trainings gespeichert${S.backend==='db'?', synchronisiert über alle Geräte, auf denen du dieses Trainingsbuch öffnest':'. Sie liegen nur auf diesem Gerät, exportiere ab und zu ein Backup'}.</p>
   <div class="row"><button class="btn" data-act="export">Alles als CSV exportieren</button></div>
-  ${S.exportText!=null?`<div style="margin-top:12px"><p class="hint">Download ist hier nicht möglich. Kopier den Text und speichere ihn als .csv:</p><textarea id="expText" readonly style="min-height:180px;font-size:13px">${esc(S.exportText)}</textarea><div class="row" style="margin-top:8px"><button class="btn sm" data-act="copyExport">Kopieren</button></div></div>`:''}`;
+  ${S.exportText!=null?`<div style="margin-top:12px"><p class="hint">Download ist hier nicht möglich. Kopier den Text und speichere ihn als .csv:</p><textarea id="expText" readonly style="min-height:180px;font-size:13px">${esc(S.exportText)}</textarea><div class="row" style="margin-top:8px"><button class="btn sm" data-act="copyExport">Kopieren</button></div></div>`:''}
+  ${window.DropboxBackup?DropboxBackup.html('btn'):''}`;
 }
 
 /* ---------- render ---------- */
@@ -899,6 +901,13 @@ document.addEventListener('keydown',ev=>{
 });
 
 render();
+function dbxFiles(){
+  return [
+    {name:'trainingsbuch.csv',text:'\ufeff'+buildCSV()},
+    {name:'trainingsbuch-komplett.json',text:JSON.stringify({app:'trainingsbuch',version:1,sessions:Object.fromEntries(S.sessions),plans:Object.fromEntries(S.plans),exinfo:S.exInfo,rest:S.rest},null,2)}
+  ];
+}
+if(window.DropboxBackup)DropboxBackup.init({app:'trainingsbuch',files:dbxFiles,hasData:()=>S.loaded.s&&S.sessions.size>0,onUpdate:()=>{if(S.tab==='data'&&S.backend!=='loading')render()}});
 initStore();
 })();
 </script>

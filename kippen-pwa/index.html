@@ -204,12 +204,14 @@ body { padding-bottom: env(safe-area-inset-bottom); }
       <span class="sub" id="priceHint" style="margin:0 0 6px"></span>
     </div>
     <label><input type="checkbox" id="optToday"> Tage bis heute mitzählen (sonst bis zum letzten Eintrag)</label>
+    <div id="dbxMount"></div>
   </div>
 </div>
 <div id="modal" hidden><div class="mbox"><p id="mmsg"></p><div class="mbtns"><button id="mno">Abbrechen</button><button class="primary" id="myes">OK</button></div></div></div>
 <div id="tip"></div>
 <div id="toast"></div>
 
+<script src="dropbox-backup.js"></script>
 <script>
 (function () {
   'use strict';
@@ -856,6 +858,22 @@ body { padding-bottom: env(safe-area-inset-bottom); }
   document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'hidden') lsWrite(LS_ENT, state.entries); });
   /* anderer Tab hat geändert */
   window.addEventListener('storage', function (e) { if (e.key === LS_ENT) { var o = lsRead(LS_ENT); state.entries = o && typeof o === 'object' ? o : {}; render(); } });
+
+  /* Dropbox-Backup */
+  function dbxFiles() {
+    var days = allDays();
+    return [
+      { name: 'kippen.csv', text: '\ufeffdatum,kippen\n' + days.map(function (d) { return d.date + ',' + d.n; }).join('\n') + '\n' },
+      { name: 'kippen-komplett.json', text: JSON.stringify({ app: 'kippen-tracker', version: 1, price: state.price, entries: state.entries }, null, 2) }
+    ];
+  }
+  if (window.DropboxBackup) {
+    DropboxBackup.init({
+      app: 'kippen', files: dbxFiles,
+      hasData: function () { return Object.keys(state.entries).length > 0; },
+      onUpdate: function () { $('dbxMount').innerHTML = DropboxBackup.html(); }
+    });
+  }
 
   /* Installieren + Offline */
   var installEvt = null;

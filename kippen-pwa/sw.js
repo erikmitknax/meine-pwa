@@ -1,6 +1,6 @@
 /* Kippen-Tracker Service Worker: macht die App offline nutzbar. */
-const CACHE = 'kippen-v1';
-const FILES = ['./', './index.html', './manifest.webmanifest', './icons/icon-192.png', './icons/icon-512.png', './icons/icon-maskable-512.png'];
+const CACHE = 'kippen-v2';
+const FILES = ['./', './index.html', './manifest.webmanifest', './dropbox-backup.js', './icons/icon-192.png', './icons/icon-512.png', './icons/icon-maskable-512.png'];
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(FILES)).then(() => self.skipWaiting()));
 });
