@@ -1,0 +1,12 @@
+{
+  "appId": "io.github.erikmitknax.trainingsbuch",
+  "appName": "Trainingsbuch",
+  "webDir": "www",
+  "backgroundColor": "#0A0A09",
+  "server": {
+    "url": "https://erikmitknax.github.io/meine-pwa/trainingsbuch-pwa/",
+    "androidScheme": "https",
+    "errorPath": "offline.html",
+    "allowNavigation": ["erikmitknax.github.io", "www.dropbox.com", "*.dropbox.com", "api.dropboxapi.com", "content.dropboxapi.com"]
+  }
+}

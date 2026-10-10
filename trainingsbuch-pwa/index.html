@@ -351,14 +351,37 @@ function setRest(name,sec){
 }
 async function wake(){try{if(!wakeLock&&navigator.wakeLock)wakeLock=await navigator.wakeLock.request('screen')}catch(e){wakeLock=null}}
 function unwake(){try{wakeLock&&wakeLock.release()}catch(e){}wakeLock=null}
+/* ---------- Android-App: Pausenende auch bei gesperrtem Handy (nur in der APK aktiv) ---------- */
+const LN=()=>{try{return (window.Capacitor&&Capacitor.isNativePlatform&&Capacitor.isNativePlatform()&&Capacitor.Plugins&&Capacitor.Plugins.LocalNotifications)||null}catch(e){return null}};
+let lnReady=false;
+async function lnSetup(ln){
+  if(lnReady)return true;
+  try{
+    let p=await ln.checkPermissions();
+    if(p.display!=='granted')p=await ln.requestPermissions();
+    if(p.display!=='granted'){toast('Benachrichtigungen sind aus. Erlaube sie in den Android-Einstellungen für die App.');return false}
+    await ln.createChannel({id:'pause2',name:'Pausentimer',description:'Meldet das Ende der Pause per Vibration',importance:4,visibility:1,vibration:true,sound:'silent.wav'});
+    lnReady=true;return true;
+  }catch(e){return false}
+}
+async function lnSchedule(endMs,name){
+  const ln=LN();if(!ln)return;
+  try{
+    if(!await lnSetup(ln))return;
+    await ln.cancel({notifications:[{id:1},{id:2},{id:3}]});
+    const mk=(id,off)=>({id,title:'Pause vorbei',body:name,channelId:'pause2',sound:'silent.wav',schedule:{at:new Date(endMs+off),allowWhileIdle:true}});
+    await ln.schedule({notifications:[mk(1,0),mk(2,2500),mk(3,5000)]});
+  }catch(e){}
+}
+function lnCancel(){const ln=LN();if(!ln)return;try{ln.cancel({notifications:[{id:1},{id:2},{id:3}]}).catch(()=>{});ln.removeAllDeliveredNotifications().catch(()=>{})}catch(e){}}
 function startRest(ei,si){
   if(!S.draft)return;const e=S.draft.exercises[ei];if(!e)return;
   const dur=restFor(e.name);if(!dur)return;
-  T={name:e.name,si,dur,end:Date.now()+dur*1000,done:false,buzzed:0};wake();buzz(30);paintRest();
+  T={name:e.name,si,dur,end:Date.now()+dur*1000,done:false,buzzed:0};wake();buzz(30);lnSchedule(T.end,e.name);paintRest();
 }
 function lastFilledSet(e){let k=0;(e.sets||[]).forEach((st,j)=>{if(String(st.r||'').trim()||String(st.w||'').trim())k=j});return k}
 function buzz(p){try{if(navigator.vibrate)return navigator.vibrate(p)}catch(e){}return false}
-function stopRest(){T=null;unwake();paintRest()}
+function stopRest(){T=null;unwake();lnCancel();paintRest()}
 function tickRest(){
   if(!T)return;
   const left=T.end-Date.now();
@@ -456,7 +479,7 @@ async function commitDraft(){
   const doc={date:d.date,unit:d.unit,note:d.note.trim(),exercises,updatedAt:Date.now()};
   S.busy=true;
   try{await putDoc('sessions',id,doc)}catch(e){S.busy=false;toast('Nicht gespeichert: '+errMsg(e));return}
-  S.busy=false;S.draft=null;T=null;unwake();persistDraft();S.tab='hist';S.histFilter='Alle';S.openSess=id;toast('Training gespeichert');render();window.scrollTo(0,0);
+  S.busy=false;S.draft=null;T=null;unwake();lnCancel();persistDraft();S.tab='hist';S.histFilter='Alle';S.openSess=id;toast('Training gespeichert');render();window.scrollTo(0,0);
 }
 function addExToDraft(name){
   name=String(name||'').trim();if(!name||!S.draft)return;
@@ -848,7 +871,7 @@ document.addEventListener('click',async ev=>{
     case 'delExYes':d.exercises.splice(ei,1);S.confirm=null;S.exMenu=null;S.infoOpen=null;persistDraft();render();break;
     case 'save':await commitDraft();break;
     case 'discard':S.confirm='discard';render();break;
-    case 'discardYes':{const wasEdit=d&&d.id;S.draft=null;T=null;unwake();S.confirm=null;persistDraft();if(wasEdit)S.tab='hist';render();break}
+    case 'discardYes':{const wasEdit=d&&d.id;S.draft=null;T=null;unwake();lnCancel();S.confirm=null;persistDraft();if(wasEdit)S.tab='hist';render();break}
     case 'cancelConfirm':S.confirm=null;render();break;
     case 'histFilter':S.histFilter=b.dataset.unit;render();break;
     case 'edit':if(S.draft&&S.draft.id!==b.dataset.id&&(S.draft.exercises.length||S.draft.note)){S.confirm='edit:'+b.dataset.id;render();break}editSession(b.dataset.id);break;
