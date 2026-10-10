@@ -360,7 +360,7 @@ async function lnSetup(ln){
     let p=await ln.checkPermissions();
     if(p.display!=='granted')p=await ln.requestPermissions();
     if(p.display!=='granted'){toast('Benachrichtigungen sind aus. Erlaube sie in den Android-Einstellungen für die App.');return false}
-    await ln.createChannel({id:'pause2',name:'Pausentimer',description:'Meldet das Ende der Pause per Vibration',importance:4,visibility:1,vibration:true,sound:'silent.wav'});
+    await ln.createChannel({id:'pause3',name:'Pausentimer',description:'Meldet das Ende der Pause per Vibration',importance:4,visibility:1,vibration:true,sound:'silent.wav'});
     lnReady=true;return true;
   }catch(e){return false}
 }
@@ -369,8 +369,7 @@ async function lnSchedule(endMs,name){
   try{
     if(!await lnSetup(ln))return;
     await ln.cancel({notifications:[{id:1},{id:2},{id:3}]});
-    const mk=(id,off)=>({id,title:'Pause vorbei',body:name,channelId:'pause2',sound:'silent.wav',schedule:{at:new Date(endMs+off),allowWhileIdle:true}});
-    await ln.schedule({notifications:[mk(1,0),mk(2,2500),mk(3,5000)]});
+    await ln.schedule({notifications:[{id:1,title:'Pause vorbei',body:name,channelId:'pause3',sound:'silent.wav',schedule:{at:new Date(endMs),allowWhileIdle:true}}]});
   }catch(e){}
 }
 function lnCancel(){const ln=LN();if(!ln)return;try{ln.cancel({notifications:[{id:1},{id:2},{id:3}]}).catch(()=>{});ln.removeAllDeliveredNotifications().catch(()=>{})}catch(e){}}
@@ -386,11 +385,8 @@ function tickRest(){
   if(!T)return;
   const left=T.end-Date.now();
   if(left<-20000){stopRest();return}
-  if(left<=0&&!T.done){T.done=true;T.doneAt=Date.now();T.buzzed=1;buzz([500,200,500,200,500])}
-  if(T.done){const since=Date.now()-T.doneAt;
-    if(T.buzzed===1&&since>3000){T.buzzed=2;buzz([500,200,500,200,500])}
-    else if(T.buzzed===2&&since>6000){T.buzzed=3;buzz([500,200,500,200,500])}}
-  if(T.done&&Date.now()-T.doneAt>9000){stopRest();return}
+  if(left<=0&&!T.done){T.done=true;T.doneAt=Date.now();buzz([1200,150,1200,150,1200,150,1200])}
+  if(T.done&&Date.now()-T.doneAt>10000){stopRest();return}
   paintRest();
 }
 function paintRest(){

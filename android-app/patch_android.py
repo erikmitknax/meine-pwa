@@ -56,4 +56,17 @@ try:
 except Exception as e:  # noqa
     print('Icon-Anpassung uebersprungen:', e, file=sys.stderr)
 
+# 5) Langes, kraeftiges Vibrationsmuster fuer den Benachrichtigungskanal (das Plugin kennt nur an/aus)
+import glob
+cands = glob.glob(os.path.join(ROOT, 'node_modules', '@capacitor', 'local-notifications', 'android', '**', 'NotificationChannelManager.java'), recursive=True)
+assert cands, 'NotificationChannelManager.java nicht gefunden'
+jp = cands[0]
+j = open(jp, encoding='utf-8').read()
+needle = 'notificationChannel.enableVibration(channel.getBool(CHANNEL_VIBRATE));'
+assert needle in j, 'Vibrations-Zeile im Plugin nicht gefunden'
+if 'setVibrationPattern' not in j:
+    j = j.replace(needle, needle + '\n            if (channel.getBool(CHANNEL_VIBRATE)) { notificationChannel.setVibrationPattern(new long[]{0, 1200, 150, 1200, 150, 1200, 150, 1200}); }', 1)
+    open(jp, 'w', encoding='utf-8').write(j)
+    print('Vibrationsmuster im Plugin gesetzt')
+
 print('Android-Projekt angepasst, Build-Nummer', run)
