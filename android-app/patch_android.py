@@ -69,4 +69,23 @@ if 'setVibrationPattern' not in j:
     open(jp, 'w', encoding='utf-8').write(j)
     print('Vibrationsmuster im Plugin gesetzt')
 
+# 6) Festen Signaturschluessel direkt in der Gradle-Konfiguration eintragen
+ks = os.path.join(RES_SRC, 'debug.keystore').replace('\\', '/')
+g = open(bg, encoding='utf-8').read()
+block = (
+    "    signingConfigs {\n"
+    "        debug {\n"
+    "            storeFile file('%s')\n"
+    "            storePassword 'android'\n"
+    "            keyAlias 'androiddebugkey'\n"
+    "            keyPassword 'android'\n"
+    "        }\n"
+    "    }\n" % ks
+)
+assert re.search(r'^android\s*\{', g, re.M), 'android-Block nicht gefunden'
+if 'signingConfigs' not in g:
+    g = re.sub(r'^(android\s*\{\s*\n)', lambda m: m.group(1) + block, g, count=1, flags=re.M)
+    open(bg, 'w', encoding='utf-8').write(g)
+    print('Signaturschluessel eingetragen')
+
 print('Android-Projekt angepasst, Build-Nummer', run)
