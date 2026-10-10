@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Vibrationstest</title>
+<style>body{font:18px system-ui,sans-serif;margin:0;padding:20px;background:#111;color:#eee}button{display:block;width:100%;margin:12px 0;padding:18px;font-size:18px;border-radius:12px;border:1px solid #666;background:#222;color:#fff}pre{white-space:pre-wrap;background:#000;padding:12px;border-radius:8px;font-size:14px}</style></head>
+<body>
+<h1>Vibrationstest</h1>
+<p>Tippe auf die Knöpfe. Bildschirm muss an bleiben.</p>
+<button id="b1">Kurz (200 ms)</button>
+<button id="b2">Lang (1 Sekunde)</button>
+<button id="b3">Muster wie in der App</button>
+<button id="b4">5 Sekunden Verzögerung, dann vibrieren</button>
+<pre id="out"></pre>
+<script>
+var out=document.getElementById('out');
+function log(t){out.textContent+=t+'\n'}
+log('navigator.vibrate vorhanden: '+('vibrate' in navigator));
+log('Browser: '+navigator.userAgent);
+function go(p,label){var r;try{r=navigator.vibrate(p)}catch(e){r='Fehler: '+e}log(label+' -> Rückgabewert: '+r+' (true = Browser hat den Befehl angenommen)')}
+b1.onclick=function(){go(200,'Kurz')};
+b2.onclick=function(){go(1000,'Lang')};
+b3.onclick=function(){go([500,200,500,200,500],'Muster')};
+b4.onclick=function(){log('Warte 5 s ...');setTimeout(function(){go([500,200,500],'Verzögert')},5000)};
+</script></body></html>
