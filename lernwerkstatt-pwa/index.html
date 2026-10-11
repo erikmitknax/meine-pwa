@@ -214,6 +214,9 @@ header nav button{white-space:nowrap;flex:1 1 auto}
 .tabcheck span{display:grid;gap:2px;min-width:0}
 .tabcheck small{color:var(--muted);font-size:.82rem;line-height:1.35}
 .tabname{font-weight:700;padding:6px 8px}
+.tgtoggle{display:flex;align-items:center;gap:10px;background:none;border:0;padding:6px 0;cursor:pointer;color:inherit;font:inherit;text-align:left;min-width:0;flex:1 1 160px}
+.tgtoggle .chev{flex:none;width:26px;height:26px;display:inline-grid;place-items:center;border-radius:7px;background:var(--surface2);font-family:var(--f-mono,monospace);font-weight:700;color:var(--accent)}
+.tgtoggle h2,.tgtoggle h3{margin:0}
 </style>
 </head>
 <body>
@@ -1018,6 +1021,7 @@ function deckCard(parent,d){
       el("button",{class:"btn small",type:"button",onclick:()=>goLib("deck",d.id)},"Karten & Optionen"))));
 }
 
+const openTopics=new Set();
 function renderLibList(){
   const b=$("#libBody");b.replaceChildren();
   b.append(el("div",{class:"row between"},
@@ -1041,14 +1045,23 @@ function renderLibList(){
     const own=sorted.filter(d=>d.topic===t.id),ch=kids(t.id);
     const learn=el("button",{class:"btn small",type:"button",onclick:()=>{setTab("lernen");startStudy({kind:"topic",id:t.id},"due",0)}},"Thema lernen");
     if(!due)learn.setAttribute("disabled","");
+    const isOpen=openTopics.has(t.id);
+    const chev=el("span",{class:"chev","aria-hidden":"true",text:isOpen?"^":">"});
+    const tog=el("button",{class:"tgtoggle",type:"button","aria-expanded":String(isOpen),"aria-label":t.name+(isOpen?" einklappen":" aufklappen")},chev,el(depth?"h3":"h2",{text:t.name}));
     const head=el("div",{class:"tgroup-head"},
-      el(depth?"h3":"h2",{text:t.name}),
+      tog,
       el("div",{class:"row"},el("span",{class:"syncnote",text:all.length+" Stapel · "+cards+" Karten"+(due?" · "+due+" fällig":"")}),learn));
     const body=el("div",{class:"grid"});
     own.forEach(d=>deckCard(body,d));
     ch.forEach(c=>node(body,c,depth+1));
     if(!own.length&&!ch.length)body.append(el("p",{class:"syncnote",text:"Noch nichts in diesem Thema. Importiere Karten, lege einen Stapel an oder ordne einen Stapel unter „Karten & Optionen“ zu."}));
-    parent.append(el("section",{class:"tgroup"+(depth?" sub":"")},head,pdfPanel(t),body));
+    const inner=el("div",{class:"grid"},pdfPanel(t),body);inner.hidden=!isOpen;
+    tog.addEventListener("click",()=>{
+      const o=!openTopics.has(t.id);if(o)openTopics.add(t.id);else openTopics.delete(t.id);
+      inner.hidden=!o;chev.textContent=o?"^":">";tog.setAttribute("aria-expanded",String(o));
+      tog.setAttribute("aria-label",t.name+(o?" einklappen":" aufklappen"));
+    });
+    parent.append(el("section",{class:"tgroup"+(depth?" sub":"")},head,inner));
   };
   kids("").forEach(t=>node(b,t,0));
   const loose=sorted.filter(d=>!topicById(d.topic));
