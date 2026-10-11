@@ -1,0 +1,1378 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#EFF2F5" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0F1520" media="(prefers-color-scheme: dark)">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Lernwerkstatt">
+<title>Lernwerkstatt</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon-192.png" type="image/png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="preload" href="fonts/source-sans-3-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="fonts/bricolage-grotesque-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
+<style>
+@font-face{font-family:"Bricolage Grotesque";font-style:normal;font-weight:200 800;font-display:swap;src:url(fonts/bricolage-grotesque-latin-wght-normal.woff2) format("woff2")}
+@font-face{font-family:"Source Sans 3";font-style:normal;font-weight:400;font-display:swap;src:url(fonts/source-sans-3-latin-400-normal.woff2) format("woff2")}
+@font-face{font-family:"Source Sans 3";font-style:normal;font-weight:500;font-display:swap;src:url(fonts/source-sans-3-latin-500-normal.woff2) format("woff2")}
+@font-face{font-family:"Source Sans 3";font-style:normal;font-weight:600;font-display:swap;src:url(fonts/source-sans-3-latin-600-normal.woff2) format("woff2")}
+@font-face{font-family:"JetBrains Mono";font-style:normal;font-weight:400;font-display:swap;src:url(fonts/jetbrains-mono-latin-400-normal.woff2) format("woff2")}
+@font-face{font-family:"JetBrains Mono";font-style:normal;font-weight:500;font-display:swap;src:url(fonts/jetbrains-mono-latin-500-normal.woff2) format("woff2")}
+html{color-scheme:light;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+body{margin:0}img{max-width:100%}[hidden]{display:none!important}
+</style>
+<style>
+/* Layout: schmale Kopfzeile mit Tabs, darunter eine einzige Arbeitsfläche; Karteikarte als Mittelpunkt. */
+:root{
+  --bg:#EFF2F5; --surface:#FFFFFF; --surface2:#E6EBF1; --ink:#172033; --muted:#5B667A; --line:#D3DAE4;
+  --accent:#0E7C6B; --accent-ink:#FFFFFF; --hi:#F2B33D; --bad:#C4452F; --good:#1E8E4E;
+  --f-display:"Bricolage Grotesque","Segoe UI",system-ui,sans-serif;
+  --f-body:"Source Sans 3","Segoe UI",system-ui,sans-serif;
+  --f-mono:"JetBrains Mono",ui-monospace,Consolas,monospace;
+  --r:10px;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0F1520; --surface:#172030; --surface2:#1F2A3D; --ink:#E6EBF3; --muted:#93A0B5; --line:#2A3650;
+  --accent:#3CC9AE; --accent-ink:#07201B; --hi:#E8B04A; --bad:#F07A63; --good:#4CC77F; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0F1520; --surface:#172030; --surface2:#1F2A3D; --ink:#E6EBF3; --muted:#93A0B5; --line:#2A3650;
+  --accent:#3CC9AE; --accent-ink:#07201B; --hi:#E8B04A; --bad:#F07A63; --good:#4CC77F; color-scheme:dark}
+*{box-sizing:border-box}
+html,body{min-height:100%}
+body{background:var(--bg);color:var(--ink);font:16px/1.5 var(--f-body);padding-inline:16px;padding-block:0 48px}
+.wrap{max-width:880px;margin-inline:auto}
+h1,h2,h3{font-family:var(--f-display);line-height:1.15;margin:0;text-wrap:balance}
+h2{font-size:1.5rem;font-weight:700}
+h3{font-size:1.05rem;font-weight:700}
+p{margin:0}
+button,input,select,textarea{font:inherit;color:inherit}
+:focus-visible{outline:3px solid var(--hi);outline-offset:2px}
+.mono{font-family:var(--f-mono);font-variant-numeric:tabular-nums}
+.label{font-size:.72rem;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:600}
+
+/* Kopf */
+header{display:flex;flex-wrap:wrap;align-items:center;gap:12px 20px;padding-block:18px 12px}
+.brand{font-family:var(--f-display);font-weight:700;font-size:1.35rem;display:flex;align-items:center;gap:8px;margin-right:auto}
+.brand i{width:14px;height:14px;background:var(--accent);border-radius:3px;display:inline-block;transform:rotate(12deg)}
+nav{display:flex;gap:4px;flex-wrap:wrap;background:var(--surface2);padding:4px;border-radius:12px}
+nav button{border:0;background:transparent;padding:8px 14px;border-radius:9px;cursor:pointer;font-weight:600;color:var(--muted)}
+nav button[aria-selected="true"]{background:var(--surface);color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,.12)}
+.iconbtn{border:1px solid var(--line);background:var(--surface);border-radius:9px;padding:8px 12px;cursor:pointer;font-size:.85rem}
+.syncnote{font-size:.78rem;color:var(--muted)}
+
+/* Allgemein */
+section[hidden]{display:none}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:20px}
+.grid{display:grid;gap:16px}
+.cols2{grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr))}
+.row{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.row.between{justify-content:space-between}
+.btn{border:1px solid var(--line);background:var(--surface);border-radius:9px;padding:9px 16px;cursor:pointer;font-weight:600}
+.btn:hover{background:var(--surface2)}
+.btn.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.btn.primary:hover{filter:brightness(1.07)}
+.btn.danger{color:var(--bad)}
+.btn.small{padding:5px 10px;font-size:.85rem}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+input[type=text],input[type=number],select,textarea{width:100%;background:var(--bg);border:1px solid var(--line);border-radius:9px;padding:9px 12px}
+textarea{resize:vertical;min-height:84px}
+label{display:grid;gap:5px;font-size:.85rem;font-weight:600;color:var(--muted)}
+.empty{color:var(--muted);padding:18px;text-align:center;border:1px dashed var(--line);border-radius:var(--r)}
+.chip{display:inline-block;font-size:.72rem;font-family:var(--f-mono);padding:2px 8px;border-radius:99px;background:var(--surface2);color:var(--muted)}
+.chip.ex{background:color-mix(in srgb,var(--hi) 25%,transparent);color:var(--ink)}
+
+/* Heute */
+.hero{display:grid;grid-template-columns:1fr auto;gap:16px;align-items:center}
+.hero .big{font-family:var(--f-display);font-size:3rem;font-weight:700;line-height:1}
+@media (max-width:520px){.hero{grid-template-columns:1fr}}
+.bars{display:flex;align-items:flex-end;gap:8px;height:110px;margin-top:10px}
+.bars div{flex:1;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;gap:4px;height:100%;min-width:0}
+.bars span.b{width:100%;background:var(--accent);border-radius:4px 4px 0 0;min-height:2px}
+.bars span.b.today{background:var(--hi)}
+.bars small{font-size:.7rem;color:var(--muted);font-family:var(--f-mono)}
+.fach{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-top:10px}
+.fach div{background:var(--surface2);border-radius:8px;padding:10px 6px;text-align:center}
+.fach b{display:block;font-family:var(--f-display);font-size:1.4rem}
+.fach small{font-size:.7rem;color:var(--muted)}
+
+/* Lernen */
+.stage{display:grid;gap:16px;justify-items:center}
+.card3d{width:100%;max-width:620px;min-height:260px;perspective:1200px;cursor:pointer;border:0;background:none;padding:0;text-align:left}
+.card3d .inner{position:relative;min-height:260px;transition:transform .45s;transform-style:preserve-3d}
+.card3d.flip .inner{transform:rotateY(180deg)}
+.face{position:absolute;inset:0;backface-visibility:hidden;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:24px;display:flex;flex-direction:column;justify-content:space-between;box-shadow:0 8px 24px -14px rgba(0,0,0,.35)}
+.face.back{transform:rotateY(180deg);border-color:var(--accent)}
+.face .txt{font-family:var(--f-display);font-size:1.5rem;font-weight:500;line-height:1.3;overflow-wrap:anywhere;margin-block:auto;padding-block:12px}
+.face .hint{font-size:.8rem;color:var(--muted)}
+.rate{display:flex;gap:10px;flex-wrap:wrap;justify-content:center}
+.progress{height:6px;background:var(--surface2);border-radius:9px;overflow:hidden;width:100%;max-width:620px}
+.progress i{display:block;height:100%;background:var(--accent);width:0;transition:width .3s}
+@media (prefers-reduced-motion:reduce){.card3d .inner,.progress i{transition:none}}
+
+/* Quiz */
+.opts{display:grid;gap:10px;margin-top:16px}
+.opt{text-align:left;border:1px solid var(--line);background:var(--surface);border-radius:10px;padding:12px 14px;cursor:pointer;overflow-wrap:anywhere}
+.opt:hover:not(:disabled){border-color:var(--accent)}
+.opt.right{border-color:var(--good);background:color-mix(in srgb,var(--good) 16%,var(--surface))}
+.opt.wrong{border-color:var(--bad);background:color-mix(in srgb,var(--bad) 14%,var(--surface))}
+
+/* Fokus */
+.timer{display:grid;justify-items:center;gap:14px}
+.ring{position:relative;width:min(280px,80vw);aspect-ratio:1}
+.ring svg{width:100%;height:100%;transform:rotate(-90deg)}
+.ring .t{position:absolute;inset:0;display:grid;place-items:center;font-family:var(--f-mono);font-size:2.6rem;font-weight:500}
+.ring .t small{display:block;font-family:var(--f-body);font-size:.8rem;color:var(--muted);text-align:center;margin-top:-6px}
+
+/* Karten-Liste */
+.list{display:grid;gap:8px;margin-top:12px}
+.item{display:grid;grid-template-columns:1fr auto;gap:8px 12px;padding:12px 14px;border:1px solid var(--line);border-radius:10px;background:var(--surface)}
+.item .q{font-weight:600;overflow-wrap:anywhere;min-width:0}
+.item .a{color:var(--muted);overflow-wrap:anywhere;min-width:0;font-size:.92rem}
+.item .meta{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:10px;font-size:.9rem;z-index:9;max-width:90vw}
+</style>
+<style>
+/* Ergänzungen: Bibliothek, Import, Lernstapel-Builder, Bewertung mit drei Stufen */
+.cols3{grid-template-columns:repeat(auto-fit,minmax(min(100%,180px),1fr))}
+.fach{grid-template-columns:repeat(7,minmax(0,1fr));gap:6px}
+.fach div{padding:8px 2px}
+.fach b{font-size:1.15rem}
+.rate{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;width:100%;max-width:620px}
+.rate button{border-radius:10px;border:1px solid var(--line);background:var(--surface);padding:10px 6px;display:grid;gap:2px;justify-items:center;font-weight:600;cursor:pointer}
+.rate button small{font-weight:400;font-size:.75rem;color:var(--muted);text-align:center}
+.rate .r0{border-color:var(--bad);color:var(--bad)}
+.rate .r1{border-color:var(--hi);color:var(--ink)}
+.rate .r2{border-color:var(--good);color:var(--good)}
+.rate .r0:hover{background:color-mix(in srgb,var(--bad) 12%,var(--surface))}
+.rate .r1:hover{background:color-mix(in srgb,var(--hi) 18%,var(--surface))}
+.rate .r2:hover{background:color-mix(in srgb,var(--good) 12%,var(--surface))}
+.face .src{font-size:.75rem;color:var(--muted);text-align:right;overflow-wrap:anywhere}
+.face .tophead{display:flex;justify-content:space-between;gap:12px;align-items:flex-start}
+
+.deckc{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:14px 16px;display:grid;gap:10px}
+.deckc .top{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px 12px;align-items:center}
+.deckc h3{overflow-wrap:anywhere;font-size:1.05rem}
+.boxes{display:grid;grid-template-columns:repeat(7,1fr);gap:3px}
+.boxes i{height:6px;border-radius:2px;background:var(--surface2);display:block;position:relative;overflow:hidden}
+.boxes i b{position:absolute;inset:0 auto 0 0;background:var(--accent);display:block}
+.pill{font-size:.75rem;font-weight:600;border-radius:99px;padding:2px 9px;font-family:var(--f-mono);white-space:nowrap}
+.pill.on{background:color-mix(in srgb,var(--hi) 28%,transparent);color:var(--ink)}
+.pill.off{background:color-mix(in srgb,var(--good) 16%,transparent);color:var(--good)}
+.tgroup{display:grid;gap:10px}
+.tgroup-head{display:flex;justify-content:space-between;align-items:baseline;gap:12px;flex-wrap:wrap;border-bottom:2px solid var(--accent);padding-bottom:4px}
+.tgroup-head h2{font-size:1.2rem;overflow-wrap:anywhere;min-width:0}
+.status{padding:8px 12px;border-radius:8px;font-weight:600;font-size:.9rem}
+.status.ok{background:color-mix(in srgb,var(--good) 16%,transparent);color:var(--good)}
+.status.err{background:color-mix(in srgb,var(--bad) 14%,transparent);color:var(--bad)}
+.preview{display:grid;gap:6px;max-height:220px;overflow:auto;border:1px solid var(--line);border-radius:8px;padding:8px;background:var(--surface)}
+.preview div{display:grid;grid-template-columns:1fr 1fr;gap:10px;font-size:.85rem;border-bottom:1px solid var(--line);padding-bottom:6px}
+.preview div:last-child{border:0;padding:0}
+.preview span{min-width:0;overflow-wrap:anywhere}
+.promptbox{background:color-mix(in srgb,var(--accent) 12%,var(--surface));border-radius:var(--r);padding:14px;display:grid;gap:10px}
+.promptbox pre{margin:0;font-family:var(--f-mono);font-size:.78rem;white-space:pre-wrap;overflow-wrap:anywhere;user-select:all}
+#imp-text{min-height:200px;font-family:var(--f-mono);font-size:.85rem}
+.builder{border:1px solid var(--accent);border-radius:var(--r);padding:16px;margin-top:14px;display:grid;gap:14px;background:var(--bg)}
+.bgroup{display:grid;gap:6px}
+.chk{display:flex;gap:10px;align-items:flex-start;font-size:.95rem;font-weight:500;color:var(--ink);cursor:pointer}
+.chk.head{font-weight:700}
+.chk span{min-width:0;overflow-wrap:anywhere}
+.chk em{font-style:normal;color:var(--muted);font-size:.8rem;font-weight:400}
+input[type=checkbox]{width:18px;height:18px;accent-color:var(--accent);margin:2px 0 0;flex:none}
+.indent{padding-left:28px;display:grid;gap:6px}
+.linkbtn{background:none;border:0;padding:0;color:var(--accent);font-weight:600;text-decoration:underline;font-size:inherit;cursor:pointer}
+.topicrow{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:10px 12px;display:grid;gap:8px}
+.cardrow{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:10px 12px;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:start}
+.cardrow .f{font-weight:600;overflow-wrap:anywhere;white-space:pre-wrap}
+.cardrow .b{color:var(--muted);font-size:.92rem;overflow-wrap:anywhere;white-space:pre-wrap}
+.cardrow .lv{font-size:.72rem;color:var(--muted);font-family:var(--f-mono)}
+.x{border:0;background:none;color:var(--muted);font-size:1.1rem;line-height:1;padding:4px 8px;border-radius:6px;cursor:pointer}
+.x:hover{color:var(--bad)}
+#bk-json{min-height:140px;font-family:var(--f-mono);font-size:.8rem}
+.tgroup.sub{padding-left:12px;border-left:2px solid var(--line)}
+.tgroup.sub>.tgroup-head{border-bottom:1px solid var(--line)}
+.tgroup-head h3{font-size:1.05rem;overflow-wrap:anywhere;min-width:0}
+.vh{position:absolute;opacity:0;width:1px;height:1px;overflow:hidden}
+.addpdf{position:relative;display:inline-block;cursor:pointer}
+.addpdf:focus-within{outline:3px solid var(--hi);outline-offset:2px}
+.pdfs summary{cursor:pointer;font-weight:600;color:var(--muted);font-size:.9rem}
+.pdfrow{display:flex;gap:10px;justify-content:space-between;align-items:center;flex-wrap:wrap;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:8px 12px}
+.pdflink{color:var(--accent);font-weight:600;text-decoration:underline;overflow-wrap:anywhere}
+.pdflink.off{color:var(--muted);text-decoration:none;pointer-events:none}
+.docs{display:flex;gap:6px 14px;flex-wrap:wrap;justify-content:center;max-width:620px;font-size:.85rem;color:var(--muted)}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+  <div class="brand"><i></i>Lernwerkstatt</div>
+  <nav role="tablist" aria-label="Bereiche">
+    <button role="tab" data-tab="heute" aria-selected="true">Heute</button>
+    <button role="tab" data-tab="lernen" aria-selected="false">Lernen</button>
+    <button role="tab" data-tab="fokus" aria-selected="false">Fokus</button>
+    <button role="tab" data-tab="bib" aria-selected="false">Bibliothek</button>
+  </nav>
+  <button class="iconbtn" id="themeBtn" type="button" aria-label="Darstellung wechseln">Hell / Dunkel</button>
+</header>
+<p class="syncnote" id="syncNote"></p>
+
+<main style="margin-top:14px">
+
+<!-- HEUTE -->
+<section id="tab-heute" class="grid">
+  <div class="panel hero">
+    <div>
+      <div class="label">Heute fällig</div>
+      <div class="big mono" id="dueCount">0</div>
+      <p id="dueText" style="color:var(--muted);margin-top:6px"></p>
+    </div>
+    <button class="btn primary" id="startDue" type="button">Jetzt lernen</button>
+  </div>
+  <div class="grid cols2">
+    <div class="panel">
+      <div class="label">Letzte 7 Tage · bewertete Karten</div>
+      <div class="bars" id="weekBars"></div>
+      <div class="row between" style="margin-top:12px">
+        <span><b class="mono" id="streak">0</b> Tage Serie</span>
+        <span><b class="mono" id="focusWeek">0</b> Min. Fokus</span>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="label">Lernfortschritt nach Fach</div>
+      <div class="fach" id="fach"></div>
+      <p style="color:var(--muted);font-size:.85rem;margin-top:10px">Neue Karten starten in „Neu“. Gewusste Karten rücken ein Fach vor (1, 2, 4, 8, 16, 32 Tage). „Nochmal“ schickt sie zurück.</p>
+    </div>
+  </div>
+</section>
+
+<!-- LERNEN -->
+<section id="tab-lernen" hidden class="grid">
+  <div id="studySetup" class="grid">
+    <div class="panel">
+      <h2>Lernrunde</h2>
+      <div class="grid cols3" style="margin-top:14px">
+        <label>Was lernen?
+          <select id="srcSel"></select>
+        </label>
+        <label>Welche Karten?
+          <select id="modeSel">
+            <option value="due">Nur fällige</option>
+            <option value="all">Alle üben</option>
+          </select>
+        </label>
+        <label>Anzahl
+          <select id="limSel">
+            <option value="0">Alle</option>
+            <option value="10">10</option>
+            <option value="20">20</option>
+            <option value="30">30</option>
+            <option value="50">50</option>
+          </select>
+        </label>
+      </div>
+      <div class="row between" style="margin-top:14px">
+        <span class="syncnote" id="srcInfo"></span>
+        <button class="btn primary" id="studyGo" type="button">Starten</button>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="row between">
+        <div style="min-width:0;flex:1 1 260px">
+          <h3>Deine Lernstapel</h3>
+          <p class="syncnote" style="margin-top:4px">Wähle beliebige Themen und Stapel aus deiner Bibliothek. In der Lernrunde kommen die Karten in zufälliger Reihenfolge quer durch alle gewählten Themen.</p>
+        </div>
+        <button class="btn" id="newSet" type="button">+ Neuer Lernstapel</button>
+      </div>
+      <div id="builder" class="builder" hidden></div>
+      <div class="list" id="setList"></div>
+    </div>
+  </div>
+
+  <div id="studyArea" class="stage" hidden>
+    <div class="row between" style="width:100%;max-width:620px">
+      <button class="btn small" id="studyEnd" type="button">← Beenden</button>
+      <span class="chip" id="studyCount"></span>
+    </div>
+    <div class="progress"><i id="studyProg"></i></div>
+    <button class="card3d" id="card" type="button" aria-label="Karte umdrehen">
+      <div class="inner">
+        <div class="face front"><div class="tophead"><span class="label">Frage</span><span class="src" id="srcF"></span></div><div class="txt" id="cardQ"></div><span class="hint">Tippen oder Leertaste zum Umdrehen</span></div>
+        <div class="face back"><div class="tophead"><span class="label">Antwort</span><span class="src" id="srcB"></span></div><div class="txt" id="cardA"></div><span class="hint">Wie gut wusstest du es?</span></div>
+      </div>
+    </button>
+    <div class="rate" id="rate" hidden>
+      <button class="r0" id="r0" type="button">Nochmal<small id="i0"></small></button>
+      <button class="r1" id="r1" type="button">Schwer<small id="i1"></small></button>
+      <button class="r2" id="r2" type="button">Gewusst<small id="i2"></small></button>
+    </div>
+    <div class="docs" id="studyDocs" hidden></div>
+    <p class="syncnote">Tasten: Leertaste umdrehen, 1 nochmal, 2 schwer, 3 gewusst</p>
+  </div>
+
+  <div id="studyDone" class="panel" hidden>
+    <h2>Runde geschafft</h2>
+    <p id="studyDoneText" style="margin-top:8px;color:var(--muted)"></p>
+    <div class="row" style="margin-top:14px">
+      <button class="btn primary" id="studyAgain" type="button">Noch eine Runde</button>
+      <button class="btn" id="studyBack" type="button">Zurück zur Auswahl</button>
+    </div>
+  </div>
+</section>
+
+<!-- FOKUS -->
+<section id="tab-fokus" hidden class="grid">
+  <div class="panel timer">
+    <div class="row" role="group" aria-label="Phase">
+      <button class="btn small" data-phase="work" type="button">Lernen</button>
+      <button class="btn small" data-phase="short" type="button">Kurze Pause</button>
+      <button class="btn small" data-phase="long" type="button">Lange Pause</button>
+    </div>
+    <div class="ring">
+      <svg viewBox="0 0 120 120" aria-hidden="true">
+        <circle cx="60" cy="60" r="54" fill="none" stroke="var(--surface2)" stroke-width="8"/>
+        <circle id="ringArc" cx="60" cy="60" r="54" fill="none" stroke="var(--accent)" stroke-width="8" stroke-linecap="round" stroke-dasharray="339.29" stroke-dashoffset="0"/>
+      </svg>
+      <div class="t"><div><span id="timeText">25:00</span><small id="phaseText">Lernen</small></div></div>
+    </div>
+    <div class="row">
+      <button class="btn primary" id="timerToggle" type="button">Start</button>
+      <button class="btn" id="timerReset" type="button">Zurücksetzen</button>
+    </div>
+    <div class="row" style="color:var(--muted);font-size:.9rem"><span>Abgeschlossene Runden heute: <b class="mono" id="roundsToday">0</b></span></div>
+    <div class="row">
+      <label style="width:110px">Lernen (Min.)<input type="number" id="setWork" min="1" max="120" value="25"></label>
+      <label style="width:110px">Pause (Min.)<input type="number" id="setShort" min="1" max="60" value="5"></label>
+      <label style="width:110px">Lange Pause<input type="number" id="setLong" min="1" max="90" value="15"></label>
+    </div>
+  </div>
+</section>
+
+<!-- BIBLIOTHEK -->
+<section id="tab-bib" hidden>
+  <div id="libBody" class="grid"></div>
+</section>
+
+</main>
+</div>
+<div class="toast" id="toast" hidden></div>
+
+<script>
+(function(){
+"use strict";
+const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
+const DAY=864e5,INTERVALS=[0,1,2,4,8,16,32],MAXBOX=6,LS="lernwerkstatt.v2",LS_OLD="lernwerkstatt.v1";
+const dayNum=(d=new Date())=>Math.floor((d.getTime()-d.getTimezoneOffset()*60000)/DAY);
+const uidGen=p=>p+Date.now().toString(36)+Math.random().toString(36).slice(2,8);
+const clone=o=>JSON.parse(JSON.stringify(o));
+const shuffle=a=>{a=a.slice();for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a};
+function el(tag,attrs,...kids){
+  const e=document.createElement(tag);
+  if(attrs)for(const k in attrs){
+    if(k==="class")e.className=attrs[k];
+    else if(k.startsWith("on"))e.addEventListener(k.slice(2),attrs[k]);
+    else if(k==="text")e.textContent=attrs[k];
+    else e.setAttribute(k,attrs[k]);
+  }
+  for(const k of kids){if(k==null)continue;e.append(k.nodeType?k:document.createTextNode(k))}
+  return e;
+}
+function toast(msg){const t=$("#toast");t.textContent=msg;t.hidden=false;clearTimeout(toast.t);toast.t=setTimeout(()=>{t.hidden=true},3000)}
+function armConfirm(btn,label,fn){
+  if(btn.dataset.armed){clearTimeout(btn._t);delete btn.dataset.armed;btn.textContent=btn.dataset.orig;fn();return}
+  btn.dataset.armed="1";btn.dataset.orig=btn.textContent;btn.textContent=label;
+  btn._t=setTimeout(()=>{delete btn.dataset.armed;btn.textContent=btn.dataset.orig},3000);
+}
+function copy(text){
+  const fb=()=>{const ta=document.createElement("textarea");ta.value=text;ta.style.cssText="position:fixed;opacity:0";document.body.append(ta);ta.select();try{document.execCommand("copy");toast("Kopiert")}catch(e){toast("Bitte den Text von Hand kopieren")}ta.remove()};
+  if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(text).then(()=>toast("Kopiert"),fb);else fb();
+}
+
+/* ---------- Zustand ---------- */
+/* topics: [{id,name}], decks: [{id,title,topic,created,updated,cards:[{id,f,b,box,due,ok,bad}]}],
+   sets: [{id,name,topics:[topicId],decks:[deckId]}] (Lernstapel, werden beim Lernen live aufgelöst) */
+let S=null;
+const PROMPT=`Erstelle mir Karteikarten zum Thema [THEMA]. Gib sie als einen einzigen JSON-Codeblock in genau diesem Format aus:
+
+{"thema": "Oberthema, z. B. Biologie", "titel": "Name des Stapels", "karten": [{"vorne": "Frage", "hinten": "Antwort"}]}`;
+
+function mkCard(f,b){return {id:uidGen("c"),f,b,box:0,due:0,ok:0,bad:0}}
+function seed(){
+  const t1={id:uidGen("t"),name:"Beispiel: Biologie"},t2={id:uidGen("t"),name:"Beispiel: Englisch"};
+  const now=Date.now();
+  const d1={id:uidGen("d"),title:"Zellorganellen",topic:t1.id,created:now,updated:now,cards:[
+    ["Mitochondrium","Zellorganell, in dem die Zellatmung stattfindet und ATP entsteht"],
+    ["Ribosom","Ort der Proteinbiosynthese"],
+    ["Zellkern","Enthält die DNA und steuert die Zelle"],
+    ["Chloroplast","Organell der Fotosynthese in Pflanzenzellen"],
+    ["Golgi-Apparat","Verpackt und versendet Proteine in Vesikeln"],
+    ["Lysosom","Baut mit Verdauungsenzymen Stoffe und Zellreste ab"]].map(x=>mkCard(x[0],x[1]))};
+  const d2={id:uidGen("d"),title:"Vokabeln B2",topic:t2.id,created:now,updated:now,cards:[
+    ["ephemeral","kurzlebig, vergänglich"],["to undermine","untergraben, schwächen"],
+    ["reluctant","widerwillig, zögerlich"],["scarce","knapp, selten"],["to hinder","behindern"]].map(x=>mkCard(x[0],x[1]))};
+  return {v:2,theme:"",set:{work:25,short:5,long:15},log:{},topics:[t1,t2],decks:[d1,d2],
+    sets:[{id:uidGen("s"),name:"Beispiel: Bio und Englisch gemischt",topics:[t1.id,t2.id],decks:[]}]};
+}
+function migrateV1(o){
+  const off=new Date().getTimezoneOffset()*60000;
+  const real=(o.decks||[]).filter(d=>!d.ex);
+  const base=seed();
+  const decks=real.map(d=>({id:d.id,title:d.name||"Stapel",topic:"",created:Date.now(),updated:Date.now(),
+    cards:(o.cards||[]).filter(c=>c.deck===d.id).map(c=>({id:c.id,f:c.q,b:c.a,box:Math.max(0,Math.min(MAXBOX,(c.box||1)-1)),due:(c.due||0)*DAY+off,ok:0,bad:0}))}));
+  return {...base,theme:o.theme||"",set:Object.assign(base.set,o.set||{}),log:o.log||{},
+    topics:decks.length?[]:base.topics,decks:decks.length?decks:base.decks,sets:decks.length?[]:base.sets};
+}
+function normalize(){
+  S.topics=(Array.isArray(S.topics)?S.topics:[]).filter(t=>t&&t.id&&t.name);
+  const tids=new Set(S.topics.map(t=>t.id));
+  S.topics.forEach(t=>{t.parent=(t.parent&&t.parent!==t.id&&tids.has(t.parent))?t.parent:"";t.pdfs=Array.isArray(t.pdfs)?t.pdfs.filter(e=>e&&e.id&&e.name):[]});
+  S.topics.forEach(t=>{const seen=new Set([t.id]);let p=t.parent;while(p){if(seen.has(p)){t.parent="";break}seen.add(p);const pt=S.topics.find(x=>x.id===p);p=pt?pt.parent:""}});
+  S.decks=Array.isArray(S.decks)?S.decks:[];
+  S.decks.forEach(d=>{d.topic=d.topic||"";d.cards=Array.isArray(d.cards)?d.cards:[];d.cards.forEach(c=>{c.box=Math.max(0,Math.min(MAXBOX,c.box|0));c.due=c.due||0;c.ok=c.ok||0;c.bad=c.bad||0})});
+  S.sets=(Array.isArray(S.sets)?S.sets:[]).filter(s=>s&&s.id).map(s=>({id:s.id,name:s.name||"Lernstapel",topics:Array.isArray(s.topics)?s.topics:[],decks:Array.isArray(s.decks)?s.decks:[]}));
+  S.log=S.log||{};S.set=Object.assign({work:25,short:5,long:15},S.set||{});S.v=2;
+}
+
+/* ---------- Speicher ---------- */
+let mode="local",db=null,uid=null,legacyPending=false;
+const dirty=new Set();let flushTimer=null,flushing=false;
+const col=()=>db.collection("data/users/"+uid);
+function syncNote(t){$("#syncNote").textContent=t}
+function lsWrite(){try{localStorage.setItem(LS,JSON.stringify(S))}catch(e){}}
+function metaBody(){const m=clone(S);delete m.decks;return m}
+function queue(id){if(mode!=="cloud")return;dirty.add(id);clearTimeout(flushTimer);flushTimer=setTimeout(flush,700)}
+function saveMeta(){lsWrite();queue("_meta")}
+function saveDeck(d){lsWrite();queue(d.id)}
+async function putDoc(id,body){
+  try{await col().doc(id).set(clone(body))}
+  catch(e){
+    if(e&&e.code==="unavailable"){await new Promise(r=>setTimeout(r,700+Math.random()*700));await col().doc(id).set(clone(body))}
+    else throw e;
+  }
+}
+async function flush(){
+  if(flushing||mode!=="cloud")return;flushing=true;
+  try{
+    while(dirty.size){
+      const id=dirty.values().next().value;dirty.delete(id);
+      const body=id==="_meta"?metaBody():S.decks.find(x=>x.id===id);if(!body)continue;
+      try{await putDoc(id,body)}
+      catch(e){toast(e&&e.code==="quota_exceeded"?"Konto-Speicher voll. Lösche alte Stapel.":"Speichern im Konto fehlgeschlagen. Daten bleiben in diesem Browser.")}
+    }
+    if(legacyPending){legacyPending=false;try{await col().doc("state").delete()}catch(e){}}
+  }finally{flushing=false}
+}
+async function removeDeck(id){
+  S.decks=S.decks.filter(d=>d.id!==id);S.sets.forEach(s=>{s.decks=s.decks.filter(x=>x!==id)});
+  lsWrite();dirty.delete(id);saveMeta();
+  if(mode==="cloud"){try{await col().doc(id).delete()}catch(e){toast("Löschen im Konto fehlgeschlagen")}}
+}
+document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="hidden"){clearTimeout(flushTimer);flush()}});
+
+async function initStore(){
+  let local=null;
+  try{local=JSON.parse(localStorage.getItem(LS))}catch(e){}
+  if(!local){try{const o=JSON.parse(localStorage.getItem(LS_OLD));if(o&&o.cards)local=migrateV1(o)}catch(e){}}
+  S=local&&Array.isArray(local.decks)?local:seed();normalize();applyTheme();renderAll();
+  try{
+    if(!window.claude||!window.claude.use)throw 0;
+    const [d,u]=await Promise.all([window.claude.use("db"),window.claude.use("user")]);
+    const id=u?await u.id():null;if(!d||!id)throw 0;
+    db=d;uid=id;
+    const snap=await col().get();
+    const docs=snap.docs.filter(s=>s.exists);
+    const meta=docs.find(s=>s.id==="_meta"),legacy=docs.find(s=>s.id==="state");
+    if(meta){
+      const remote=docs.filter(s=>s.id!=="_meta"&&s.id!=="state").map(s=>clone(s.data())).filter(x=>x&&Array.isArray(x.cards));
+      S=Object.assign(clone(meta.data()),{decks:remote});normalize();
+    }else{
+      if(legacy){S=migrateV1(clone(legacy.data()));normalize();legacyPending=true}
+      dirty.add("_meta");S.decks.forEach(x=>dirty.add(x.id));
+    }
+    mode="cloud";lsWrite();
+    if(dirty.size)flush();
+    syncNote("Gespeichert in deinem Konto und auf allen Geräten verfügbar.");
+    applyTheme();renderAll();
+  }catch(e){mode="local";syncNote("Gespeichert auf diesem Gerät. Sichere regelmäßig unter Bibliothek › Sicherung.")}
+}
+
+/* ---------- Darstellung ---------- */
+function applyTheme(){if(S&&S.theme)document.documentElement.setAttribute("data-theme",S.theme);else document.documentElement.removeAttribute("data-theme")}
+$("#themeBtn").addEventListener("click",()=>{
+  const cur=document.documentElement.getAttribute("data-theme")||(matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light");
+  S.theme=cur==="dark"?"light":"dark";applyTheme();saveMeta();
+});
+
+/* ---------- Hilfen ---------- */
+/* Themenbaum: jedes Thema hat optional ein Oberthema (parent). Höchstens MAXD+1 Ebenen. */
+const MAXD=4,SEP=" › ";
+const byName=(a,b)=>a.name.localeCompare(b.name,"de");
+const topicById=id=>S.topics.find(x=>x.id===id);
+const kids=id=>S.topics.filter(t=>(t.parent||"")===id).sort(byName);
+function descIds(id){const out=new Set([id]);const walk=x=>kids(x).forEach(k=>{if(!out.has(k.id)){out.add(k.id);walk(k.id)}});walk(id);return out}
+function topicDepth(id){let d=0,t=topicById(id);while(t&&t.parent&&d<12){d++;t=topicById(t.parent)}return d}
+function topicHeight(id){let h=0;kids(id).forEach(k=>{h=Math.max(h,1+topicHeight(k.id))});return h}
+function topicPath(id){const p=[];let t=topicById(id),n=0;while(t&&n++<12){p.unshift(t.name);t=t.parent?topicById(t.parent):null}return p.join(SEP)}
+function flatTopics(parent="",depth=0,out=[]){kids(parent).forEach(t=>{out.push({t,depth});flatTopics(t.id,depth+1,out)});return out}
+const topicName=id=>{const t=topicById(id);return t?t.name:""};
+/* Pfad wie "Ausbildung › Recht" auflösen, bei create=true fehlende Ebenen anlegen */
+function topicByPath(path,create){
+  const parts=String(path||"").split(/\s*[›>]\s*/).map(s=>s.trim()).filter(Boolean).slice(0,MAXD+1);
+  if(!parts.length)return "";
+  let cur="";
+  for(let i=0;i<parts.length;i++){
+    const nm=parts[i].toLowerCase();
+    let t=S.topics.find(x=>(x.parent||"")===cur&&x.name.toLowerCase()===nm);
+    if(!t&&i===0&&parts.length===1){const any=S.topics.filter(x=>x.name.toLowerCase()===nm);if(any.length===1)t=any[0]}
+    if(!t){
+      if(!create)return "";
+      t={id:uidGen("t"),name:parts[i].slice(0,60),parent:cur};S.topics.push(t);saveMeta();
+    }
+    cur=t.id;
+  }
+  return cur;
+}
+function bump(key,n){const d=String(dayNum());S.log[d]=S.log[d]||{};S.log[d][key]=(S.log[d][key]||0)+n;saveMeta()}
+
+/* ---------- Wiederholung (7 Fächer, wie in der Lernkartei) ---------- */
+const startOfToday=()=>{const d=new Date();d.setHours(0,0,0,0);return d.getTime()};
+const isDue=c=>(c.due||0)<=Date.now();
+const dueCount=d=>d.cards.filter(isDue).length;
+function nextBox(c,r){if(r===0)return 0;if(r===1)return Math.max(1,c.box||0);return Math.min(MAXBOX,(c.box||0)+1)}
+function dueFor(box){return box===0?Date.now():startOfToday()+INTERVALS[box]*DAY+3*3600000}
+function intervalLabel(c,r){if(r===0)return "gleich nochmal";const n=INTERVALS[nextBox(c,r)];return n===1?"morgen":"in "+n+" Tagen"}
+
+/* ---------- Import-Parser ---------- */
+function pick(o,keys){for(const k of keys){if(o[k]!=null&&String(o[k]).trim()!=="")return String(o[k]).trim()}return ""}
+const TK=["thema","topic","fach","kategorie","bereich","oberthema"];
+const TITLEK=["titel","title","name","stapel","deck"];
+const FK=["vorne","front","frage","question","q","f","term","begriff","vorderseite"];
+const BK=["hinten","back","antwort","answer","a","b","definition","rueckseite","rückseite"];
+function cardsFromArray(arr){
+  const out=[];
+  for(const c of arr){
+    if(Array.isArray(c)&&c.length>=2){out.push({f:String(c[0]).trim(),b:String(c[1]).trim()});continue}
+    if(c&&typeof c==="object"){const f=pick(c,FK),b=pick(c,BK);if(f&&b)out.push({f,b})}
+  }
+  return out;
+}
+function parseInput(raw){
+  let t=raw.trim();if(!t)return null;
+  const fence=t.match(/```(?:json|JSON)?\s*([\s\S]*?)```/);if(fence)t=fence[1].trim();
+  const js=t.search(/[\[{]/);
+  if(js!==-1){
+    try{
+      const o=JSON.parse(t.slice(js));
+      if(Array.isArray(o)){
+        if(o.length&&o[0]&&typeof o[0]==="object"&&!Array.isArray(o[0])&&(o[0].karten||o[0].cards)){
+          return {decks:o.map(d=>({title:pick(d,TITLEK)||pick(d,TK),topic:pick(d,TK),cards:cardsFromArray(d.karten||d.cards||[])})).filter(d=>d.cards.length)};
+        }
+        return {decks:[{title:"",topic:"",cards:cardsFromArray(o)}]};
+      }
+      if(o&&typeof o==="object"){
+        const arr=o.karten||o.cards||o.flashcards||o.karteikarten||[];
+        return {decks:[{title:pick(o,TITLEK)||pick(o,TK),topic:pick(o,TK),cards:cardsFromArray(arr)}]};
+      }
+    }catch(e){if(js===0)return {error:"Das sieht nach JSON aus, ist aber unvollständig. Kopiere den ganzen Codeblock."}}
+  }
+  const cards=[],lines=t.split(/\r?\n/);
+  const qre=/^\s*(?:\d+[.)]\s*)?(?:F|Q|Frage|Question|Vorne|Front)\s*[:：]\s*(.*)$/i;
+  const are=/^\s*(?:A|Antwort|Answer|Hinten|Back)\s*[:：]\s*(.*)$/i;
+  if(lines.some(l=>qre.test(l))&&lines.some(l=>are.test(l))){
+    let cur=null,side=null;
+    for(const l of lines){
+      let m;
+      if((m=l.match(qre))){if(cur&&cur.f&&cur.b)cards.push(cur);cur={f:m[1],b:""};side="f"}
+      else if((m=l.match(are))&&cur){cur.b=m[1];side="b"}
+      else if(cur&&side&&l.trim()){cur[side]+=(cur[side]?"\n":"")+l.trim()}
+    }
+    if(cur&&cur.f&&cur.b)cards.push(cur);
+    return {decks:[{title:"",topic:"",cards:cards.map(c=>({f:c.f.trim(),b:c.b.trim()}))}]};
+  }
+  for(const l of lines){
+    const s=l.replace(/^\s*(?:[-*•]|\d+[.)])\s+/,"");
+    const parts=s.split(/\t|\s+;\s+|\s*;\s*|\s+\|\s+|\s*::\s*|\s+[–—-]\s+/);
+    if(parts.length>=2){const f=parts[0].trim(),b=parts.slice(1).join(" – ").trim();if(f&&b)cards.push({f,b})}
+  }
+  return {decks:[{title:"",topic:"",cards}]};
+}
+
+/* ---------- PDF-Unterlagen pro Thema ----------
+   Im Artefakt landen PDFs über die Asset-Ablage (auf allen Geräten verfügbar).
+   Ohne diese Ablage (z. B. als installierte PWA) werden sie lokal in IndexedDB gespeichert. */
+const MAXPDF=20*1024*1024-4096;
+let assetsCap=null;
+async function getAssets(){
+  if(assetsCap!==null)return assetsCap||null;
+  try{assetsCap=(await window.claude.use("assets"))||false}catch(e){assetsCap=false}
+  return assetsCap||null;
+}
+function idbOpen(){return new Promise((res,rej)=>{
+  if(!window.indexedDB)return rej(new Error("Auf diesem Gerät ist keine lokale Ablage verfügbar."));
+  const r=indexedDB.open("lernwerkstatt-pdf",1);
+  r.onupgradeneeded=()=>r.result.createObjectStore("files");
+  r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error||new Error("Lokale Ablage nicht verfügbar."));
+})}
+async function idbRun(mode,fn){
+  const d=await idbOpen();
+  return new Promise((res,rej)=>{
+    const tx=d.transaction("files",mode);let out;
+    const rq=fn(tx.objectStore("files"));
+    if(rq)rq.onsuccess=()=>{out=rq.result};
+    tx.oncomplete=()=>{d.close();res(out)};tx.onerror=()=>{d.close();rej(tx.error)};tx.onabort=()=>{d.close();rej(tx.error)};
+  });
+}
+const idbPut=(id,blob)=>idbRun("readwrite",s=>s.put(blob,id));
+const idbGet=id=>idbRun("readonly",s=>s.get(id));
+const idbDel=id=>idbRun("readwrite",s=>s.delete(id));
+
+/* Native App (Capacitor): Dateien über das Teilen-Menü öffnen oder speichern; im Browser normaler Download */
+const NATIVE=(()=>{try{return !!(window.Capacitor&&window.Capacitor.isNativePlatform&&window.Capacitor.isNativePlatform())}catch(e){return false}})();
+const plug=n=>{try{return NATIVE&&window.Capacitor.Plugins&&window.Capacitor.Plugins[n]||null}catch(e){return null}};
+const safeName=s=>String(s).replace(/[^\w.\-äöüÄÖÜß ]+/g,"_").slice(0,100)||"datei";
+function blobToBase64(blob){return new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(String(r.result).split(",")[1]||"");r.onerror=()=>rej(r.error);r.readAsDataURL(blob)})}
+async function saveAndShare(filename,blob,title){
+  const fs=plug("Filesystem"),sh=plug("Share");if(!fs||!sh)return false;
+  const data=await blobToBase64(blob);
+  const r=await fs.writeFile({path:"export/"+safeName(filename),data,directory:"CACHE",recursive:true});
+  await sh.share({title:title||filename,dialogTitle:title||filename,url:r.uri});
+  return true;
+}
+function browserDownload(filename,blob){
+  const u=URL.createObjectURL(blob),a=document.createElement("a");
+  a.href=u;a.download=filename;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(u),4000);
+}
+async function exportFile(filename,blob,title){
+  if(NATIVE){try{if(await saveAndShare(filename,blob,title))return true}catch(e){if(/cancel/i.test(String(e&&e.message||e)))return true}}
+  try{browserDownload(filename,blob);return true}catch(e){return false}
+}
+async function addPdf(topic,file){
+  if(!(file.type==="application/pdf"||/\.pdf$/i.test(file.name)))throw new Error("„"+file.name+"“ ist kein PDF.");
+  if(file.size>MAXPDF)throw new Error("„"+file.name+"“ ist größer als 20 MB.");
+  const e={id:uidGen("f"),name:file.name.replace(/\.pdf$/i,"").slice(0,120)||"Unterlage",size:file.size,added:Date.now(),kind:"local",ref:""};
+  const a=await getAssets();
+  if(a){
+    try{
+      const blob=file.type==="application/pdf"?file:new Blob([file],{type:"application/pdf"});
+      const r=await a.upload(blob);e.kind="asset";e.ref=r.id;
+    }catch(err){e.kind="local"}
+  }
+  if(e.kind==="local"){
+    try{await idbPut(e.id,file);if(navigator.storage&&navigator.storage.persist)navigator.storage.persist().catch(()=>{})}
+    catch(err){throw new Error("Das PDF konnte nicht gespeichert werden. Der Speicher ist voll oder gesperrt.")}
+  }
+  topic.pdfs=Array.isArray(topic.pdfs)?topic.pdfs:[];
+  topic.pdfs.push(e);saveMeta();
+}
+async function removePdfFile(e){
+  try{
+    if(e.kind==="asset"){const a=await getAssets();if(a)await a.delete(e.ref)}
+    else await idbDel(e.id);
+  }catch(err){}
+  const u=urlCache.get(e.id);if(u){try{URL.revokeObjectURL(u)}catch(x){}urlCache.delete(e.id)}
+}
+const urlCache=new Map();
+function linkFor(e){
+  const a=el("a",{class:"pdflink",target:"_blank",rel:"noopener"},"PDF · "+e.name);
+  if(NATIVE&&e.kind!=="asset")a.addEventListener("click",async ev=>{
+    ev.preventDefault();
+    try{
+      const b=await idbGet(e.id);if(!b){toast("Das PDF liegt nicht auf diesem Gerät.");return}
+      if(!(await saveAndShare(e.name+".pdf",b,e.name)))toast("PDFs öffnen geht in dieser App gerade nicht.");
+    }catch(err){if(!/cancel/i.test(String(err&&err.message||err)))toast("Das PDF konnte nicht geöffnet werden.")}
+  });
+  if(e.kind==="asset")a.setAttribute("href","/_blob/"+e.ref);
+  else if(urlCache.has(e.id))a.setAttribute("href",urlCache.get(e.id));
+  else{
+    a.classList.add("off");
+    idbGet(e.id).then(b=>{
+      if(b){const u=URL.createObjectURL(b);urlCache.set(e.id,u);a.setAttribute("href",u);a.classList.remove("off")}
+      else a.title="Nur auf dem Gerät verfügbar, auf dem sie hochgeladen wurde."
+    }).catch(()=>{a.title="Nur auf dem Gerät verfügbar, auf dem sie hochgeladen wurde."});
+  }
+  return a;
+}
+/* alle PDFs eines Themas und seiner Oberthemen */
+function pdfsFor(topicId){
+  const out=[];let t=topicById(topicId),n=0;
+  while(t&&n++<12){(t.pdfs||[]).forEach(e=>out.push(e));t=t.parent?topicById(t.parent):null}
+  return out;
+}
+const openPdf=new Set();
+const fmtSize=n=>n>=1048576?(n/1048576).toFixed(1).replace(".",",")+" MB":Math.max(1,Math.round(n/1024))+" KB";
+function pdfPanel(t){
+  const list=t.pdfs||[];
+  const det=el("details",{class:"pdfs"});
+  det.open=openPdf.has(t.id);
+  det.addEventListener("toggle",()=>{if(det.open)openPdf.add(t.id);else openPdf.delete(t.id)});
+  det.append(el("summary",{text:"Unterlagen (PDF)"+(list.length?" · "+list.length:"")}));
+  const box=el("div",{class:"grid",style:"gap:6px;margin-top:8px"});
+  list.forEach(e=>{
+    const del=el("button",{class:"btn small danger",type:"button"},"Löschen");
+    del.addEventListener("click",()=>armConfirm(del,"Wirklich?",async()=>{
+      t.pdfs=t.pdfs.filter(x=>x.id!==e.id);saveMeta();await removePdfFile(e);toast("PDF gelöscht");renderLib();
+    }));
+    box.append(el("div",{class:"pdfrow"},
+      el("div",{style:"min-width:0"},linkFor(e),el("div",{class:"syncnote",text:fmtSize(e.size||0)+(e.kind==="local"?" · nur auf diesem Gerät":"")})),del));
+  });
+  if(!list.length)box.append(el("p",{class:"syncnote",text:"Noch keine Unterlagen. Beim Lernen siehst du die PDFs eines Themas und seiner Oberthemen unter der Karte."}));
+  const input=el("input",{type:"file",accept:"application/pdf,.pdf",multiple:"",class:"vh","aria-label":"PDF auswählen"});
+  input.addEventListener("change",async()=>{
+    const files=[...input.files];input.value="";if(!files.length)return;
+    openPdf.add(t.id);let ok=0;const errs=[];
+    for(const f of files){
+      toast("Speichere „"+f.name+"“ …");
+      try{await addPdf(t,f);ok++}catch(err){errs.push(err&&err.message?err.message:"Das PDF konnte nicht gespeichert werden.")}
+    }
+    toast(errs.length?errs[0]:ok+(ok===1?" PDF gespeichert":" PDFs gespeichert"));
+    renderLib();
+  });
+  det.append(box,el("div",{class:"row",style:"margin-top:8px"},el("label",{class:"btn small addpdf"},"+ PDF hinzufügen",input)));
+  return det;
+}
+
+/* ---------- Heute ---------- */
+const allDue=()=>S.decks.reduce((a,d)=>a+dueCount(d),0);
+function renderHome(){
+  const t=dayNum(),due=allDue(),total=S.decks.reduce((a,d)=>a+d.cards.length,0);
+  $("#dueCount").textContent=due;
+  $("#dueText").textContent=due
+    ?`${due} ${due===1?"Karte wartet":"Karten warten"} auf dich, etwa ${Math.max(1,Math.round(due*0.4))} Min.`
+    :(total?"Alles erledigt. Die nächsten Karten werden später fällig.":"Importiere zuerst Karten in der Bibliothek.");
+  $("#startDue").disabled=!due;
+  const days=[];for(let i=6;i>=0;i--)days.push(t-i);
+  const vals=days.map(x=>{const l=S.log[x]||{};return (l.r||0)+(l.q||0)});
+  const max=Math.max(5,...vals),wd=["So","Mo","Di","Mi","Do","Fr","Sa"];
+  $("#weekBars").innerHTML=days.map((x,i)=>`<div><small>${vals[i]||""}</small><span class="b${x===t?" today":""}" style="height:${vals[i]/max*72}%"></span><small>${wd[new Date(x*864e5).getUTCDay()]}</small></div>`).join("");
+  const act=x=>{const l=S.log[x]||{};return (l.r||0)+(l.q||0)+(l.f||0)>0};
+  let s=0,x=t;if(!act(x))x--;while(act(x)){s++;x--}
+  $("#streak").textContent=s;
+  $("#focusWeek").textContent=days.reduce((a,x)=>a+((S.log[x]||{}).f||0),0);
+  const cnt=Array(MAXBOX+1).fill(0);S.decks.forEach(d=>d.cards.forEach(c=>{cnt[Math.min(MAXBOX,c.box||0)]++}));
+  $("#fach").innerHTML=cnt.map((n,i)=>`<div><b class="mono">${n}</b><small>${i?i:"Neu"}</small></div>`).join("");
+}
+$("#startDue").addEventListener("click",()=>{setTab("lernen");startStudy({kind:"all"},"due",0)});
+
+/* ---------- Karten einer Quelle ---------- */
+function coverOf(topicIds){const c=new Set();topicIds.forEach(id=>descIds(id).forEach(x=>c.add(x)));return c}
+const decksOfSet=s=>{const cv=coverOf(s.topics);return S.decks.filter(d=>s.decks.includes(d.id)||(d.topic&&cv.has(d.topic)))};
+function cardsOf(src){
+  let ds;
+  if(src.kind==="deck")ds=S.decks.filter(d=>d.id===src.id);
+  else if(src.kind==="topic"){const cv=descIds(src.id);ds=S.decks.filter(d=>cv.has(d.topic))}
+  else if(src.kind==="set"){const s=S.sets.find(x=>x.id===src.id);ds=s?decksOfSet(s):[]}
+  else ds=S.decks.slice();
+  return ds.flatMap(d=>d.cards.map(c=>({c,d})));
+}
+function parseSrc(v){if(!v||v==="all")return {kind:"all"};const i=v.indexOf(":");return {kind:v.slice(0,i),id:v.slice(i+1)}}
+function fillSrc(){
+  const sel=$("#srcSel"),old=sel.value;
+  sel.replaceChildren(el("option",{value:"all",text:"Alles (alle Themen gemischt)"}));
+  if(S.sets.length){const g=el("optgroup",{label:"Lernstapel"});S.sets.forEach(s=>g.append(el("option",{value:"set:"+s.id,text:s.name})));sel.append(g)}
+  if(S.topics.length){const g=el("optgroup",{label:"Einzelne Themen (mit Unterthemen)"});flatTopics().forEach(x=>g.append(el("option",{value:"topic:"+x.t.id,text:topicPath(x.t.id)})));sel.append(g)}
+  if([...sel.options].some(o=>o.value===old))sel.value=old;
+  srcInfo();
+}
+function srcInfo(){
+  const items=cardsOf(parseSrc($("#srcSel").value));
+  const due=items.filter(x=>isDue(x.c)).length;
+  $("#srcInfo").textContent=`${items.length} Karten, davon ${due} fällig`;
+}
+$("#srcSel").addEventListener("change",srcInfo);
+
+/* ---------- Lernrunde ---------- */
+let Q={active:false};
+function startStudy(src,md,limit){
+  let items=cardsOf(src);
+  if(md==="due")items=items.filter(x=>isDue(x.c));
+  if(!items.length){toast(md==="due"?"Keine fälligen Karten. Wähle „Alle üben“, um trotzdem zu lernen.":"Hier gibt es noch keine Karten.");return}
+  items=shuffle(items);if(limit>0)items=items.slice(0,limit);
+  const map={};items.forEach(x=>{map[x.c.id]=x});
+  Q={active:true,params:[src,md,limit],map,queue:items.map(x=>x.c.id),total:items.length,done:0,flipped:false,stats:[0,0,0]};
+  $("#studySetup").hidden=true;$("#studyDone").hidden=true;$("#studyArea").hidden=false;showCard();
+}
+function showCard(){
+  const x=Q.map[Q.queue[0]];if(!x)return finishStudy();
+  Q.flipped=false;$("#card").classList.remove("flip");$("#rate").hidden=true;
+  $("#cardQ").textContent=x.c.f;$("#cardA").textContent=x.c.b;
+  const src=[topicPath(x.d.topic),x.d.title].filter(Boolean).join(" · ");
+  $("#srcF").textContent=src;$("#srcB").textContent=src;
+  const docs=pdfsFor(x.d.topic),dbox=$("#studyDocs");dbox.replaceChildren();
+  if(docs.length){dbox.hidden=false;dbox.append(el("span",{text:"Unterlagen:"}));docs.forEach(e=>dbox.append(linkFor(e)))}else dbox.hidden=true;
+  $("#studyCount").textContent=`${Q.done} von ${Q.total} geschafft`;
+  $("#studyProg").style.width=(Q.done/Q.total*100)+"%";
+  [0,1,2].forEach(r=>{$("#i"+r).textContent=intervalLabel(x.c,r)});
+}
+function flip(){
+  if(!Q.active)return;
+  Q.flipped=!Q.flipped;$("#card").classList.toggle("flip",Q.flipped);$("#rate").hidden=!Q.flipped;
+}
+function rate(r){
+  if(!Q.active||!Q.flipped)return;
+  const id=Q.queue.shift(),x=Q.map[id];if(!x)return;
+  const c=x.c;
+  c.box=nextBox(c,r);c.due=dueFor(c.box);
+  if(r===2)c.ok=(c.ok||0)+1;if(r===0)c.bad=(c.bad||0)+1;
+  Q.stats[r]++;bump("r",1);if(r===2)bump("c",1);
+  saveDeck(x.d);
+  if(r===0)Q.queue.splice(Math.min(Q.queue.length,3),0,id);else Q.done++;
+  if(!Q.queue.length)finishStudy();else showCard();
+}
+function finishStudy(){
+  Q.active=false;$("#studyArea").hidden=true;$("#studyDone").hidden=false;
+  $("#studyDoneText").textContent=`${Q.stats[2]}× gewusst, ${Q.stats[1]}× schwer, ${Q.stats[0]}× nochmal. Die Karten sind jetzt auf ihre nächsten Termine verteilt.`;
+  renderHome();renderSets();srcInfo();
+}
+function leaveStudy(){
+  Q.active=false;$("#studyArea").hidden=true;$("#studyDone").hidden=true;$("#studySetup").hidden=false;
+  renderHome();renderSets();srcInfo();
+}
+$("#card").addEventListener("click",flip);
+$("#r0").addEventListener("click",()=>rate(0));
+$("#r1").addEventListener("click",()=>rate(1));
+$("#r2").addEventListener("click",()=>rate(2));
+$("#studyEnd").addEventListener("click",leaveStudy);
+$("#studyBack").addEventListener("click",leaveStudy);
+$("#studyAgain").addEventListener("click",()=>{const p=Q.params;$("#studyDone").hidden=true;startStudy(p[0],p[1],p[2])});
+$("#studyGo").addEventListener("click",()=>startStudy(parseSrc($("#srcSel").value),$("#modeSel").value,+$("#limSel").value));
+document.addEventListener("keydown",e=>{
+  if(!Q.active||$("#tab-lernen").hidden)return;
+  if(/INPUT|TEXTAREA|SELECT/.test((e.target||{}).tagName||""))return;
+  if(e.key===" "&&e.target.tagName!=="BUTTON"){e.preventDefault();flip()}
+  else if(Q.flipped){if(e.key==="1")rate(0);else if(e.key==="2")rate(1);else if(e.key==="3")rate(2)}
+});
+
+/* ---------- Lernstapel (eigene Mischungen) ---------- */
+function renderSets(){
+  const box=$("#setList");box.replaceChildren();
+  if(!S.sets.length){box.append(el("div",{class:"empty",text:"Noch kein Lernstapel. Lege einen an und wähle, welche Themen und Stapel darin gemischt werden."}));return}
+  S.sets.forEach(s=>{
+    const ds=decksOfSet(s),n=ds.reduce((a,d)=>a+d.cards.length,0),due=ds.reduce((a,d)=>a+dueCount(d),0);
+    const names=s.topics.map(topicPath).filter(Boolean);
+    const sub=names.length?"Themen: "+names.join(", "):"";
+    const go=el("button",{class:"btn small primary",type:"button",onclick:()=>startStudy({kind:"set",id:s.id},"due",+$("#limSel").value)},"Fällige lernen");
+    if(!due)go.setAttribute("disabled","");
+    const del=el("button",{class:"btn small danger",type:"button"},"Löschen");
+    del.addEventListener("click",()=>armConfirm(del,"Wirklich löschen?",()=>{S.sets=S.sets.filter(x=>x.id!==s.id);saveMeta();renderSets();fillSrc();toast("Lernstapel gelöscht")}));
+    box.append(el("div",{class:"item",style:"grid-template-columns:1fr"},
+      el("div",{style:"min-width:0"},el("div",{class:"q",text:s.name}),
+        el("div",{class:"a",text:`${ds.length} Stapel · ${n} Karten · ${due} fällig`}),
+        sub?el("div",{class:"a",text:sub}):null),
+      el("div",{class:"row"},go,
+        el("button",{class:"btn small",type:"button",onclick:()=>{openBuilder(s.id);$("#builder").scrollIntoView({block:"nearest"})}},"Bearbeiten"),del)));
+  });
+}
+let B=null;
+function openBuilder(id){
+  const s=id?S.sets.find(x=>x.id===id):null;
+  B={id:id||null,name:s?s.name:"",topics:new Set(s?s.topics:[]),decks:new Set(s?s.decks:[])};
+  renderBuilder();
+}
+const bSel=()=>({topics:[...B.topics],decks:[...B.decks]});
+function renderBuilder(){
+  const box=$("#builder");
+  if(!B){box.hidden=true;box.replaceChildren();return}
+  box.hidden=false;
+  const sel=bSel(),ds=decksOfSet(sel),count=ds.reduce((a,d)=>a+d.cards.length,0);
+  const info=el("span",{class:"syncnote",text:`${count} Karten aus ${ds.length} Stapeln ausgewählt`});
+  const save=el("button",{class:"btn primary",type:"button"},"Speichern");
+  const updSave=()=>{if(B.name.trim()&&ds.length)save.removeAttribute("disabled");else save.setAttribute("disabled","")};
+  const name=el("input",{type:"text",id:"bName",maxlength:"60",placeholder:"z. B. Klausurvorbereitung Mix"});name.value=B.name;
+  name.addEventListener("input",()=>{B.name=name.value;updSave()});
+  const known=new Set(S.topics.map(t=>t.id));
+  const loose=S.decks.filter(d=>!known.has(d.topic));
+  const deckRow=(d,locked)=>{
+    const cb=el("input",{type:"checkbox"});cb.checked=locked||B.decks.has(d.id);cb.disabled=locked;
+    cb.addEventListener("change",()=>{if(cb.checked)B.decks.add(d.id);else B.decks.delete(d.id);renderBuilder()});
+    return el("label",{class:"chk"},cb,el("span",null,d.title+" ",el("em",{text:"("+d.cards.length+" Karten)"})));
+  };
+  const wrap=el("div",{class:"grid",style:"gap:14px"});
+  const node=(parent,t,lock)=>{
+    const ids=descIds(t.id),n=S.decks.filter(d=>ids.has(d.topic)).reduce((a,d)=>a+d.cards.length,0);
+    const on=B.topics.has(t.id),cb=el("input",{type:"checkbox"});cb.checked=lock||on;cb.disabled=lock;
+    cb.addEventListener("change",()=>{if(cb.checked)B.topics.add(t.id);else B.topics.delete(t.id);renderBuilder()});
+    const grp=el("div",{class:"bgroup"},el("label",{class:"chk head"},cb,el("span",null,t.name+" ",el("em",{text:"("+n+" Karten"+(kids(t.id).length?", inkl. Unterthemen":"")+")"}))));
+    const inner=el("div",{class:"indent"}),cl=lock||on;
+    S.decks.filter(d=>d.topic===t.id).forEach(d=>inner.append(deckRow(d,cl)));
+    kids(t.id).forEach(c=>node(inner,c,cl));
+    if(inner.childNodes.length)grp.append(inner);
+    parent.append(grp);
+  };
+  kids("").forEach(t=>node(wrap,t,false));
+  if(loose.length){
+    const ind=el("div",{class:"indent",style:"padding-left:0"});loose.forEach(d=>ind.append(deckRow(d,false)));
+    wrap.append(el("div",{class:"bgroup"},el("div",{class:"label",text:"Ohne Thema"}),ind));
+  }
+  if(!S.decks.length)wrap.append(el("p",{class:"syncnote",text:"Die Bibliothek ist noch leer. Importiere zuerst Karten."}));
+  save.addEventListener("click",()=>{
+    const r=bSel(),nm=B.name.trim();if(!nm||!ds.length)return;
+    if(B.id){const s=S.sets.find(x=>x.id===B.id);if(s){s.name=nm;s.topics=r.topics;s.decks=r.decks}}
+    else S.sets.push({id:uidGen("s"),name:nm,topics:r.topics,decks:r.decks});
+    saveMeta();B=null;renderBuilder();renderSets();fillSrc();toast("Lernstapel gespeichert");
+  });
+  box.replaceChildren(
+    el("label",{for:"bName"},"Name des Lernstapels",name),
+    el("div",{class:"row"},
+      el("button",{class:"linkbtn",type:"button",onclick:()=>{B.topics=new Set(S.topics.map(t=>t.id));S.decks.filter(d=>!known.has(d.topic)).forEach(d=>B.decks.add(d.id));renderBuilder()}},"Alles auswählen"),
+      el("button",{class:"linkbtn",type:"button",onclick:()=>{B.topics=new Set();B.decks=new Set();renderBuilder()}},"Nichts auswählen")),
+    el("p",{class:"syncnote",text:"Ein Häkchen bei einem Thema nimmt alle Stapel und Unterthemen darin mit, auch später importierte Karten. Einzelne Stapel kannst du zusätzlich anhaken."}),
+    wrap,info,
+    el("div",{class:"row"},save,el("button",{class:"btn",type:"button",onclick:()=>{B=null;renderBuilder()}},"Abbrechen")));
+  updSave();
+}
+$("#newSet").addEventListener("click",()=>{openBuilder(null);$("#builder").scrollIntoView({block:"nearest"})});
+
+/* ---------- Bibliothek ---------- */
+let lib={view:"list",deckId:null};
+function renderLib(){
+  const v=lib.view;
+  if(v==="import")renderImport();else if(v==="topics")renderTopics();else if(v==="deck")renderDeck();
+  else if(v==="backup")renderBackup();else if(v==="newdeck")renderNewDeck();else renderLibList();
+}
+function goLib(view,deckId){lib.view=view;lib.deckId=deckId||null;renderLib();window.scrollTo(0,0)}
+const backBtn=()=>el("div",{class:"row"},el("button",{class:"btn small",type:"button",onclick:()=>goLib("list")},"← Bibliothek"));
+function topicSelect(id,noneLabel,allow){
+  const sel=el("select",{id});sel.append(el("option",{value:"",text:noneLabel}));
+  flatTopics().forEach(x=>{if(!allow||allow(x.t))sel.append(el("option",{value:x.t.id,text:topicPath(x.t.id)}))});
+  return sel;
+}
+
+function deckCard(parent,d){
+  const due=dueCount(d),counts=Array(MAXBOX+1).fill(0);d.cards.forEach(c=>counts[Math.min(MAXBOX,c.box||0)]++);
+  const boxes=el("div",{class:"boxes",title:"Fortschritt: Neu bis Fach 6"});
+  counts.forEach(n=>{const i=el("i"),bb=el("b");bb.style.width=(d.cards.length?n/d.cards.length*100:0)+"%";i.append(bb);boxes.append(i)});
+  const good=d.cards.filter(c=>(c.box||0)>=3).length;
+  const go=el("button",{class:"btn small primary",type:"button",onclick:()=>{setTab("lernen");startStudy({kind:"deck",id:d.id},"due",0)}},"Lernen");
+  if(!due)go.setAttribute("disabled","");
+  parent.append(el("article",{class:"deckc"},
+    el("div",{class:"top"},
+      el("div",{style:"min-width:0"},el("h3",{text:d.title}),el("div",{class:"syncnote",text:d.cards.length+" Karten · "+good+" sitzen gut"})),
+      el("span",{class:"pill "+(due?"on":"off"),text:due?due+" fällig":"erledigt"})),
+    boxes,
+    el("div",{class:"row"},go,
+      el("button",{class:"btn small",type:"button",onclick:()=>{setTab("lernen");startStudy({kind:"deck",id:d.id},"all",0)}},"Alle üben"),
+      el("button",{class:"btn small",type:"button",onclick:()=>goLib("deck",d.id)},"Karten & Optionen"))));
+}
+
+function renderLibList(){
+  const b=$("#libBody");b.replaceChildren();
+  b.append(el("div",{class:"row between"},
+    el("h2",{text:"Bibliothek"}),
+    el("div",{class:"row"},
+      el("button",{class:"btn primary",type:"button",onclick:()=>goLib("import")},"+ Importieren"),
+      el("button",{class:"btn",type:"button",onclick:()=>goLib("newdeck")},"+ Neuer Stapel"),
+      el("button",{class:"btn",type:"button",onclick:()=>goLib("topics")},"Themen"),
+      el("button",{class:"btn",type:"button",onclick:()=>goLib("backup")},"Sicherung"))));
+  if(!S.decks.length&&!S.topics.length){
+    b.append(el("div",{class:"panel grid"},
+      el("h3",{text:"Noch keine Karteikarten"}),
+      el("p",{style:"color:var(--muted)",text:"Importiere deine erste Kartei: Prompt kopieren, in einem Chat mit Claude ausfüllen lassen, Antwort einfügen. Oder lege zuerst Themen an, zum Beispiel Ausbildung › Recht."}),
+      el("div",{class:"row"},el("button",{class:"btn primary",type:"button",onclick:()=>goLib("import")},"Karten importieren"),el("button",{class:"btn",type:"button",onclick:()=>goLib("topics")},"Themen anlegen"))));
+    return;
+  }
+  const sorted=S.decks.slice().sort((a,b)=>dueCount(b)-dueCount(a)||(b.updated||b.created||0)-(a.updated||a.created||0));
+  const node=(parent,t,depth)=>{
+    const ids=descIds(t.id),all=S.decks.filter(d=>ids.has(d.topic));
+    const due=all.reduce((a,d)=>a+dueCount(d),0),cards=all.reduce((a,d)=>a+d.cards.length,0);
+    const own=sorted.filter(d=>d.topic===t.id),ch=kids(t.id);
+    const learn=el("button",{class:"btn small",type:"button",onclick:()=>{setTab("lernen");startStudy({kind:"topic",id:t.id},"due",0)}},"Thema lernen");
+    if(!due)learn.setAttribute("disabled","");
+    const head=el("div",{class:"tgroup-head"},
+      el(depth?"h3":"h2",{text:t.name}),
+      el("div",{class:"row"},el("span",{class:"syncnote",text:all.length+" Stapel · "+cards+" Karten"+(due?" · "+due+" fällig":"")}),learn));
+    const body=el("div",{class:"grid"});
+    own.forEach(d=>deckCard(body,d));
+    ch.forEach(c=>node(body,c,depth+1));
+    if(!own.length&&!ch.length)body.append(el("p",{class:"syncnote",text:"Noch nichts in diesem Thema. Importiere Karten, lege einen Stapel an oder ordne einen Stapel unter „Karten & Optionen“ zu."}));
+    parent.append(el("section",{class:"tgroup"+(depth?" sub":"")},head,pdfPanel(t),body));
+  };
+  kids("").forEach(t=>node(b,t,0));
+  const loose=sorted.filter(d=>!topicById(d.topic));
+  if(loose.length){
+    const body=el("div",{class:"grid"});loose.forEach(d=>deckCard(body,d));
+    b.append(el("section",{class:"tgroup"},
+      el("div",{class:"tgroup-head"},el("h2",{text:S.topics.length?"Ohne Thema":"Alle Stapel"}),el("span",{class:"syncnote",text:loose.length+" Stapel"})),body));
+  }
+}
+
+/* ---------- Neuer Stapel ---------- */
+function renderNewDeck(){
+  const b=$("#libBody");b.replaceChildren();
+  const name=el("input",{type:"text",id:"nd-name",maxlength:"120",placeholder:"z. B. Arbeitsrecht Grundlagen"});
+  const tsel=topicSelect("nd-topic","Ohne Thema");
+  const ntopic=el("input",{type:"text",id:"nd-newtopic",maxlength:"200",placeholder:"z. B. Ausbildung › Recht"});
+  const go=el("button",{class:"btn primary",type:"button"},"Stapel anlegen");
+  go.addEventListener("click",()=>{
+    const t=name.value.trim();if(!t){toast("Gib dem Stapel einen Namen");return}
+    const tp=ntopic.value.trim()?topicByPath(ntopic.value,true):tsel.value;
+    const d={id:uidGen("d"),title:t.slice(0,120),topic:tp,created:Date.now(),updated:Date.now(),cards:[]};
+    S.decks.push(d);saveDeck(d);refreshAll();toast("Stapel angelegt. Füge jetzt Karten hinzu.");goLib("deck",d.id);
+  });
+  b.append(backBtn(),el("h2",{text:"Neuer Stapel"}),
+    el("div",{class:"panel grid"},
+      el("label",{for:"nd-name"},"Name des Stapels",name),
+      el("label",{for:"nd-topic"},"Thema",tsel),
+      el("label",{for:"nd-newtopic"},"Oder neues Thema anlegen (mit › Unterthemen trennen)",ntopic),
+      el("div",{class:"row"},go,el("button",{class:"btn",type:"button",onclick:()=>goLib("list")},"Abbrechen"))));
+  setTimeout(()=>name.focus(),50);
+}
+
+/* ---------- Import ---------- */
+function renderImport(){
+  const b=$("#libBody");b.replaceChildren();
+  let parsed=null;
+  const ta=el("textarea",{id:"imp-text",spellcheck:"false",placeholder:'{"thema": "…", "titel": "…", "karten": [{"vorne": "…", "hinten": "…"}]}\n\nAuch möglich, eine Karte pro Zeile:\nFrage ; Antwort'});
+  const status=el("div"),preview=el("div",{class:"preview",hidden:""});
+  const target=el("select",{id:"imp-target"});
+  target.append(el("option",{value:"",text:"Neuer Stapel"}));
+  S.decks.forEach(d=>target.append(el("option",{value:d.id,text:"Hinzufügen zu: "+d.title})));
+  const titleIn=el("input",{type:"text",id:"imp-title",placeholder:"z. B. Biologie – Zellatmung",maxlength:"120"});
+  const titleWrap=el("label",{for:"imp-title"},"Name des neuen Stapels",titleIn);
+  const topicSel=el("select",{id:"imp-topic"});
+  topicSel.append(el("option",{value:"",text:"Ohne Thema"}));
+  flatTopics().forEach(x=>topicSel.append(el("option",{value:x.t.id,text:topicPath(x.t.id)})));
+  topicSel.append(el("option",{value:"__new",text:"+ Neues Thema …"}));
+  const newTopic=el("input",{type:"text",id:"imp-newtopic",placeholder:"Neues Thema, z. B. Ausbildung › Recht",maxlength:"200","aria-label":"Name des neuen Themas",hidden:""});
+  const topicWrap=el("div",{class:"grid",style:"gap:8px"},el("label",{for:"imp-topic"},"Thema",topicSel),newTopic);
+  const go=el("button",{class:"btn primary",type:"button"},"Importieren");
+  function update(){
+    status.replaceChildren();preview.hidden=true;preview.replaceChildren();
+    parsed=parseInput(ta.value);
+    const tg=target.value;titleWrap.hidden=!!tg;topicWrap.hidden=!!tg;
+    let n=0;
+    if(parsed&&parsed.error)status.append(el("div",{class:"status err",text:parsed.error}));
+    else if(parsed){
+      n=parsed.decks.reduce((a,d)=>a+d.cards.length,0);
+      if(!n)status.append(el("div",{class:"status err",text:"Keine Karten erkannt. Nutze das JSON-Format aus dem Prompt oder eine Karte pro Zeile: Frage ; Antwort"}));
+      else{
+        status.append(el("div",{class:"status ok",text:n+(n===1?" Karte":" Karten")+" erkannt"+(parsed.decks.length>1?" in "+parsed.decks.length+" Stapeln":"")}));
+        parsed.decks[0].cards.slice(0,30).forEach(c=>preview.append(el("div",null,el("span",{text:c.f}),el("span",{text:c.b}))));
+        preview.hidden=false;
+        const t0=parsed.decks[0].title;if(t0&&!titleIn.dataset.touched)titleIn.value=t0;
+        const pt=parsed.decks[0].topic;
+        if(pt&&!topicSel.dataset.touched){const tid=topicByPath(pt,false);if(tid)topicSel.value=tid;else{topicSel.value="__new";newTopic.value=pt}}
+      }
+    }
+    newTopic.hidden=topicSel.value!=="__new";
+    go.disabled=!n;
+  }
+  ta.addEventListener("input",update);target.addEventListener("change",update);
+  topicSel.addEventListener("change",()=>{topicSel.dataset.touched="1";update();if(topicSel.value==="__new")newTopic.focus()});
+  titleIn.addEventListener("input",()=>{titleIn.dataset.touched=titleIn.value?"1":""});
+  go.addEventListener("click",()=>{
+    if(!parsed||parsed.error)return;
+    const tg=target.value,selTopic=topicSel.value;
+    const uiTopic=()=>selTopic==="__new"?topicByPath(newTopic.value,true):selTopic;
+    const mk=c=>mkCard(c.f,c.b);let added=0;
+    if(tg){
+      const d=S.decks.find(x=>x.id===tg);if(!d)return;
+      const have=new Set(d.cards.map(c=>c.f+"\u0000"+c.b));
+      parsed.decks.forEach(pd=>pd.cards.forEach(c=>{if(!have.has(c.f+"\u0000"+c.b)){d.cards.push(mk(c));added++}}));
+      d.updated=Date.now();saveDeck(d);
+    }else{
+      parsed.decks.forEach((pd,i)=>{
+        const title=(i===0?titleIn.value.trim():"")||pd.title||("Stapel vom "+new Date().toLocaleDateString("de-DE"));
+        const tp=i===0?uiTopic():(pd.topic?topicByPath(pd.topic,true):uiTopic());
+        const d={id:uidGen("d"),title:title.slice(0,120),topic:tp,created:Date.now(),updated:Date.now(),cards:pd.cards.map(mk)};
+        S.decks.push(d);saveDeck(d);added+=d.cards.length;
+      });
+    }
+    toast(added+(added===1?" Karte":" Karten")+" importiert");
+    refreshAll();goLib("list");
+  });
+  b.append(
+    backBtn(),el("h2",{text:"Karten importieren"}),
+    el("div",{class:"promptbox"},
+      el("div",{class:"row between"},el("span",{class:"label",text:"Schreib das in einen anderen Chat"}),el("button",{class:"btn small",type:"button",onclick:()=>copy(PROMPT)},"Kopieren")),
+      el("pre",{text:PROMPT})),
+    el("label",{for:"imp-text"},"Antwort von Claude hier einfügen",ta),
+    status,preview,
+    el("label",{for:"imp-target"},"Ziel",target),
+    titleWrap,topicWrap,
+    el("div",{class:"row"},go,el("button",{class:"btn",type:"button",onclick:()=>goLib("list")},"Abbrechen")));
+  update();setTimeout(()=>ta.focus(),50);
+}
+
+/* ---------- Themen ---------- */
+let delTopic=null;
+const sibDup=(name,parent,exceptId)=>S.topics.some(x=>x.id!==exceptId&&(x.parent||"")===(parent||"")&&x.name.toLowerCase()===name.toLowerCase());
+function renderTopics(){
+  const b=$("#libBody");b.replaceChildren();
+  const inp=el("input",{type:"text",id:"topic-new",placeholder:"z. B. Ausbildung oder Recht",maxlength:"60"});
+  const psel=topicSelect("topic-parent","Hauptthema (oberste Ebene)",t=>topicDepth(t.id)+1<=MAXD);
+  const form=el("form",{class:"grid",style:"gap:10px"},
+    el("label",{for:"topic-new"},"Neues Thema",inp),
+    el("label",{for:"topic-parent"},"Liegt unter",psel),
+    el("div",{class:"row"},el("button",{class:"btn primary",type:"submit"},"Hinzufügen")));
+  form.addEventListener("submit",e=>{
+    e.preventDefault();const n=inp.value.trim();if(!n)return;
+    if(sibDup(n,psel.value,null)){toast("Dieses Thema gibt es auf dieser Ebene schon");return}
+    S.topics.push({id:uidGen("t"),name:n.slice(0,60),parent:psel.value});saveMeta();
+    toast("Thema angelegt");refreshAll();renderTopics();const i=$("#topic-new");if(i)i.focus();
+  });
+  const list=el("div",{class:"grid",style:"gap:8px"});
+  if(!S.topics.length)list.append(el("p",{class:"syncnote",text:"Noch keine Themen. Lege oben dein erstes an, zum Beispiel „Ausbildung“, und darunter „Recht“ oder „Buchführung“."}));
+  flatTopics().forEach(({t,depth})=>{
+    const own=S.decks.filter(d=>d.topic===t.id).length,sub=kids(t.id).length;
+    const name=el("input",{type:"text","aria-label":"Name des Themas",maxlength:"60"});name.value=t.name;
+    name.addEventListener("change",()=>{
+      const nn=name.value.trim();if(!nn){name.value=t.name;return}
+      if(sibDup(nn,t.parent,t.id)){toast("Dieses Thema gibt es auf dieser Ebene schon");name.value=t.name;return}
+      t.name=nn.slice(0,60);saveMeta();fillSrc();renderSets();toast("Umbenannt");
+    });
+    const ex=descIds(t.id),h=topicHeight(t.id);
+    const move=topicSelect("mv-"+t.id,"Hauptthema (oberste Ebene)",p=>!ex.has(p.id)&&topicDepth(p.id)+1+h<=MAXD);
+    move.setAttribute("aria-label","Übergeordnetes Thema");move.value=t.parent||"";
+    move.addEventListener("change",()=>{
+      if(sibDup(t.name,move.value,t.id)){toast("Unter diesem Thema gibt es schon eins mit diesem Namen");move.value=t.parent||"";return}
+      t.parent=move.value;saveMeta();toast("Verschoben");refreshAll();renderTopics();
+    });
+    const ctrl=delTopic===t.id
+      ?el("span",{class:"row"},
+        el("span",{class:"syncnote",text:(own||sub)?"Unterthemen und Stapel rücken eine Ebene nach oben."+((t.pdfs||[]).length?" Die PDFs dieses Themas werden gelöscht.":""):((t.pdfs||[]).length?"Thema samt PDFs löschen?":"Thema löschen?")}),
+        el("button",{class:"btn small danger",type:"button",onclick:()=>{
+          const up=t.parent||"";
+          S.topics.forEach(x=>{if((x.parent||"")===t.id)x.parent=up});
+          S.decks.forEach(d=>{if(d.topic===t.id){d.topic=up;saveDeck(d)}});
+          S.sets.forEach(s=>{s.topics=s.topics.filter(x=>x!==t.id)});
+          (t.pdfs||[]).forEach(e=>removePdfFile(e));
+          S.topics=S.topics.filter(x=>x.id!==t.id);
+          saveMeta();delTopic=null;toast("Thema gelöscht");refreshAll();renderTopics();
+        }},"Löschen"),
+        el("button",{class:"btn small",type:"button",onclick:()=>{delTopic=null;renderTopics()}},"Abbrechen"))
+      :el("button",{class:"btn small",type:"button",onclick:()=>{delTopic=t.id;renderTopics()}},"Löschen");
+    list.append(el("div",{class:"topicrow",style:"margin-left:"+Math.min(depth,4)*14+"px"},
+      name,
+      el("label",null,"Liegt unter",move),
+      el("div",{class:"row between"},el("span",{class:"syncnote",text:own+(own===1?" Stapel":" Stapel")+(sub?" · "+sub+(sub===1?" Unterthema":" Unterthemen"):"")}),ctrl)));
+  });
+  b.append(backBtn(),el("h2",{text:"Themen"}),
+    el("p",{class:"syncnote",text:"Ordne Themen wie einen Ordnerbaum, zum Beispiel Ausbildung › Recht › Arbeitsrecht oder Spanisch › Grammatik. Bis zu fünf Ebenen sind möglich. Im Bereich Lernen nimmt ein Thema automatisch alle Unterthemen mit. Beim Löschen eines Themas bleiben alle Stapel und Karten erhalten."}),
+    el("div",{class:"panel"},form),list);
+}
+
+/* ---------- Stapel-Details ---------- */
+let editCard=null;
+function renderDeck(){
+  const d=S.decks.find(x=>x.id===lib.deckId);
+  if(!d){lib.view="list";return renderLib()}
+  const b=$("#libBody");b.replaceChildren();
+  const title=el("input",{type:"text",id:"deck-title",maxlength:"120"});title.value=d.title;
+  title.addEventListener("change",()=>{const t=title.value.trim();if(!t){title.value=d.title;return}d.title=t;d.updated=Date.now();saveDeck(d);renderSets();fillSrc();toast("Umbenannt")});
+  const tsel=el("select",{id:"deck-topic"});tsel.append(el("option",{value:"",text:"Ohne Thema"}));
+  flatTopics().forEach(x=>tsel.append(el("option",{value:x.t.id,text:topicPath(x.t.id)})));tsel.value=d.topic||"";
+  tsel.addEventListener("change",()=>{d.topic=tsel.value;d.updated=Date.now();saveDeck(d);renderSets();fillSrc();toast("Thema geändert")});
+  const nf=el("textarea",{id:"nc-f",placeholder:"Vorderseite (Frage)"}),nb=el("textarea",{id:"nc-b",placeholder:"Rückseite (Antwort)"});
+  nf.style.minHeight=nb.style.minHeight="64px";
+  const add=el("button",{class:"btn primary",type:"button"},"Karte hinzufügen");
+  add.addEventListener("click",()=>{
+    const f=nf.value.trim(),bb=nb.value.trim();if(!f||!bb){toast("Bitte Vorder- und Rückseite ausfüllen");return}
+    d.cards.push(mkCard(f,bb));d.updated=Date.now();saveDeck(d);refreshAll();renderDeck();toast("Karte gespeichert");
+  });
+  const list=el("div",{class:"grid",style:"gap:8px"});
+  if(!d.cards.length)list.append(el("div",{class:"empty",text:"Dieser Stapel hat noch keine Karten."}));
+  d.cards.forEach(c=>{
+    if(editCard===c.id){
+      const ef=el("textarea",{"aria-label":"Vorderseite"}),eb=el("textarea",{"aria-label":"Rückseite"});ef.value=c.f;eb.value=c.b;
+      ef.style.minHeight=eb.style.minHeight="64px";
+      list.append(el("div",{class:"topicrow"},ef,eb,el("div",{class:"row"},
+        el("button",{class:"btn small primary",type:"button",onclick:()=>{
+          const f=ef.value.trim(),bb=eb.value.trim();if(!f||!bb){toast("Beide Seiten brauchen Text");return}
+          c.f=f;c.b=bb;d.updated=Date.now();saveDeck(d);editCard=null;renderDeck();
+        }},"Speichern"),
+        el("button",{class:"btn small",type:"button",onclick:()=>{editCard=null;renderDeck()}},"Abbrechen"))));
+      return;
+    }
+    const x=el("button",{class:"x",type:"button","aria-label":"Karte löschen"},"✕");
+    x.addEventListener("click",()=>armConfirm(x,"Löschen?",()=>{d.cards=d.cards.filter(k=>k.id!==c.id);d.updated=Date.now();saveDeck(d);refreshAll();renderDeck()}));
+    list.append(el("div",{class:"cardrow"},
+      el("div",{style:"min-width:0;display:grid;gap:3px"},el("div",{class:"f",text:c.f}),el("div",{class:"b",text:c.b}),
+        el("div",{class:"lv",text:(c.box?"Fach "+c.box:"Neu")+(c.ok||c.bad?" · "+c.ok+"× gewusst, "+c.bad+"× nochmal":"")})),
+      el("div",{class:"row",style:"flex-wrap:nowrap"},el("button",{class:"btn small",type:"button",onclick:()=>{editCard=c.id;renderDeck()}},"Bearbeiten"),x)));
+  });
+  const reset=el("button",{class:"btn small",type:"button"},"Fortschritt zurücksetzen");
+  reset.addEventListener("click",()=>armConfirm(reset,"Wirklich zurücksetzen?",()=>{d.cards.forEach(c=>{c.box=0;c.due=0;c.ok=0;c.bad=0});saveDeck(d);refreshAll();renderDeck();toast("Fortschritt zurückgesetzt")}));
+  const del=el("button",{class:"btn small danger",type:"button"},"Stapel löschen");
+  del.addEventListener("click",()=>armConfirm(del,"Stapel samt Karten löschen?",async()=>{await removeDeck(d.id);toast("Stapel gelöscht");refreshAll();goLib("list")}));
+  b.append(backBtn(),el("h2",{text:"Karten & Optionen"}),
+    el("div",{class:"panel grid"},
+      el("label",{for:"deck-title"},"Name des Stapels",title),
+      el("label",{for:"deck-topic"},"Thema",tsel),
+      el("div",{class:"row"},reset,del)),
+    el("div",{class:"panel grid"},el("h3",{text:"Neue Karte"}),nf,nb,el("div",{class:"row"},add)),
+    el("div",{class:"grid"},el("h3",{text:d.cards.length+(d.cards.length===1?" Karte":" Karten")}),list));
+}
+
+/* ---------- Sicherung ---------- */
+const LS_BK="lernwerkstatt.lastbackup";
+function lastBackup(){try{return Number(localStorage.getItem(LS_BK))||0}catch(e){return 0}}
+function markBackup(){try{localStorage.setItem(LS_BK,String(Date.now()))}catch(e){}}
+const pad2=n=>String(n).padStart(2,"0");
+function stampNow(){const d=new Date();return d.getFullYear()+"-"+pad2(d.getMonth()+1)+"-"+pad2(d.getDate())+"_"+pad2(d.getHours())+"-"+pad2(d.getMinutes())}
+function makeBackup(){return {app:"lernwerkstatt",version:2,exported:new Date().toISOString(),topics:S.topics.map(t=>({id:t.id,name:t.name,parent:t.parent||""})),decks:clone(S.decks),sets:clone(S.sets)}}
+const clampInt=(x,lo,hi)=>{x=Math.floor(Number(x));return isFinite(x)?Math.max(lo,Math.min(hi,x)):lo};
+function planRestore(obj){
+  if(!obj||typeof obj!=="object"||!Array.isArray(obj.decks))return {error:"Das ist keine Sicherung. Es fehlt die Liste der Stapel."};
+  const bt=(Array.isArray(obj.topics)?obj.topics:[]).filter(t=>t&&typeof t.id==="string"&&typeof t.name==="string"&&t.name.trim());
+  const din=[];
+  for(const d of obj.decks){
+    if(!d||typeof d.id!=="string"||!d.id||!Array.isArray(d.cards))continue;
+    const cards=d.cards.filter(c=>c&&typeof c.f==="string"&&typeof c.b==="string"&&c.f.trim()&&c.b.trim())
+      .map(c=>({id:typeof c.id==="string"&&c.id?c.id:uidGen("c"),f:c.f,b:c.b,box:clampInt(c.box,0,MAXBOX),due:Number(c.due)||0,ok:Number(c.ok)||0,bad:Number(c.bad)||0}));
+    din.push({id:d.id,title:String(d.title||"Ohne Titel").slice(0,200),topic:typeof d.topic==="string"?d.topic:"",created:Number(d.created)||Date.now(),updated:Number(d.updated)||0,cards});
+  }
+  if(!din.length&&!bt.length)return {error:"In dieser Sicherung sind keine Stapel enthalten."};
+  const map={},newTopics=[];
+  bt.forEach(t=>{
+    const ex=S.topics.find(x=>x.id===t.id)||(!t.parent&&S.topics.find(x=>!x.parent&&x.name.toLowerCase()===t.name.trim().toLowerCase()));
+    if(ex)map[t.id]=ex.id;else{map[t.id]=t.id;newTopics.push({id:t.id,name:t.name.trim().slice(0,60),parent:typeof t.parent==="string"?t.parent:""})}
+  });
+  newTopics.forEach(t=>{t.parent=map[t.parent]||""});
+  let add=0,upd=0,keep=0,cards=0;
+  din.forEach(d=>{
+    d.topic=d.topic&&map[d.topic]?map[d.topic]:"";cards+=d.cards.length;
+    const cur=S.decks.find(x=>x.id===d.id);
+    if(!cur)add++;else if((d.updated||0)>(cur.updated||0))upd++;else keep++;
+  });
+  const sets=(Array.isArray(obj.sets)?obj.sets:[]).filter(s=>s&&typeof s.id==="string"&&s.name&&!S.sets.some(x=>x.id===s.id))
+    .map(s=>({id:s.id,name:String(s.name).slice(0,60),topics:(Array.isArray(s.topics)?s.topics:[]).map(x=>map[x]||x),decks:Array.isArray(s.decks)?s.decks:[]}));
+  return {decks:din,newTopics,sets,add,upd,keep,cards};
+}
+function applyRestore(plan){
+  plan.newTopics.forEach(t=>S.topics.push(t));
+  plan.sets.forEach(s=>S.sets.push(s));
+  plan.decks.forEach(d=>{
+    const i=S.decks.findIndex(x=>x.id===d.id);
+    if(i<0){S.decks.push(d);saveDeck(d)}
+    else if((d.updated||0)>(S.decks[i].updated||0)){S.decks[i]=d;saveDeck(d)}
+  });
+  normalize();saveMeta();
+}
+async function getCap(n){try{return await window.claude.use(n)}catch(e){return null}}
+function renderBackup(){
+  const b=$("#libBody");b.replaceChildren();
+  const nCards=S.decks.reduce((a,d)=>a+d.cards.length,0),lb=lastBackup();
+  const restoreBox=el("div",{class:"panel grid",hidden:""});
+  function showPlan(plan,label){
+    restoreBox.replaceChildren();restoreBox.hidden=false;
+    if(plan.error){restoreBox.append(el("div",{class:"status err",text:plan.error}));restoreBox.scrollIntoView({block:"nearest"});return}
+    const parts=[];if(plan.add)parts.push(plan.add+" neu");if(plan.upd)parts.push(plan.upd+" aktualisiert");if(plan.keep)parts.push(plan.keep+" unverändert");
+    restoreBox.append(el("h3",{text:"Sicherung aus "+label}),
+      el("div",{class:"status ok",text:plan.decks.length+" Stapel mit "+plan.cards+" Karten"+(parts.length?" ("+parts.join(", ")+")":"")+(plan.newTopics.length?" · "+plan.newTopics.length+" neue Themen":"")+(plan.sets.length?" · "+plan.sets.length+" Lernstapel":"")}),
+      el("p",{class:"syncnote",text:"Es wird nichts gelöscht. Gibt es einen Stapel schon, gewinnt die Version mit der neueren Änderung."}),
+      el("div",{class:"row"},
+        el("button",{class:"btn primary",type:"button",onclick:()=>{applyRestore(plan);toast("Sicherung eingespielt");refreshAll();goLib("list")}},"Einspielen"),
+        el("button",{class:"btn",type:"button",onclick:()=>{restoreBox.hidden=true}},"Abbrechen")));
+    restoreBox.scrollIntoView({block:"nearest"});
+  }
+  function handleText(text,label){let o;try{o=JSON.parse(text)}catch(e){showPlan({error:"Das ist keine gültige Sicherung. Der Text lässt sich nicht lesen."});return}showPlan(planRestore(o),label)}
+  const fileStatus=el("div"),jsonArea=el("textarea",{id:"bk-json",readonly:"",hidden:"","aria-label":"Sicherung als Text"});
+  const saveBtn=el("button",{class:"btn primary",type:"button"},"Als Datei speichern");
+  saveBtn.addEventListener("click",async()=>{
+    const json=JSON.stringify(makeBackup(),null,1),dl=await getCap("downloads");
+    const fallback=msg=>{jsonArea.value=json;jsonArea.hidden=false;jsonArea.select();fileStatus.replaceChildren(el("div",{class:"status "+(msg?"err":"ok"),text:msg||"Kopiere den Text und speichere ihn in einer .json-Datei."}))};
+    if(!dl){
+      if(!window.claude){
+        const ok=await exportFile("lernwerkstatt-sicherung-"+stampNow()+".json",new Blob([json],{type:"application/json"}),"Lernwerkstatt Sicherung");
+        if(ok){markBackup();fileStatus.replaceChildren(el("div",{class:"status ok",text:"Sicherung erstellt."}));return}
+        return fallback("Die Datei konnte nicht erstellt werden. Kopiere stattdessen den Text unten.");
+      }
+      return fallback("");
+    }
+    try{await dl.save({filename:"lernwerkstatt-sicherung-"+stampNow()+".json",data:json});markBackup();fileStatus.replaceChildren(el("div",{class:"status ok",text:"Datei gespeichert."}))}
+    catch(e){if(e&&e.code==="declined")return;fallback("Speichern als Datei klappt hier nicht. Kopiere stattdessen den Text unten.")}
+  });
+  const fileIn=el("input",{type:"file",id:"bk-file",accept:".json,application/json"});
+  fileIn.addEventListener("change",async()=>{
+    const f=fileIn.files&&fileIn.files[0];if(!f)return;
+    if(f.size>20e6){showPlan({error:"Die Datei ist größer als 20 MB und keine Sicherung."});return}
+    try{handleText(await f.text(),"Datei „"+f.name+"“")}catch(e){showPlan({error:"Die Datei lässt sich nicht lesen."})}
+    fileIn.value="";
+  });
+  const paste=el("textarea",{id:"bk-paste",placeholder:"… oder Sicherungstext hier einfügen",spellcheck:"false"});
+  b.append(backBtn(),el("h2",{text:"Sicherung"}),
+    el("p",{class:"syncnote",text:S.decks.length+" Stapel · "+nCards+" Karten · "+S.topics.length+" Themen · "+(lb?"letzte Sicherung am "+new Date(lb).toLocaleString("de-DE"):"noch nicht gesichert")}),
+    restoreBox,
+    el("div",{class:"panel grid"},el("h3",{text:"Sichern"}),
+      el("p",{class:"syncnote",text:"Speichert alle Themen, Stapel, Karten und Lernstapel samt Fortschritt in einer Datei. PDF-Unterlagen sind nicht enthalten."}),
+      el("div",{class:"row"},saveBtn),fileStatus,jsonArea),
+    el("div",{class:"panel grid"},el("h3",{text:"Einspielen"}),
+      el("p",{class:"syncnote",text:"Funktioniert auch mit Sicherungen aus der Lernkartei. So holst du deine bisherigen Karten hierher."}),
+      el("label",{for:"bk-file"},"Sicherung aus Datei",fileIn),
+      paste,el("div",{class:"row"},el("button",{class:"btn",type:"button",onclick:()=>{if(paste.value.trim())handleText(paste.value,"eingefügtem Text")}},"Prüfen"))));
+}
+
+/* ---------- Fokus-Timer ---------- */
+const PH={work:"Lernen",short:"Kurze Pause",long:"Lange Pause"},CIRC=339.29;
+let T={phase:"work",left:0,running:false,end:0,iv:null};
+const phaseMs=p=>S.set[p]*60000;
+function setPhase(p){T.phase=p;T.left=phaseMs(p);T.running=false;clearInterval(T.iv);drawTimer()}
+function drawTimer(){
+  const total=phaseMs(T.phase),ms=T.running?Math.max(0,T.end-Date.now()):T.left,s=Math.ceil(ms/1000);
+  $("#timeText").textContent=String(Math.floor(s/60)).padStart(2,"0")+":"+String(s%60).padStart(2,"0");
+  $("#phaseText").textContent=PH[T.phase];
+  $("#ringArc").setAttribute("stroke-dashoffset",(CIRC*(1-ms/total)).toFixed(2));
+  $("#timerToggle").textContent=T.running?"Pause":(T.left<total?"Weiter":"Start");
+  $$("[data-phase]").forEach(b=>b.classList.toggle("primary",b.dataset.phase===T.phase));
+  const l=S.log[dayNum()]||{};$("#roundsToday").textContent=l.p||0;
+  $("#setWork").value=S.set.work;$("#setShort").value=S.set.short;$("#setLong").value=S.set.long;
+}
+function beep(){
+  try{
+    const A=window.AudioContext||window.webkitAudioContext;if(!A)return;
+    const ctx=new A(),o=ctx.createOscillator(),g=ctx.createGain();
+    o.frequency.value=660;g.gain.value=.08;o.connect(g);g.connect(ctx.destination);
+    o.start();setTimeout(()=>{o.stop();ctx.close()},450);
+  }catch(e){}
+}
+function complete(){
+  clearInterval(T.iv);T.running=false;beep();
+  let next="work";
+  if(T.phase==="work"){
+    bump("p",1);bump("f",S.set.work);
+    next=(((S.log[dayNum()]||{}).p||0)%4===0)?"long":"short";
+    toast("Runde geschafft. Zeit für eine Pause.");
+  }else toast("Pause vorbei. Weiter geht es.");
+  setPhase(next);renderHome();
+}
+$("#timerToggle").addEventListener("click",()=>{
+  if(T.running){T.left=Math.max(0,T.end-Date.now());T.running=false;clearInterval(T.iv);drawTimer();return}
+  T.running=true;T.end=Date.now()+T.left;clearInterval(T.iv);
+  T.iv=setInterval(()=>{if(Date.now()>=T.end)complete();else drawTimer()},250);drawTimer();
+});
+$("#timerReset").addEventListener("click",()=>setPhase(T.phase));
+$$("[data-phase]").forEach(b=>b.addEventListener("click",()=>setPhase(b.dataset.phase)));
+[["setWork","work",120],["setShort","short",60],["setLong","long",90]].forEach(([id,key,mx])=>{
+  $("#"+id).addEventListener("change",e=>{
+    S.set[key]=Math.min(mx,Math.max(1,Math.round(+e.target.value||S.set[key])));
+    saveMeta();if(!T.running)setPhase(T.phase);else drawTimer();
+  });
+});
+
+/* ---------- Tabs & Start ---------- */
+function setTab(name){
+  $$("nav [data-tab]").forEach(b=>b.setAttribute("aria-selected",String(b.dataset.tab===name)));
+  ["heute","lernen","fokus","bib"].forEach(n=>{$("#tab-"+n).hidden=n!==name});
+  if(name==="heute")renderHome();
+  if(name==="lernen"){fillSrc();renderSets()}
+  if(name==="fokus")drawTimer();
+  if(name==="bib"){lib.view="list";lib.deckId=null;renderLib()}
+}
+$$("nav [data-tab]").forEach(b=>b.addEventListener("click",()=>setTab(b.dataset.tab)));
+function refreshAll(){renderHome();fillSrc();renderSets()}
+function renderAll(){
+  renderHome();fillSrc();renderSets();
+  if(!$("#tab-bib").hidden)renderLib();
+  if(!T.running)T.left=phaseMs(T.phase);
+  drawTimer();
+}
+initStore();
+})();
+
+</script>
+<script>
+if("serviceWorker" in navigator&&location.protocol.indexOf("http")===0){addEventListener("load",function(){navigator.serviceWorker.register("sw.js").catch(function(){})})}
+</script>
+</body>
+</html>

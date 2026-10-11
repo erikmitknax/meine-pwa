@@ -1,0 +1,12 @@
+{
+  "appId": "io.github.erikmitknax.lernwerkstatt",
+  "appName": "Lernwerkstatt",
+  "webDir": "www",
+  "backgroundColor": "#0F1520",
+  "server": {
+    "url": "https://erikmitknax.github.io/meine-pwa/lernwerkstatt-pwa/",
+    "androidScheme": "https",
+    "errorPath": "offline.html",
+    "allowNavigation": ["erikmitknax.github.io"]
+  }
+}
