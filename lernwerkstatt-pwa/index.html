@@ -236,6 +236,14 @@ html.pv-lock,html.pv-lock body{overflow:hidden}
 .exrow span{overflow-wrap:anywhere}
 .exrow input{margin:0}
 .status{padding:8px 12px;border-radius:8px;background:var(--surface2);font-size:.9rem}
+.acc{border:1px solid var(--line);border-radius:12px;background:var(--surface);overflow:hidden}
+.acc .acc{background:var(--surface2)}
+.acc-h{display:flex;align-items:center;gap:10px;width:100%;padding:12px 14px;background:none;border:0;color:inherit;font:inherit;font-weight:700;text-align:left;cursor:pointer;min-width:0}
+.acc-h .chev{flex:none;width:26px;height:26px;display:inline-grid;place-items:center;border-radius:7px;background:var(--surface2);font-family:var(--f-mono,monospace);font-weight:700;color:var(--accent)}
+.acc .acc .acc-h .chev{background:var(--surface)}
+.acc-t{flex:none}
+.acc-s{margin-left:auto;min-width:0;color:var(--muted);font-size:.85rem;font-weight:400;text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.acc-b{padding:0 14px 14px;display:grid;gap:10px}
 </style>
 </head>
 <body>
@@ -380,21 +388,27 @@ html.pv-lock,html.pv-lock body{overflow:hidden}
 
 <!-- EINSTELLUNGEN -->
 <section id="tab-einst" hidden class="grid">
-  <div class="panel grid" id="setSich" hidden></div>
   <div class="panel grid" id="setMain">
     <div class="row between"><h2>Einstellungen</h2><button class="btn small" id="settingsClose" type="button">Schließen</button></div>
-    <div><div class="label">Darstellung</div><div class="row" id="themeOpts" role="group" aria-label="Darstellung" style="margin-top:8px"></div>
-    <p class="syncnote" style="margin-top:8px">„System“ folgt der Einstellung deines Geräts.</p></div>
-    <div><div class="label">Farbdesign</div><div class="pals" id="paletteOpts" role="group" aria-label="Farbdesign" style="margin-top:8px"></div>
-    <p class="syncnote" style="margin-top:8px">Funktioniert zusammen mit Hell und Dunkel.</p></div>
-    <div><div class="label">Timer: Klingelton und Vibration</div><div class="grid" id="alarmOpts" style="gap:10px;margin-top:8px"></div>
-    <p class="syncnote" style="margin-top:8px">Das gilt, wenn im Fokus-Timer eine Phase endet. Der Timer läuft nur, solange die App geöffnet ist.</p></div>
-    <div><div class="label">Reiter</div>
-    <p class="syncnote" style="margin-top:4px">Hake an, welche Reiter du siehst, ändere ihre Namen und lege mit den Pfeilen die Reihenfolge fest. Ein leeres Namensfeld stellt den Originalnamen wieder her.</p>
-    <div class="grid" id="tabOpts" style="gap:8px;margin-top:8px"></div></div>
-    <div><div class="label">Sicherung</div>
-    <p class="syncnote" style="margin-top:4px">Exportiere deine Stapel als Datei oder lege automatische Sicherungen in deiner Dropbox an.</p>
-    <div class="row" style="margin-top:8px"><button class="btn" id="setSichBtn" type="button">Sicherung öffnen ›</button></div></div>
+    <div data-acc="theme" data-title="Darstellung">
+      <div class="row" id="themeOpts" role="group" aria-label="Darstellung"></div>
+      <p class="syncnote" style="margin-top:8px">„System“ folgt der Einstellung deines Geräts.</p>
+    </div>
+    <div data-acc="palette" data-title="Farbdesign">
+      <div class="pals" id="paletteOpts" role="group" aria-label="Farbdesign"></div>
+      <p class="syncnote" style="margin-top:8px">Funktioniert zusammen mit Hell und Dunkel.</p>
+    </div>
+    <div data-acc="alarm" data-title="Timer-Alarm">
+      <div class="grid" id="alarmOpts" style="gap:10px"></div>
+      <p class="syncnote" style="margin-top:8px">Das gilt, wenn im Fokus-Timer eine Phase endet. Der Timer läuft nur, solange die App geöffnet ist.</p>
+    </div>
+    <div data-acc="tabs" data-title="Reiter">
+      <p class="syncnote" style="margin-top:0">Hake an, welche Reiter du siehst, ändere ihre Namen und lege mit den Pfeilen die Reihenfolge fest. Ein leeres Namensfeld stellt den Originalnamen wieder her.</p>
+      <div class="grid" id="tabOpts" style="gap:8px;margin-top:8px"></div>
+    </div>
+    <div data-acc="sich" data-title="Sicherung und Export">
+      <div class="grid" id="setSich" style="gap:10px"></div>
+    </div>
   </div>
 </section>
 
@@ -583,6 +597,25 @@ function applyTheme(){
   else VARS.forEach(v=>r.style.removeProperty(v));
 }
 try{matchMedia("(prefers-color-scheme: dark)").addEventListener("change",()=>{if(S&&S.palette)applyTheme()})}catch(e){}
+/* Einklappbare Bereiche (Einstellungen). Offene Bereiche merkt sich das Gerät. */
+const ACC_LS="lernwerkstatt.acc";
+const accOpen=new Set((()=>{try{return JSON.parse(localStorage.getItem(ACC_LS))||[]}catch(e){return []}})());
+function accWrap(box,key,title){
+  const body=el("div",{class:"acc-b"});while(box.firstChild)body.append(box.firstChild);
+  const open=accOpen.has(key);
+  const chev=el("span",{class:"chev","aria-hidden":"true",text:open?"^":">"}),sum=el("span",{class:"acc-s"});
+  const h=el("button",{class:"acc-h",type:"button","aria-expanded":String(open)},chev,el("span",{class:"acc-t",text:title}),sum);
+  body.hidden=!open;box.classList.add("acc");box.dataset.key=key;
+  h.addEventListener("click",()=>{
+    const o=body.hidden;body.hidden=!o;chev.textContent=o?"^":">";h.setAttribute("aria-expanded",String(o));
+    if(o)accOpen.add(key);else accOpen.delete(key);
+    try{localStorage.setItem(ACC_LS,JSON.stringify([...accOpen]))}catch(e){}
+  });
+  box.append(h,body);return box;
+}
+const makeAcc=(key,title,...kids)=>accWrap(el("div",null,...kids),key,title);
+function accSum(key,text){const s=document.querySelector('.acc[data-key="'+key+'"]>.acc-h .acc-s');if(s)s.textContent=text}
+$$("[data-acc]").forEach(b=>{accWrap(b,b.dataset.acc,b.dataset.title)});
 function renderSettings(){
   const box=$("#themeOpts");box.replaceChildren();
   const cur=S&&S.theme||"";
@@ -617,6 +650,10 @@ function renderSettings(){
     mk("Lautstärke","al-vol",[[1,"Leise"],[2,"Mittel"],[3,"Laut"]],a.vol,v=>{S.alarm=Object.assign(alarmCfg(),{vol:Number(v)});playSound(alarmCfg().sound,alarmCfg().vol)},null),
     mk("Vibration","al-vib",VIBS,a.vib,v=>{S.alarm=Object.assign(alarmCfg(),{vib:v});vibrate(v)},()=>vibrate(alarmCfg().vib)));
   if(!navigator.vibrate)ab.append(el("p",{class:"syncnote",text:"Dieses Gerät oder dieser Browser unterstützt keine Vibration (zum Beispiel iPhone). Der Ton funktioniert trotzdem."}));
+  accSum("theme",({light:"Hell",dark:"Dunkel"})[S&&S.theme]||"System");
+  accSum("palette",(PALETTES.find(p=>p.id===(S&&S.palette||""))||PALETTES[0]).name);
+  accSum("alarm",(SOUNDS.find(x=>x[0]===a.sound)||[])[1]+" · "+(VIBS.find(x=>x[0]===a.vib)||[])[1]);
+  accSum("tabs",tabsList().filter(t=>t.on).length+" von "+TABDEF.length+" sichtbar");
   const tb=$("#tabOpts");tb.replaceChildren();
   const list=tabsList();
   list.forEach((t,i)=>{
@@ -1294,13 +1331,7 @@ function exportPlan(sel,none){
   return {topics:S.topics.filter(t=>keep.has(t.id)),decks};
 }
 
-/* ---------- Seite „Sicherung“ in den Einstellungen ---------- */
-let settingsView="main";
-function showSettings(v){
-  settingsView=v;$("#setMain").hidden=v!=="main";$("#setSich").hidden=v!=="sich";
-  if(v==="sich")renderSicherung();else renderSettings();
-  window.scrollTo(0,0);
-}
+/* ---------- Bereich „Sicherung und Export“ in den Einstellungen ---------- */
 let sichStatusEl=null;
 function renderSichStatus(){
   if(!sichStatusEl||!sichStatusEl.isConnected)return;
@@ -1313,7 +1344,6 @@ function renderSichStatus(){
 }
 function renderSicherung(){
   const root=$("#setSich");root.replaceChildren();
-  root.append(el("div",{class:"row between"},el("h2",{text:"Sicherung"}),el("button",{class:"btn small",type:"button",onclick:()=>showSettings("main")},"← Einstellungen")));
   /* --- Export --- */
   const flat=flatTopics();
   const sel=new Set(flat.map(x=>x.t.id));let none=true;
@@ -1342,14 +1372,16 @@ function renderSicherung(){
     const ok=await exportFile("lernwerkstatt-"+(full?"sicherung":"auswahl")+"-"+stampNow()+".json",new Blob([JSON.stringify(b,null,1)],{type:"application/json"}),"Lernwerkstatt Export");
     if(ok){if(full)markBackup();toast(exportHow==="download"?"Gespeichert im Ordner „Download“":exportHow==="share"?"Datei bereit. Wähle, wohin sie soll.":"Datei heruntergeladen")}else toast("Die Datei konnte nicht erstellt werden.");
   });
-  root.append(el("div",{class:"panel grid"},el("h3",{text:"Exportieren"}),
+  root.append(makeAcc("exp","Exportieren",
     el("p",{class:"syncnote",text:"Speichert Stapel samt Lernfortschritt in einer Datei. Wähle Themen aus oder nimm alles. PDF-Unterlagen sind nicht in der Datei. Zurückspielen kannst du sie in der Bibliothek über „Importieren“."}),
     el("div",{class:"row"},all,noneBtn),list,count,el("div",{class:"row"},exp)));
   sync();
   /* --- Dropbox --- */
-  const dp=el("div",{class:"panel grid"});root.append(dp);
-  dp.append(el("h3",{text:"Automatische Sicherung in Dropbox"}));
+  const dp=el("div",{class:"grid",style:"gap:10px"});
   if(!dbConnected())renderDbxConnect(dp);else renderDbxConnected(dp);
+  root.append(accWrap(dp,"dbx","Dropbox-Sicherung"));
+  accSum("dbx",dbConnected()?(DB.auto?"automatisch":"verbunden"):"nicht verbunden");
+  accSum("sich",dbConnected()?"Dropbox verbunden":"Export, Dropbox");
 }
 function renderDbxConnect(dp){
   dp.append(el("p",{class:"syncnote",text:"Die App kann bei jeder Änderung eine Sicherungsdatei in deine Dropbox legen und dabei die alte überschreiben. Dafür brauchst du einen eigenen App-Key von Dropbox. Er bleibt nur auf diesem Gerät."}));
@@ -1871,15 +1903,14 @@ function setTab(name){
   if(name==="heute")renderHome();
   if(name==="lernen"){fillSrc();renderSets()}
   if(name==="fokus")drawTimer();
-  if(name==="einst"){settingsView==="sich"?renderSicherung():renderSettings()}
+  if(name==="einst"){renderSettings();renderSicherung()}
   if(name==="bib"){lib.view="list";lib.deckId=null;renderLib()}
 }
 renderNav();
 let lastTab="heute";
-function closeSettings(){settingsView="main";$("#setMain").hidden=false;$("#setSich").hidden=true;const vis=tabsList().filter(t=>t.on).map(t=>t.id);setTab(vis.includes(lastTab)?lastTab:vis[0])}
+function closeSettings(){const vis=tabsList().filter(t=>t.on).map(t=>t.id);setTab(vis.includes(lastTab)?lastTab:vis[0])}
 $("#settingsBtn").addEventListener("click",()=>{if(curTab==="einst")closeSettings();else{lastTab=curTab;setTab("einst")}});
 $("#settingsClose").addEventListener("click",closeSettings);
-$("#setSichBtn").addEventListener("click",()=>showSettings("sich"));
 function refreshAll(){renderHome();fillSrc();renderSets()}
 function renderAll(){
   renderNav();
