@@ -97,12 +97,28 @@ const server = http.createServer((req, res) => {
   t2(q2('#addEx'), 'Seilzug'); c2('[data-act="addEx"]'); await tick();
   ok(d2.querySelectorAll('.cyc').length >= 1, 'reine Varianten-Übung (nur Bänder) zeigt weiter den Varianten-Schalter');
   c2('[data-act="discard"]'); await tick(); c2('[data-act="discardYes"]'); await tick();
+  ok(!!q2('[data-act="tab"][data-tab="settings"][data-open="backup"]') && !q2('[data-tab="data"]'), 'Startseite verlinkt "Sicherung & Import" (keinen Daten-Tab mehr)');
 
   console.log('Komplett-Sicherung: Export, Restore (zusammenführen und ersetzen), Fehlerfälle');
   const wx = w2, dx = d2, lsx = k => JSON.parse(wx.localStorage.getItem(k) || 'null');
   const qx = s => dx.querySelector(s), cx = s => qx(s).click();
-  cx('[data-act="tab"][data-tab="data"]'); await tick();
-  ok(/Sichern/.test(qx('#view').textContent) && /Wiederherstellen/.test(qx('#view').textContent) && /Übungen verwalten/.test(qx('#view').textContent), 'Daten-Tab zeigt Sichern, Wiederherstellen, Übungen verwalten');
+  cx('#gearBtn'); await tick();
+  ok(dx.querySelectorAll('.acc').length === 7, 'Einstellungen haben 7 Abschnitte');
+  ok(dx.querySelectorAll('.acc.open').length === 0 && dx.querySelectorAll('.acc-b').length === 0, 'alle Abschnitte sind eingeklappt');
+  ok([...dx.querySelectorAll('.acc-h')].every(h => h.getAttribute('aria-expanded') === 'false'), 'aria-expanded ist überall "false"');
+  const titles = [...dx.querySelectorAll('.acc-h')].map(h => h.textContent);
+  ok(['Design', 'Logo', 'Signal am Pausenende', 'Sicherung & Wiederherstellung', 'Dropbox-Backup', 'CSV importieren', 'Übungen verwalten'].every(t => titles.some(x => x.includes(t))), 'Titel: Design, Logo, Signal, Sicherung, Dropbox, CSV, Übungen');
+  cx('[data-act="acc"][data-id="design"]'); await tick();
+  ok(dx.querySelectorAll('.acc.open').length === 1 && !!qx('.swatches'), 'Antippen klappt "Design" auf');
+  ok(qx('[data-act="acc"][data-id="design"]').getAttribute('aria-expanded') === 'true', 'aria-expanded wird "true"');
+  cx('[data-act="acc"][data-id="backup"]'); await tick();
+  ok(dx.querySelectorAll('.acc.open').length === 2 && /Sichern/.test(qx('#view').textContent) && /Wiederherstellen/.test(qx('#view').textContent), 'mehrere Abschnitte können offen sein, Sicherung zeigt Sichern und Wiederherstellen');
+  cx('[data-act="acc"][data-id="design"]'); await tick();
+  ok(dx.querySelectorAll('.acc.open').length === 1 && !qx('.swatches'), 'nochmal Antippen klappt wieder zu');
+  cx('[data-act="tab"][data-tab="log"]'); await tick(); cx('#gearBtn'); await tick();
+  ok(dx.querySelectorAll('.acc.open').length === 0, 'beim erneuten Öffnen der Einstellungen ist wieder alles zu');
+  cx('[data-act="tab"][data-tab="log"]'); await tick(); cx('[data-act="tab"][data-open="backup"]'); await tick();
+  ok(dx.querySelectorAll('.acc.open').length === 1 && qx('.acc.open .acc-h').textContent.includes('Sicherung'), 'Link "Sicherung & Import" öffnet die Einstellungen mit aufgeklapptem Abschnitt Sicherung');
   // Pläne und Hinweise für den Rundlauf anlegen
   const plans = { p1: { name: 'Push Gym', unit: 'Push', exercises: ['Bankdrücken'], order: 1 } };
   wx.localStorage.setItem('tb_plans', JSON.stringify(plans)); wx.localStorage.setItem('tb_exinfo', JSON.stringify({ 'Bankdrücken': 'Sitz 5' })); wx.localStorage.setItem('tb_rest', JSON.stringify({ 'Bankdrücken': 120 }));
@@ -111,7 +127,8 @@ const server = http.createServer((req, res) => {
   const w3 = dom3.window, d3 = w3.document, q = s => d3.querySelector(s), c = s => q(s).click(), L3 = k => JSON.parse(w3.localStorage.getItem(k) || 'null');
   const tp = (el, v) => { el.value = v; el.dispatchEvent(new w3.Event('input', { bubbles: true })); };
   const t3 = () => q('#toast') && !q('#toast').hidden ? q('#toast').textContent : '';
-  ok(/Sichern/.test(q('#view').textContent), 'Daten-Tab war als letzter Tab gespeichert und öffnet direkt');
+  ok(/Sicherung & Wiederherstellung/.test(q('#view').textContent) && !q('.acc.open'), 'alter gespeicherter Tab "data" öffnet die Einstellungen, alles eingeklappt');
+  c('[data-act="acc"][data-id="backup"]'); await tick();
   c('[data-act="exportJSON"]'); await tick(60);
   const exp = q('#expText');
   ok(!!exp, 'JSON-Export fällt ohne Download-Möglichkeit auf Text zum Kopieren zurück');
@@ -163,6 +180,7 @@ const server = http.createServer((req, res) => {
   c('[data-act="restoreCancel"]'); await tick();
 
   console.log('Übung umbenennen und zusammenführen');
+  c('[data-act="acc"][data-id="manage"]'); await tick();
   const sel = q('#rnFrom');
   ok(!!sel && [...sel.options].some(o => o.textContent === 'Bankdrücken'), 'Auswahl enthält vorhandene Übungen');
   // Tippfehler-Übung anlegen
@@ -171,6 +189,7 @@ const server = http.createServer((req, res) => {
   const dom4 = await JSDOM.fromURL(base + 'index.html', { runScripts: 'dangerously', resources: 'usable', pretendToBeVisual: true, virtualConsole: vc, beforeParse(w4) { w4.Element.prototype.scrollIntoView = function () {}; w4.scrollTo = function () {}; for (const k of ['tb_sessions', 'tb_plans', 'tb_exinfo', 'tb_rest']) w4.localStorage.setItem(k, w3.localStorage.getItem(k)); w4.localStorage.setItem('tb_tab', JSON.stringify('data')); } });
   await tick(300);
   const w4 = dom4.window, d4 = w4.document, q4 = s => d4.querySelector(s), c4 = s => q4(s).click(), L4 = k => JSON.parse(w4.localStorage.getItem(k) || 'null');
+  c4('[data-act="acc"][data-id="manage"]'); await tick();
   const s4 = q4('#rnFrom'); s4.value = 'Bankdrucken'; s4.dispatchEvent(new w4.Event('change', { bubbles: true })); await tick();
   const to = q4('#rnTo'); to.value = 'Bankdrücken'; to.dispatchEvent(new w4.Event('input', { bubbles: true }));
   c4('[data-act="rnPrepare"]'); await tick();

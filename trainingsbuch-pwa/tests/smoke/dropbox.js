@@ -10,9 +10,9 @@ const server=http.createServer((req,res)=>{const p=decodeURIComponent(req.url.sp
   await new Promise(r=>server.listen(0,'127.0.0.1',r));const base='http://127.0.0.1:'+server.address().port+'/';
   const errors=[];const vc=new VirtualConsole();vc.on('jsdomError',e=>{if(!/Not implemented/.test(e.message))errors.push(e.message)});
   const SESS={a:{date:'2026-10-01',unit:'Push',note:'',exercises:[{name:'Bankdrücken',weste:false,griffe:false,sets:[{w:'40',r:'8'}]}],updatedAt:1}};
-  async function boot(dbx,fetchImpl,tab='data'){
+  async function boot(dbx,fetchImpl,tab='settings',query='',open=true){
     const calls=[];
-    const dom=await JSDOM.fromURL(base+'index.html',{runScripts:'dangerously',resources:'usable',pretendToBeVisual:true,virtualConsole:vc,beforeParse(w){
+    const dom=await JSDOM.fromURL(base+'index.html'+query,{runScripts:'dangerously',resources:'usable',pretendToBeVisual:true,virtualConsole:vc,beforeParse(w){
       w.Element.prototype.scrollIntoView=function(){};w.scrollTo=function(){};
       Object.defineProperty(w,'crypto',{value:nodeCrypto.webcrypto,configurable:true});
       w.localStorage.setItem('tb_sessions',JSON.stringify(SESS));w.localStorage.setItem('tb_tab',JSON.stringify(tab));
@@ -20,6 +20,7 @@ const server=http.createServer((req,res)=>{const p=decodeURIComponent(req.url.sp
       w.fetch=async(url,opts)=>{calls.push({url,opts});return fetchImpl(url,opts)};
     }});
     await tick(2600); // Dropbox startet Auto-Backup nach 2 s
+    if(open){const h=dom.window.document.querySelector('[data-act="acc"][data-id="dropbox"]');if(h&&h.getAttribute('aria-expanded')!=='true')h.click();await tick(60)}
     return {w:dom.window,d:dom.window.document,calls};
   }
   const okRes=(body='{}')=>({ok:true,status:200,json:async()=>JSON.parse(body),text:async()=>body});
@@ -64,6 +65,23 @@ const server=http.createServer((req,res)=>{const p=decodeURIComponent(req.url.sp
   A=await boot({...fresh},async url=>/files\/download/.test(url)?{ok:false,status:409,text:async()=>'{"error_summary":"path/not_found/.."}',json:async()=>({})}:okRes());
   A.d.querySelector('[data-dbx="restore"]').click();await tick(300);
   ok(/noch keine Sicherung/.test(A.d.querySelector('#view').textContent),'keine Datei in Dropbox: verständliche Meldung');
+
+  console.log('Einrichtung: Redirect-Adresse mit Anleitung und Kopieren-Knopf');
+  A=await boot(null,async()=>okRes());
+  const code=A.d.querySelector('.dbx-box code');
+  ok(!!code&&code.textContent===A.w.location.origin+'/','zeigt die Redirect-Adresse genau so an, wie sie an Dropbox geschickt wird');
+  ok(/Redirect URIs/.test(A.d.querySelector('#view').textContent)&&/files\.content\.read/.test(A.d.querySelector('#view').textContent),'erklärt, wo sie eingetragen wird, und nennt die Leseberechtigung');
+  let copied=null;Object.defineProperty(A.w.navigator,'clipboard',{value:{writeText:async t=>{copied=t}},configurable:true});
+  A.d.querySelector('[data-dbx="copy"]').click();await tick(100);
+  ok(copied===A.w.location.origin+'/'&&/Adresse kopiert/.test(A.d.querySelector('#view').textContent),'Kopieren-Knopf legt die Adresse in die Zwischenablage');
+  const hdr=A.d.querySelector('[data-act="acc"][data-id="dropbox"]');
+  ok(/Nicht verbunden/.test(hdr.textContent),'Abschnittskopf zeigt "Nicht verbunden"');
+
+  console.log('Rückkehr von Dropbox öffnet den Dropbox-Abschnitt (auch aus anderem Tab)');
+  A=await boot({appKey:'k',pending:{ver:'v',state:'s1'}},async url=>/oauth2\/token/.test(url)?{ok:true,status:200,json:async()=>({access_token:'a',refresh_token:'r',expires_in:3600}),text:async()=>''}:okRes(),'log','?code=c&state=s1',false);
+  ok(/settings|Mit Dropbox verbunden/.test(A.d.querySelector('#view').textContent)&&/Mit Dropbox verbunden/.test(A.d.querySelector('#view').textContent),'Erfolgsmeldung ist sichtbar, obwohl vorher ein anderer Tab offen war');
+  ok(A.d.querySelectorAll('.acc.open').length===1&&/Dropbox-Backup/.test(A.d.querySelector('.acc.open .acc-h').textContent),'nur der Dropbox-Abschnitt ist aufgeklappt');
+  ok(/Verbunden/.test(A.d.querySelector('[data-act="acc"][data-id="dropbox"]').textContent),'Abschnittskopf zeigt "Verbunden"');
 
   ok(errors.length===0,errors.length?errors.join(' | '):'keine Fehler in der Konsole');
   console.log(`\n${pass} ok, ${fail} fehlgeschlagen`);server.close();process.exit(fail?1:0);
