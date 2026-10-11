@@ -27,7 +27,7 @@ jobs:
 
       - name: Abhaengigkeiten installieren
         working-directory: android-app
-        run: npm install --no-audit --no-fund
+        run: npm ci --no-audit --no-fund
 
       - name: Android-Projekt erzeugen
         working-directory: android-app

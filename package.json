@@ -1,0 +1,11 @@
+{
+  "name": "meine-pwa",
+  "private": true,
+  "description": "Trainingsbuch- und Kippen-PWA. Nur für die Tests von trainingsbuch-pwa nötig, die Apps selbst brauchen keine Abhängigkeiten.",
+  "scripts": {
+    "test": "node --test \"trainingsbuch-pwa/tests/*.test.js\" && node trainingsbuch-pwa/tests/smoke/app.js && node trainingsbuch-pwa/tests/smoke/dropbox.js"
+  },
+  "devDependencies": {
+    "jsdom": "^29.1.1"
+  }
+}
