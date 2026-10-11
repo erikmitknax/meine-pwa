@@ -780,9 +780,22 @@ function browserDownload(filename,blob){
   const u=URL.createObjectURL(blob),a=document.createElement("a");
   a.href=u;a.download=filename;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(u),4000);
 }
+/* Android-App: Datei direkt in den Ordner „Download“ speichern (eigenes Plug-in der App). */
+let exportHow="";
+async function saveToDownloads(filename,blob){
+  let p=null;try{p=NATIVE&&window.Capacitor.registerPlugin?window.Capacitor.registerPlugin("LwDownload"):null}catch(e){}
+  if(!p)return false;
+  const data=await blobToBase64(blob);
+  await p.save({filename:safeName(filename),data,mime:blob.type||"application/octet-stream"});
+  return true;
+}
 async function exportFile(filename,blob,title){
-  if(NATIVE){try{if(await saveAndShare(filename,blob,title))return true}catch(e){if(/cancel/i.test(String(e&&e.message||e)))return true}}
-  try{browserDownload(filename,blob);return true}catch(e){return false}
+  exportHow="";
+  if(NATIVE){
+    try{if(await saveToDownloads(filename,blob)){exportHow="download";return true}}catch(e){}
+    try{if(await saveAndShare(filename,blob,title)){exportHow="share";return true}}catch(e){if(/cancel/i.test(String(e&&e.message||e)))return true}
+  }
+  try{browserDownload(filename,blob);exportHow="browser";return true}catch(e){return false}
 }
 async function addPdf(topic,file){
   if(!(file.type==="application/pdf"||/\.pdf$/i.test(file.name)))throw new Error("„"+file.name+"“ ist kein PDF.");
@@ -1327,7 +1340,7 @@ function renderSicherung(){
     const p=exportPlan(sel,none),full=p.topics.length===S.topics.length&&p.decks.length===S.decks.length;
     const b=makeBackup();b.topics=p.topics.map(t=>({id:t.id,name:t.name,parent:t.parent||""}));b.decks=clone(p.decks);if(!full)b.sets=[];
     const ok=await exportFile("lernwerkstatt-"+(full?"sicherung":"auswahl")+"-"+stampNow()+".json",new Blob([JSON.stringify(b,null,1)],{type:"application/json"}),"Lernwerkstatt Export");
-    if(ok){if(full)markBackup();toast("Export erstellt")}else toast("Die Datei konnte nicht erstellt werden.");
+    if(ok){if(full)markBackup();toast(exportHow==="download"?"Gespeichert im Ordner „Download“":exportHow==="share"?"Datei bereit. Wähle, wohin sie soll.":"Datei heruntergeladen")}else toast("Die Datei konnte nicht erstellt werden.");
   });
   root.append(el("div",{class:"panel grid"},el("h3",{text:"Exportieren"}),
     el("p",{class:"syncnote",text:"Speichert Stapel samt Lernfortschritt in einer Datei. Wähle Themen aus oder nimm alles. PDF-Unterlagen sind nicht in der Datei. Zurückspielen kannst du sie in der Bibliothek über „Importieren“."}),
