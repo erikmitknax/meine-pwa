@@ -29,6 +29,10 @@ Das sind Unit-Tests für `logic.js` und `sw.js` sowie zwei Durchläufe der ganze
 
 Zahnrad oben rechts. Alle Abschnitte sind eingeklappt und lassen sich einzeln aufklappen: Design, Logo, Signal am Pausenende, Sicherung & Wiederherstellung, Dropbox-Backup, CSV importieren, Übungen verwalten. Auf der Startseite führt „Sicherung & Import“ direkt zum aufgeklappten Abschnitt Sicherung.
 
+## Fortschritt
+
+Je Übung ein Diagramm mit **allen Sätzen**: jedes Training steht gleichmäßig verteilt auf der Achse, jeder Satz ist ein Punkt, der Top-Satz ist der große Ring und die Linie verbindet die Top-Sätze. Die gestrichelte Linie ist der Trend. Antippen eines Trainings zeigt darunter alle seine Sätze. Darüber steht die Entwicklung seit dem ersten angezeigten Training (Pfeil, Differenz, Prozent). „Letzte 12 / Letzte 30 / Alle“ begrenzt den Zeitraum. Weitere Kennzahlen: Top-Gewicht, Volumen, Beste Wdh, Wdh gesamt.
+
 ## Sichern und Wiederherstellen
 
 - **Einstellungen → Sicherung & Wiederherstellung → Komplett-Sicherung (JSON)** enthält Trainings, Pläne, Übungshinweise und Pausenzeiten.

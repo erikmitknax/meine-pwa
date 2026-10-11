@@ -319,26 +319,54 @@ function sessionCard(s){
 }
 
 /* ---------- progress ---------- */
-function chartSVG(pts,unit){
-  const vw=($('#view')&&$('#view').clientWidth)||360;const W=Math.round(Math.max(300,Math.min(680,vw))),H=Math.round(W<480?220:260),P={l:40,r:14,t:12,b:28};
-  const xs=pts.map(p=>parseISO(p.date).getTime());
-  let x0=Math.min(...xs),x1=Math.max(...xs);if(x0===x1){x0-=3*864e5;x1+=3*864e5}
-  const ticks=niceTicks(Math.min(...pts.map(p=>p.v)),Math.max(...pts.map(p=>p.v)),4);
+// Ein Eintrag pro Training, gleichmäßig verteilt (nicht nach Kalenderabstand), damit nichts zusammenklebt.
+// Jeder Satz ist ein Punkt, der Top-Satz ist der große Ring, die Linie verbindet die Top-Sätze, gestrichelt der Trend.
+function chartSVG(pts,unit,sel){
+  const n=pts.length;
+  const vw=($('#view')&&$('#view').clientWidth)||360;const W=Math.round(Math.max(300,Math.min(680,vw))),H=Math.round(W<480?240:280),P={l:42,r:14,t:20,b:30};
+  const all=pts.flatMap(p=>p.vals);
+  const ticks=niceTicks(Math.min(...all),Math.max(...all),4);
   const y0=ticks[0],y1=ticks[ticks.length-1];
-  const X=t=>P.l+(t-x0)/(x1-x0)*(W-P.l-P.r),Y=v=>P.t+(1-(v-y0)/(y1-y0))*(H-P.t-P.b);
-  const line=pts.map((p,i)=>`${i?'L':'M'}${X(xs[i]).toFixed(1)},${Y(p.v).toFixed(1)}`).join('');
-  const area=`${line}L${X(xs[xs.length-1]).toFixed(1)},${Y(y0)}L${X(xs[0]).toFixed(1)},${Y(y0)}Z`;
-  const every=Math.max(1,Math.ceil(pts.length/(W<480?4:6)));
-  const xl=pts.map((p,i)=>{if(i%every&&i!==pts.length-1)return '';if(i!==pts.length-1&&pts.length-1-i<every&&i%every===0&&i!==0)return '';const x=X(xs[i]);const a=x<P.l+24?'start':x>W-P.r-24?'end':'middle';return `<text class="ax" x="${x.toFixed(1)}" y="${H-8}" text-anchor="${a}">${esc(fmtShort(p.date))}</text>`}).join('');
-  const sel=S.progSel==null||S.progSel>=pts.length?pts.length-1:S.progSel;
-  return `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Verlauf in ${esc(unit)}">
-    <defs><linearGradient id="ga" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="var(--gold)" stop-opacity=".28"/><stop offset="1" stop-color="var(--gold)" stop-opacity="0"/></linearGradient></defs>
-    ${ticks.map(v=>`<line class="grid" x1="${P.l}" x2="${W-P.r}" y1="${Y(v).toFixed(1)}" y2="${Y(v).toFixed(1)}"/><text class="ax" x="${P.l-8}" y="${(Y(v)+4).toFixed(1)}" text-anchor="end">${esc(fmtNum(v))}</text>`).join('')}
+  const x0=P.l+12,x1=W-P.r-12,step=n>1?(x1-x0)/(n-1):0;
+  const X=i=>n>1?x0+i*step:(P.l+W-P.r)/2,Y=v=>P.t+(1-(v-y0)/(y1-y0))*(H-P.t-P.b);
+  const f=v=>v.toFixed(1);
+  const line=pts.map((p,i)=>`${i?'L':'M'}${f(X(i))},${f(Y(p.v))}`).join('');
+  const area=`${line}L${f(X(n-1))},${f(Y(y0))}L${f(X(0))},${f(Y(y0))}Z`;
+  // Trend: Ausgleichsgerade durch die Top-Sätze (ab 3 Trainings)
+  let trend='';
+  if(n>=3){
+    const mx=(n-1)/2,my=pts.reduce((a,p)=>a+p.v,0)/n;
+    let sxy=0,sxx=0;pts.forEach((p,i)=>{sxy+=(i-mx)*(p.v-my);sxx+=(i-mx)*(i-mx)});
+    const m=sxy/sxx,c=my-m*mx,cl=v=>Math.min(y1,Math.max(y0,v));
+    trend=`<path class="trend" d="M${f(X(0))},${f(Y(cl(c)))}L${f(X(n-1))},${f(Y(cl(c+m*(n-1))))}"/>`;
+  }
+  const bestI=pts.reduce((bi,p,i)=>p.v>pts[bi].v?i:bi,0);
+  const every=Math.max(1,Math.ceil(n/(W<480?5:8)));
+  const xl=pts.map((p,i)=>{
+    const show=(i%every===0&&(n-1-i>=every||i===n-1))||i===n-1;
+    if(!show)return '';
+    const x=X(i);const a=x<P.l+22?'start':x>W-P.r-22?'end':'middle';
+    return `<text class="ax" x="${f(x)}" y="${H-9}" text-anchor="${a}">${esc(fmtShort(p.date))}</text>`}).join('');
+  const sets=pts.map((p,i)=>{
+    const lo=Math.min(...p.vals),hi=Math.max(...p.vals);
+    const span=hi>lo?`<line class="span" x1="${f(X(i))}" x2="${f(X(i))}" y1="${f(Y(lo))}" y2="${f(Y(hi))}"/>`:'';
+    const dots=p.vals.length<2?'':p.vals.map(v=>`<circle class="dot" cx="${f(X(i))}" cy="${f(Y(v))}" r="3.5"/>`).join('');
+    return span+dots}).join('');
+  const tops=pts.map((p,i)=>`<circle class="pt ${i===sel?'sel':''} ${p.weste?'w':''}" cx="${f(X(i))}" cy="${f(Y(p.v))}" r="${i===sel?6.5:5}"/>`).join('');
+  const bl=`<text class="bestlbl" x="${f(Math.min(W-P.r-14,Math.max(P.l+14,X(bestI))))}" y="${f(Y(pts[bestI].v)-11)}" text-anchor="middle">${esc(fmtNum(pts[bestI].v))}</text>`;
+  const hit=pts.map((p,i)=>`<rect class="hit" data-act="progSel" data-i="${i}" x="${f(X(i)-(step||60)/2)}" y="${P.t}" width="${f(step||60)}" height="${H-P.t-P.b}"><title>${esc(fmtShort(p.date))}: ${esc(fmtNum(p.v))} ${esc(unit)}</title></rect>`).join('');
+  return `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Verlauf in ${esc(unit)}, ${n} Trainings">
+    <defs><linearGradient id="ga" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="var(--gold)" stop-opacity=".22"/><stop offset="1" stop-color="var(--gold)" stop-opacity="0"/></linearGradient></defs>
+    ${ticks.map(v=>`<line class="grid" x1="${P.l}" x2="${W-P.r}" y1="${f(Y(v))}" y2="${f(Y(v))}"/><text class="ax" x="${P.l-8}" y="${f(Y(v)+4)}" text-anchor="end">${esc(fmtNum(v))}</text>`).join('')}
+    <line class="selln" x1="${f(X(sel))}" x2="${f(X(sel))}" y1="${P.t}" y2="${H-P.b}"/>
     <path d="${area}" fill="url(#ga)"/>
+    ${trend}
+    ${sets}
     <path class="ln" d="${line}"/>
-    ${pts.map((p,i)=>`<circle class="pt ${i===sel?'sel':''} ${p.weste?'w':''}" cx="${X(xs[i]).toFixed(1)}" cy="${Y(p.v).toFixed(1)}" r="${i===sel?6:4.5}"/>`).join('')}
-    ${pts.map((p,i)=>`<circle class="hit" data-act="progSel" data-i="${i}" cx="${X(xs[i]).toFixed(1)}" cy="${Y(p.v).toFixed(1)}" r="16"><title>${esc(fmtShort(p.date))}: ${esc(fmtNum(p.v))} ${esc(unit)}</title></circle>`).join('')}
+    ${tops}
+    ${bl}
     ${xl}
+    ${hit}
   </svg>`;
 }
 function viewProg(){
@@ -348,28 +376,39 @@ function viewProg(){
   const groups={};for(const n of names){const u=unitOf(n);(groups[u]=groups[u]||[]).push(n)}
   const order=[...UNITS,'Sonstige'].filter(u=>groups[u]);
   const k=weightKinds(S.progEx);
-  const avail=k.numeric?['top','vol','best']:['best','total'];
+  const avail=k.numeric?['sets','top','vol','best']:['setsR','best','total'];
   if(!S.progMetric||!avail.includes(S.progMetric))S.progMetric=avail[0];
   const M=METRICS[S.progMetric];
   const hist=sessionsDesc().slice().reverse().map(s=>({s,e:(s.exercises||[]).find(e=>e.name===S.progEx)})).filter(x=>x.e);
-  const pts=hist.map(x=>({date:x.s.date,v:M.f(x.e),weste:!!x.e.weste})).filter(p=>!isNaN(p.v));
+  const allPts=hist.map(x=>({date:x.s.date,v:M.f(x.e),vals:M.all?M.all(x.e):[M.f(x.e)],weste:!!x.e.weste,e:x.e})).filter(p=>!isNaN(p.v));
+  const range=S.progRange===undefined?12:S.progRange;   // 0 = alle
+  const pts=range&&allPts.length>range?allPts.slice(-range):allPts;
   const sel=S.progSel==null||S.progSel>=pts.length?pts.length-1:S.progSel;
   let body='';
   if(!pts.length)body='<p class="empty">Für diese Kennzahl gibt es noch keine Werte.</p>';
   else{
-    const cur=pts[sel],first=pts[0],best=Math.max(...pts.map(p=>p.v)),last=pts[pts.length-1];
-    const diff=last.v-first.v;
+    const cur=pts[sel],first=pts[0],last=pts[pts.length-1];
+    const best=Math.max(...pts.map(p=>p.v));
+    const diff=last.v-first.v,pct=first.v?diff/Math.abs(first.v)*100:NaN;
+    const dir=diff>0?'up':diff<0?'down':'';
+    const sign=diff>0?'+':'';
+    const setsOf=cur.e.sets||[];
     body=`<div class="readout"><strong>${esc(fmtNum(cur.v))}</strong><span>${esc(M.unit)} · ${esc(fmtLong(cur.date))}${cur.weste?' · mit Weste':''}</span></div>
-    ${chartSVG(pts,M.unit)}
+    ${pts.length>1?`<p class="trendline ${dir}">${diff>0?'▲':diff<0?'▼':'■'} ${sign}${esc(fmtNum(diff))} ${esc(M.unit)}${isNaN(pct)?'':` (${sign}${esc(fmtNum(Math.round(pct*10)/10))} %)`} seit ${esc(fmtShort(first.date))}</p>`:''}
+    ${chartSVG(pts,M.unit,sel)}
+    ${M.all?'<p class="legend"><i class="lg-top"></i>Top-Satz <i class="lg-dot"></i>weitere Sätze <i class="lg-trend"></i>Trend</p>':''}
+    <div class="setlist"><span class="lbl">Sätze am ${esc(fmtShort(cur.date))}</span>${setsOf.length?setsOf.map(st=>`<span class="setchip">${esc(setStr(st))}</span>`).join(''):'<span class="hint">Keine Sätze</span>'}${cur.e.weste?'<span class="tag">Weste</span>':''}${cur.e.griffe?'<span class="tag">Griffe</span>':''}</div>
     <div class="stats">
       <div class="stat"><span class="lbl">Letztes</span><b>${esc(fmtNum(last.v))}</b></div>
       <div class="stat"><span class="lbl">Bestwert</span><b>${esc(fmtNum(best))}</b></div>
-      <div class="stat"><span class="lbl">Seit Start</span><b class="${diff>0?'up':''}">${diff>0?'+':''}${esc(fmtNum(diff))}</b></div>
+      <div class="stat"><span class="lbl">Trainings</span><b>${pts.length}${allPts.length>pts.length?`<small> / ${allPts.length}</small>`:''}</b></div>
     </div>`;
   }
+  const ranges=allPts.length>12?[[12,'Letzte 12'],[30,'Letzte 30'],[0,'Alle']].filter(([r])=>r===0||allPts.length>r||r===12):[];
   return `<div class="prog-ctrl">
     <div class="field"><label for="progEx">Übung</label><select id="progEx">${order.map(u=>`<optgroup label="${esc(u)}">${groups[u].map(n=>`<option ${n===S.progEx?'selected':''}>${esc(n)}</option>`).join('')}</optgroup>`).join('')}</select></div>
     <div class="chips">${avail.map(m=>`<button class="chip ${m===S.progMetric?'on':''}" data-act="metric" data-m="${m}">${esc(METRICS[m].label)}</button>`).join('')}</div>
+    ${ranges.length?`<div class="chips">${ranges.map(([r,l])=>`<button class="chip ${r===range?'on':''}" data-act="range" data-r="${r}">${l}</button>`).join('')}</div>`:''}
   </div>
   ${body}
   ${S.showTbl?`<div class="tbl-wrap"><table><thead><tr><th>Datum</th><th>Sätze</th></tr></thead><tbody>
@@ -711,6 +750,7 @@ document.addEventListener('click',async ev=>{
     case 'metric':S.progMetric=b.dataset.m;S.progSel=null;render();break;
     case 'progEx_':break;
     case 'progSel':S.progSel=+b.dataset.i;render();break;
+    case 'range':S.progRange=+b.dataset.r;S.progSel=null;render();break;
     case 'newPlan':S.planEdit={id:null,name:'',unit:'Push',exercises:[]};render();break;
     case 'editPlan':{const p=S.plans.get(b.dataset.id);if(p){S.planEdit={id:b.dataset.id,name:p.name,unit:p.unit,order:p.order,exercises:[...(p.exercises||[])]};render()}break}
     case 'delPlan':S.confirm='plan:'+b.dataset.id;render();break;
