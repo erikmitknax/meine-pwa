@@ -356,6 +356,7 @@ async function initStore(){
     S.loaded={s:true,p:true};
   }
   render();
+  if(!navReady)navInit();
 }
 
 async function saveInfo(name,text){
@@ -893,6 +894,47 @@ document.addEventListener('change',ev=>{
   }
 });
 
+/* ---------- Zurück-Wischgeste (Pixel/Android) und Zurück-Taste ---------- */
+let navKeys=[],navIdx=0,navApplying=false,navIgnore=0,navReady=false;
+function viewKey(){
+  let k=S.tab;
+  if(S.openSess)k+='|s'+S.openSess;
+  if(S.planEdit)k+='|edit';
+  if(S.timerOpen!==null||S.exMenu!==null||S.infoOpen!==null||S.confirm)k+='|o';
+  return k;
+}
+function navApply(key){
+  navApplying=true;
+  const parts=String(key||'log').split('|');
+  S.tab=parts[0]||'log';
+  const sess=parts.find(x=>x[0]==='s'&&x.length>1);
+  S.openSess=sess?sess.slice(1):null;
+  S.planEdit=null;S.timerOpen=null;S.exMenu=null;S.infoOpen=null;S.confirm=null;
+  render();window.scrollTo(0,0);
+  navApplying=false;
+}
+function navSync(){
+  if(navApplying||!navReady)return;
+  const key=viewKey();
+  if(key===navKeys[navIdx])return;
+  if(navIdx>0&&navKeys[navIdx-1]===key){navIgnore++;navIdx--;history.back();return}
+  navKeys.length=navIdx+1;navKeys.push(key);navIdx++;
+  try{history.pushState({tb:1,i:navIdx},'')}catch(e){}
+}
+function navInit(){
+  try{
+    navKeys=[viewKey()];navIdx=0;
+    history.replaceState({tb:1,i:0},'');
+    window.addEventListener('popstate',ev=>{
+      if(navIgnore>0){navIgnore--;return}
+      const st=ev.state;
+      if(!st||!st.tb)return;
+      navIdx=Math.min(st.i,navKeys.length-1);
+      navApply(navKeys[navIdx]||'log');
+    });
+    navReady=true;
+  }catch(e){}
+}
 /* ---------- render ---------- */
 function renderTabs(){
   $('#tabs').innerHTML=TABS.map(([k,l])=>`<button class="tab ${(S.tab===k||(k==='log'&&['plans','data'].includes(S.tab)))?'on':''}" data-act="tab" data-tab="${k}" ${S.tab===k?'aria-current="page"':''}>${esc(l)}${k==='log'&&S.draft&&!['log','plans','data'].includes(S.tab)?'<span class="dot" aria-label="offen"></span>':''}</button>`).join('');
@@ -910,6 +952,7 @@ function render(){
   const gb=$('#gearBtn');if(gb){gb.classList.toggle('on',S.tab==='settings');if(S.tab==='settings')gb.setAttribute('aria-current','page');else gb.removeAttribute('aria-current')}
   setTimeout(paintRest,0);
   $('#view').innerHTML=(S.tab==='plans'||S.tab==='data'||S.tab==='settings'?'<button class="link back" data-act="tab" data-tab="log">‹ Zurück zum Training</button>':'')+v();
+  navSync();
 }
 function softRender(){
   // keep focus while typing in an open training or plan form
