@@ -1,7 +1,10 @@
 /* Dropbox-Backup für die PWAs (ohne Server, Anmeldung per OAuth2 PKCE).
-   Die Datei ist in kippen-pwa und trainingsbuch-pwa identisch.
+   Diese Fassung gehört zum Trainingsbuch (mit Wiederherstellen). Die Kopie in kippen-pwa ist noch die ältere ohne.
    Ablauf: App Key eintragen -> "Mit Dropbox verbinden" -> Dropbox fragt einmal um Erlaubnis ->
-   die App lädt ihre Dateien nach Dropbox/Apps/<App-Name>/ und überschreibt dort immer die letzte Version. */
+   die App lädt ihre Dateien nach Dropbox/Apps/<App-Name>/ und überschreibt dort immer die letzte Version.
+   Wiederherstellen (optional): config.restoreFile + config.onRestoreText. Dafür braucht die Dropbox-App zusätzlich die
+   Berechtigung files.content.read. Automatisches Sichern startet erst, wenn dieses Gerät einmal bewusst gesichert oder
+   wiederhergestellt hat (Schutz davor, eine vorhandene Sicherung mit einem leeren Stand zu überschreiben). */
 (function () {
   'use strict';
   var cfg = null, st = {}, busy = false, msg = '', timer = null;
@@ -21,6 +24,10 @@
   async function sha256(s) { return new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s))); }
   function qs(o) { return Object.keys(o).map(function (k) { return encodeURIComponent(k) + '=' + encodeURIComponent(o[k]); }).join('&'); }
   function hash(s) { var h = 5381; for (var i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0; return String(h) + ':' + s.length; }
+  async function digest(s) {
+    try { var d = await sha256(s), h = 's2:'; for (var i = 0; i < d.length; i++) h += (d[i] < 16 ? '0' : '') + d[i].toString(16); return h; }
+    catch (e) { return hash(s); }
+  }
 
   async function connect() {
     var el = document.getElementById('dbx-key');
@@ -89,11 +96,41 @@
     if (!r.ok) { var t = ''; try { t = await r.text(); } catch (e) { /* ignore */ } throw new Error('Dropbox ' + r.status + (t ? ': ' + t.slice(0, 120) : '')); }
   }
 
+  async function download(name, retried) {
+    var tok = await getAccess();
+    var r = await fetch('https://content.dropboxapi.com/2/files/download', {
+      method: 'POST', headers: { 'Authorization': 'Bearer ' + tok, 'Dropbox-API-Arg': JSON.stringify({ path: '/' + name }) }
+    });
+    var t = '';
+    if (!r.ok) { try { t = await r.text(); } catch (e) { /* ignore */ } }
+    if (r.status === 401 && !retried && !/missing_scope/.test(t)) { st.access = null; save(); return download(name, true); }
+    if (!r.ok) {
+      if (/missing_scope/.test(t)) throw new Error('Deine Dropbox-App darf noch nicht lesen. Öffne den Dropbox App Console, aktiviere unter „Permissions“ files.content.read, speichere und tippe dann hier auf „Trennen“ und „Mit Dropbox verbinden“.');
+      if (/not_found/.test(t)) throw new Error('In deiner Dropbox liegt noch keine Sicherung (' + name + ').');
+      throw new Error('Dropbox ' + r.status + (t ? ': ' + t.slice(0, 120) : ''));
+    }
+    return r.text();
+  }
+
+  async function restore() {
+    if (!cfg || !st.refresh || busy || !cfg.restoreFile || !cfg.onRestoreText) return;
+    if (navigator.onLine === false) { setMsg('Du bist offline. Zum Wiederherstellen brauchst du Internet.'); return; }
+    busy = true; msg = 'Lade Sicherung …'; update();
+    var text = null;
+    try { text = await download(cfg.restoreFile); msg = ''; }
+    catch (e) { msg = 'Wiederherstellen fehlgeschlagen: ' + e.message; }
+    busy = false; update();
+    if (text != null) { try { cfg.onRestoreText(text); } catch (e) { msg = 'Wiederherstellen fehlgeschlagen: ' + e.message; update(); } }
+  }
+
+  function markSynced() { st.armed = true; st.hash = null; save(); update(); }
+
   async function backup(manual) {
     if (!cfg || !st.refresh || busy) return;
+    if (!manual && !(st.armed || st.last)) return;
     if (!cfg.hasData()) { if (manual) setMsg('Noch keine Daten zum Sichern. Ein leeres Backup überschreibt nichts.'); return; }
     var files = cfg.files();
-    var h = hash(files.map(function (f) { return f.name + '\u0001' + f.text; }).join('\u0002'));
+    var h = await digest(files.map(function (f) { return f.name + '\u0001' + f.text; }).join('\u0002'));
     if (!manual && h === st.hash) return;
     if (navigator.onLine === false) { if (manual) setMsg('Du bist offline. Das Backup wird nachgeholt, sobald du wieder online bist.'); return; }
     busy = true; msg = 'Sichere …'; update();
@@ -105,7 +142,7 @@
   }
 
   function disconnect() {
-    st.access = null; st.refresh = null; st.exp = 0; st.hash = null; st.last = null; save();
+    st.access = null; st.refresh = null; st.exp = 0; st.hash = null; st.last = null; st.armed = false; save();
     msg = 'Verbindung getrennt. Die Dateien in Dropbox bleiben erhalten.'; update();
   }
 
@@ -118,7 +155,10 @@
       h += '<div class="dbx-small">Verbunden. ' + (st.last ? 'Letztes Backup: ' + esc(fmt(st.last)) + '.' : 'Noch kein Backup gemacht.') + '</div>';
       h += '<div class="dbx-small">Dateien: ' + cfg.files().map(function (f) { return esc(f.name); }).join(', ') + ' (werden bei jedem Backup überschrieben)</div>';
       h += '<label class="dbx-small" style="display:block;margin-top:8px"><input type="checkbox" data-dbx-auto' + (st.auto !== false ? ' checked' : '') + '> Automatisch sichern (beim Öffnen und beim Verlassen der App, wenn sich etwas geändert hat)</label>';
-      h += '<div class="dbx-row"><button type="button"' + c + ' data-dbx="backup"' + (busy ? ' disabled' : '') + '>Jetzt sichern</button><button type="button"' + c + ' data-dbx="disconnect">Trennen</button></div>';
+      if (!(st.armed || st.last)) h += '<div class="dbx-small" style="margin-top:8px"><b>Automatisches Sichern ist noch pausiert.</b> Es startet, sobald du einmal „Jetzt sichern“ oder „Aus Dropbox wiederherstellen“ benutzt hast. So überschreibt ein neues Gerät nicht versehentlich eine vorhandene Sicherung.</div>';
+      h += '<div class="dbx-row"><button type="button"' + c + ' data-dbx="backup"' + (busy ? ' disabled' : '') + '>Jetzt sichern</button>' +
+        (cfg.onRestoreText ? '<button type="button"' + c + ' data-dbx="restore"' + (busy ? ' disabled' : '') + '>Aus Dropbox wiederherstellen</button>' : '') +
+        '<button type="button"' + c + ' data-dbx="disconnect">Trennen</button></div>';
     } else {
       h += '<div class="dbx-small">Speichert deine Daten als Datei in deiner Dropbox und überschreibt dort immer das letzte Backup.</div>';
       h += '<input type="text" id="dbx-key" placeholder="Dropbox App Key" autocomplete="off" autocapitalize="off" spellcheck="false" value="' + esc(st.appKey || '') + '">';
@@ -143,7 +183,7 @@
     document.addEventListener('click', function (e) {
       var b = e.target.closest && e.target.closest('[data-dbx]'); if (!b) return;
       var a = b.getAttribute('data-dbx');
-      if (a === 'connect') connect(); else if (a === 'backup') backup(true); else if (a === 'disconnect') disconnect();
+      if (a === 'connect') connect(); else if (a === 'backup') backup(true); else if (a === 'restore') restore(); else if (a === 'disconnect') disconnect();
     });
     document.addEventListener('change', function (e) {
       if (e.target && e.target.hasAttribute && e.target.hasAttribute('data-dbx-auto')) { st.auto = !!e.target.checked; save(); if (st.auto) backup(false); }
@@ -158,5 +198,5 @@
     }
   }
 
-  window.DropboxBackup = { init: init, html: html, backup: function () { return backup(true); }, state: function () { return st; } };
+  window.DropboxBackup = { init: init, html: html, backup: function () { return backup(true); }, restore: restore, markSynced: markSynced, state: function () { return st; } };
 })();
