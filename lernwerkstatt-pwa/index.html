@@ -217,6 +217,14 @@ header nav button{white-space:nowrap;flex:1 1 auto}
 .tgtoggle{display:flex;align-items:center;gap:10px;background:none;border:0;padding:6px 0;cursor:pointer;color:inherit;font:inherit;text-align:left;min-width:0;flex:1 1 160px}
 .tgtoggle .chev{flex:none;width:26px;height:26px;display:inline-grid;place-items:center;border-radius:7px;background:var(--surface2);font-family:var(--f-mono,monospace);font-weight:700;color:var(--accent)}
 .tgtoggle h2,.tgtoggle h3{margin:0}
+.pdfview{position:fixed;inset:0;z-index:100;background:var(--bg);display:flex;flex-direction:column;padding-top:env(safe-area-inset-top,0px)}
+.pv-bar{display:flex;align-items:center;gap:8px;padding:8px 12px;border-bottom:1px solid var(--line);background:var(--surface)}
+.pv-title{flex:1;min-width:0;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pv-page{color:var(--muted);font-size:.85rem;white-space:nowrap}
+.pv-scroll{flex:1;overflow:auto;display:flex;flex-direction:column;padding:8px;background:var(--surface2);-webkit-overflow-scrolling:touch;outline:0;padding-bottom:calc(8px + env(safe-area-inset-bottom,0px))}
+.pv-pg{flex:none;margin:0 auto 10px;background:#fff;box-shadow:0 1px 4px rgba(0,0,0,.25)}
+.pv-pg canvas{display:block}
+html.pv-lock,html.pv-lock body{overflow:hidden}
 </style>
 </head>
 <body>
@@ -739,10 +747,112 @@ async function removePdfFile(e){
   const u=urlCache.get(e.id);if(u){try{URL.revokeObjectURL(u)}catch(x){}urlCache.delete(e.id)}
 }
 const urlCache=new Map();
+/* ---------- PDF-Ansicht in der App (pdf.js, wird erst beim ersten Öffnen geladen) ---------- */
+let pdfjsP=null;
+function ensurePdfJs(){
+  if(window.pdfjsLib)return Promise.resolve(true);
+  if(pdfjsP)return pdfjsP;
+  pdfjsP=new Promise(res=>{
+    const s=document.createElement("script");s.src="pdfjs/pdf.min.js";
+    s.onload=()=>{try{window.pdfjsLib.GlobalWorkerOptions.workerSrc="pdfjs/pdf.worker.min.js";res(true)}catch(x){res(false)}};
+    s.onerror=()=>{s.remove();res(false)};
+    document.head.append(s);
+  }).then(ok=>{if(!ok)pdfjsP=null;return ok});
+  return pdfjsP;
+}
+async function pdfBytes(e){
+  if(e.kind==="asset"){const r=await fetch("/_blob/"+e.ref);if(!r.ok)throw new Error("fetch");return r.arrayBuffer()}
+  const b=await idbGet(e.id);if(!b)throw new Error("missing");
+  return b.arrayBuffer?b.arrayBuffer():new Response(b).arrayBuffer();
+}
+let viewerOpen=false;
+async function openViewer(e){
+  if(viewerOpen)return true;
+  if(!(await ensurePdfJs()))return false;
+  let data;
+  try{data=await pdfBytes(e)}catch(err){
+    toast(err&&err.message==="missing"?"Das PDF liegt nicht auf diesem Gerät.":"Das PDF konnte nicht geladen werden.");return true;
+  }
+  let pdf;
+  try{pdf=await window.pdfjsLib.getDocument({data:new Uint8Array(data),standardFontDataUrl:"pdfjs/standard_fonts/"}).promise}
+  catch(err){toast(err&&err.name==="PasswordException"?"Dieses PDF ist passwortgeschützt.":"Das PDF konnte nicht geöffnet werden.");return true}
+  viewerOpen=true;
+  const ZOOMS=[1,1.25,1.5,2,2.5,3];let zi=0;
+  const pageInfo=el("span",{class:"pv-page mono",text:"1 / "+pdf.numPages});
+  const minus=el("button",{class:"btn small",type:"button","aria-label":"Verkleinern"},"−"),plus=el("button",{class:"btn small",type:"button","aria-label":"Vergrößern"},"+");
+  const close=el("button",{class:"btn small primary",type:"button"},"Schließen");
+  const scroller=el("div",{class:"pv-scroll",tabindex:"0"});
+  const ov=el("div",{class:"pdfview",role:"dialog","aria-modal":"true","aria-label":e.name},
+    el("div",{class:"pv-bar"},el("div",{class:"pv-title",text:e.name}),pageInfo,minus,plus,close),scroller);
+  let gen=0,io=null,tasks=[];
+  const pagesEls=[];
+  async function layout(){
+    const my=++gen;
+    tasks.forEach(t=>{try{t.cancel()}catch(x){}});tasks=[];
+    if(io)io.disconnect();
+    const keepFrac=scroller.scrollHeight?scroller.scrollTop/scroller.scrollHeight:0;
+    scroller.replaceChildren();pagesEls.length=0;
+    const avail=Math.max(200,scroller.clientWidth-16),z=ZOOMS[zi];
+    io=new IntersectionObserver(ents=>{ents.forEach(en=>{if(en.isIntersecting)renderPage(en.target,my)})},{root:scroller,rootMargin:"900px 0px"});
+    for(let n=1;n<=pdf.numPages;n++){
+      const p=await pdf.getPage(n);if(my!==gen)return;
+      const v1=p.getViewport({scale:1}),sc=avail/v1.width*z,v=p.getViewport({scale:sc});
+      const w=el("div",{class:"pv-pg","data-n":String(n)});w.style.width=Math.floor(v.width)+"px";w.style.height=Math.floor(v.height)+"px";
+      w._p=p;w._v=v;scroller.append(w);pagesEls.push(w);io.observe(w);
+    }
+    scroller.scrollTop=keepFrac*scroller.scrollHeight;
+  }
+  async function renderPage(w,my){
+    if(w._done||my!==gen)return;w._done=true;
+    const ratio=Math.min(window.devicePixelRatio||1,2),v=w._v;
+    const cv=document.createElement("canvas");
+    let r=ratio;const area=v.width*v.height;if(area*r*r>16e6)r=Math.max(1,Math.sqrt(16e6/area));
+    cv.width=Math.floor(v.width*r);cv.height=Math.floor(v.height*r);cv.style.width="100%";cv.style.height="100%";
+    try{
+      const t=w._p.render({canvasContext:cv.getContext("2d"),viewport:v,transform:r!==1?[r,0,0,r,0,0]:null});
+      tasks.push(t);await t.promise;if(my===gen)w.append(cv);
+    }catch(err){if(!(err&&err.name==="RenderingCancelledException"))w._done=false}
+  }
+  function upd(){
+    const top=scroller.getBoundingClientRect().top+scroller.clientHeight/3;let cur=1;
+    for(const w of pagesEls){if(w.getBoundingClientRect().top<=top)cur=Number(w.dataset.n);else break}
+    pageInfo.textContent=cur+" / "+pdf.numPages;
+  }
+  scroller.addEventListener("scroll",upd,{passive:true});
+  const setZoom=d=>{const n=Math.max(0,Math.min(ZOOMS.length-1,zi+d));if(n===zi)return;zi=n;minus.disabled=zi===0;plus.disabled=zi===ZOOMS.length-1;layout()};
+  minus.disabled=true;
+  minus.addEventListener("click",()=>setZoom(-1));plus.addEventListener("click",()=>setZoom(1));
+  /* Zurück-Taste des Geräts schließt die Ansicht statt die App */
+  let closed=false;
+  function shut(){
+    if(closed)return;closed=true;viewerOpen=false;gen++;
+    tasks.forEach(t=>{try{t.cancel()}catch(x){}});if(io)io.disconnect();
+    document.removeEventListener("keydown",onKey,true);removeEventListener("popstate",onPop);
+    ov.remove();document.documentElement.classList.remove("pv-lock");try{pdf.destroy()}catch(x){}
+  }
+  function onPop(){shut()}
+  function onKey(ev){
+    if(ev.key==="Escape"){ev.preventDefault();ev.stopPropagation();closeIt()}
+    else if(ev.key==="+"||ev.key==="="){ev.stopPropagation();setZoom(1)}
+    else if(ev.key==="-"){ev.stopPropagation();setZoom(-1)}
+    else ev.stopPropagation();
+  }
+  function closeIt(){
+    if(history.state&&history.state.pdfview){history.back()}else shut();
+  }
+  close.addEventListener("click",closeIt);
+  try{history.pushState({pdfview:1},"")}catch(x){}
+  addEventListener("popstate",onPop);document.addEventListener("keydown",onKey,true);
+  document.documentElement.classList.add("pv-lock");document.body.append(ov);
+  await layout();upd();scroller.focus({preventScroll:true});
+  return true;
+}
 function linkFor(e){
   const a=el("a",{class:"pdflink",target:"_blank",rel:"noopener"},"PDF · "+e.name);
-  if(NATIVE&&e.kind!=="asset")a.addEventListener("click",async ev=>{
+  a.addEventListener("click",async ev=>{
     ev.preventDefault();
+    try{if(await openViewer(e))return}catch(err){}
+    if(!NATIVE||e.kind==="asset"){const h=a.getAttribute("href");if(h)window.open(h,"_blank","noopener");else toast("Das PDF liegt nicht auf diesem Gerät.");return}
     try{
       const b=await idbGet(e.id);if(!b){toast("Das PDF liegt nicht auf diesem Gerät.");return}
       if(!(await saveAndShare(e.name+".pdf",b,e.name)))toast("PDFs öffnen geht in dieser App gerade nicht.");

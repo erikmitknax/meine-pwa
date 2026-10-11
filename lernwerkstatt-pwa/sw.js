@@ -1,6 +1,6 @@
 // Cache-Name nur hochzaehlen, wenn sich die Dateiliste aendert oder alte Caches weg sollen.
 // HTML holt der Service Worker immer zuerst aus dem Netz, so kommen Updates ohne Neuinstallation an.
-const VERSION = 'lw-v1';
+const VERSION = 'lw-v2';
 const SHELL = ['./', './index.html', './manifest.webmanifest', './icons/icon-192.png', './icons/icon-512.png', './icons/icon-maskable-512.png', './icons/apple-touch-icon.png', './fonts/bricolage-grotesque-latin-wght-normal.woff2','./fonts/source-sans-3-latin-400-normal.woff2','./fonts/source-sans-3-latin-500-normal.woff2','./fonts/source-sans-3-latin-600-normal.woff2','./fonts/jetbrains-mono-latin-400-normal.woff2','./fonts/jetbrains-mono-latin-500-normal.woff2'];
 const INDEX = './index.html';
 
@@ -40,7 +40,7 @@ self.addEventListener('fetch', e => {
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
   if (url.origin !== location.origin) return;
-  if (/\.(woff2|png)$/.test(url.pathname)) { e.respondWith(cacheFirst(req)); return; }
+  if (/\.(woff2|png)$/.test(url.pathname) || /\/pdfjs\//.test(url.pathname)) { e.respondWith(cacheFirst(req)); return; }
   const isDoc = req.mode === 'navigate' || url.pathname.endsWith('/') || url.pathname.endsWith('.html');
   e.respondWith(networkFirst(req, isDoc ? INDEX : req));
 });
