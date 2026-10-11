@@ -194,7 +194,7 @@ input[type=checkbox]{width:18px;height:18px;accent-color:var(--accent);margin:2p
 .tgroup.sub{padding-left:12px;border-left:2px solid var(--line)}
 .tgroup.sub>.tgroup-head{border-bottom:1px solid var(--line)}
 .tgroup-head h3{font-size:1.05rem;overflow-wrap:anywhere;min-width:0}
-.gear{margin-left:auto;display:inline-flex;align-items:center;justify-content:center;padding:8px;width:40px;height:40px}
+.gear{display:inline-flex;align-items:center;justify-content:center;padding:8px;width:40px;height:40px}
 .vh{position:absolute;opacity:0;width:1px;height:1px;overflow:hidden}
 .addpdf{position:relative;display:inline-block;cursor:pointer}
 .addpdf:focus-within{outline:3px solid var(--hi);outline-offset:2px}
@@ -203,19 +203,24 @@ input[type=checkbox]{width:18px;height:18px;accent-color:var(--accent);margin:2p
 .pdflink{color:var(--accent);font-weight:600;text-decoration:underline;overflow-wrap:anywhere}
 .pdflink.off{color:var(--muted);text-decoration:none;pointer-events:none}
 .docs{display:flex;gap:6px 14px;flex-wrap:wrap;justify-content:center;max-width:620px;font-size:.85rem;color:var(--muted)}
+.top{display:flex;align-items:center;justify-content:space-between;width:100%;gap:12px}
+header{gap:10px}
+header nav{width:100%;overflow-x:auto;flex-wrap:nowrap}
+header nav button{white-space:nowrap;flex:1 1 auto}
+.tabrow{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:var(--surface)}
+.tabrow.off{opacity:.65}
+.tabcheck{display:flex;align-items:flex-start;gap:10px;min-width:0;flex:1;cursor:pointer}
+.tabcheck input{width:auto;margin-top:4px;flex:none}
+.tabcheck span{display:grid;gap:2px;min-width:0}
+.tabcheck small{color:var(--muted);font-size:.82rem;line-height:1.35}
 </style>
 </head>
 <body>
 <div class="wrap">
 <header>
-  <div class="brand"><i></i>Lernwerkstatt</div>
-  <nav role="tablist" aria-label="Bereiche">
-    <button role="tab" data-tab="heute" aria-selected="true">Heute</button>
-    <button role="tab" data-tab="lernen" aria-selected="false">Lernen</button>
-    <button role="tab" data-tab="fokus" aria-selected="false">Fokus</button>
-    <button role="tab" data-tab="bib" aria-selected="false">Bibliothek</button>
-  </nav>
-  <button class="iconbtn gear" id="settingsBtn" type="button" aria-label="Einstellungen" title="Einstellungen"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h0a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h0a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v0a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
+  <div class="top"><div class="brand"><i></i>Lernwerkstatt</div>
+  <button class="iconbtn gear" id="settingsBtn" type="button" aria-label="Einstellungen" title="Einstellungen"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h0a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h0a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v0a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button></div>
+  <nav role="tablist" aria-label="Bereiche"></nav>
 </header>
 <p class="syncnote" id="syncNote"></p>
 
@@ -356,6 +361,9 @@ input[type=checkbox]{width:18px;height:18px;accent-color:var(--accent);margin:2p
     <div class="row between"><h2>Einstellungen</h2><button class="btn small" id="settingsClose" type="button">Schließen</button></div>
     <div><div class="label">Darstellung</div><div class="row" id="themeOpts" role="group" aria-label="Darstellung" style="margin-top:8px"></div>
     <p class="syncnote" style="margin-top:8px">„System“ folgt der Einstellung deines Geräts.</p></div>
+    <div><div class="label">Reiter</div>
+    <p class="syncnote" style="margin-top:4px">Wähle, welche Reiter du siehst, und lege mit den Pfeilen die Reihenfolge fest.</p>
+    <div class="grid" id="tabOpts" style="gap:8px;margin-top:8px"></div></div>
     <div><div class="label">Karten und Daten</div><div class="row" style="margin-top:8px">
       <button class="btn" id="setImport" type="button">Karten importieren (JSON)</button>
       <button class="btn" id="setBackup" type="button">Sicherung</button></div></div>
@@ -436,7 +444,20 @@ function migrateV1(o){
   return {...base,theme:o.theme||"",set:Object.assign(base.set,o.set||{}),log:o.log||{},
     topics:decks.length?[]:base.topics,decks:decks.length?decks:base.decks,sets:decks.length?[]:base.sets};
 }
+const TABDEF=[
+ {id:"heute",name:"Heute",desc:"Übersicht: fällige Karten, Serie und Fortschritt je Fach. Von hier startest du die Runde."},
+ {id:"lernen",name:"Lernen",desc:"Karten abfragen, wahlweise nach Thema oder als gemischter Lernstapel aus mehreren Themen."},
+ {id:"fokus",name:"Fokus",desc:"Lerntimer mit Lern- und Pausenphasen (Pomodoro)."},
+ {id:"bib",name:"Bibliothek",desc:"Themen, Stapel und Karten verwalten, importieren, PDFs anhängen und Sicherung."}];
+function tabsList(){
+  const raw=S&&Array.isArray(S.tabs)?S.tabs:[],out=[],seen=new Set();
+  raw.forEach(t=>{const d=t&&TABDEF.find(x=>x.id===t.id);if(d&&!seen.has(d.id)){seen.add(d.id);out.push({id:d.id,on:t.on!==false})}});
+  TABDEF.forEach(d=>{if(!seen.has(d.id))out.push({id:d.id,on:true})});
+  if(!out.some(t=>t.on))out[0].on=true;
+  return out;
+}
 function normalize(){
+  S.tabs=tabsList();
   S.topics=(Array.isArray(S.topics)?S.topics:[]).filter(t=>t&&t.id&&t.name);
   const tids=new Set(S.topics.map(t=>t.id));
   S.topics.forEach(t=>{t.parent=(t.parent&&t.parent!==t.id&&tids.has(t.parent))?t.parent:"";t.pdfs=Array.isArray(t.pdfs)?t.pdfs.filter(e=>e&&e.id&&e.name):[]});
@@ -519,6 +540,21 @@ function renderSettings(){
     const b=el("button",{class:"btn"+(cur===v?" primary":""),type:"button","aria-pressed":String(cur===v)},l);
     b.addEventListener("click",()=>{if(v)S.theme=v;else delete S.theme;applyTheme();saveMeta();renderSettings()});
     box.append(b);
+  });
+  const tb=$("#tabOpts");tb.replaceChildren();
+  const list=tabsList();
+  list.forEach((t,i)=>{
+    const d=TABDEF.find(x=>x.id===t.id);
+    const cb=el("input",{type:"checkbox",id:"tabon-"+t.id,"aria-label":d.name+" anzeigen"});cb.checked=t.on;
+    const only=t.on&&list.filter(x=>x.on).length===1;if(only)cb.disabled=true;
+    cb.addEventListener("change",()=>{t.on=cb.checked;S.tabs=list;saveMeta();renderNav();renderSettings()});
+    const mv=(dir)=>{const j=i+dir;if(j<0||j>=list.length)return;[list[i],list[j]]=[list[j],list[i]];S.tabs=list;saveMeta();renderNav();renderSettings();const nb=document.querySelector("#tabrow-"+t.id+" ."+(dir<0?"up":"down"));if(nb&&!nb.disabled)nb.focus()};
+    const up=el("button",{class:"btn small up",type:"button","aria-label":d.name+" nach oben"},"↑"),dn=el("button",{class:"btn small down",type:"button","aria-label":d.name+" nach unten"},"↓");
+    up.disabled=i===0;dn.disabled=i===list.length-1;
+    up.addEventListener("click",()=>mv(-1));dn.addEventListener("click",()=>mv(1));
+    tb.append(el("div",{class:"tabrow"+(t.on?"":" off"),id:"tabrow-"+t.id},
+      el("label",{class:"tabcheck",for:"tabon-"+t.id},cb,el("span",null,el("b",{text:d.name}),el("small",{text:d.desc}))),
+      el("div",{class:"row",style:"gap:4px;flex-wrap:nowrap"},up,dn)));
   });
 }
 
@@ -1395,8 +1431,19 @@ $$("[data-phase]").forEach(b=>b.addEventListener("click",()=>setPhase(b.dataset.
 });
 
 /* ---------- Tabs & Start ---------- */
+let curTab="heute";
+function renderNav(){
+  const nav=$("nav");nav.replaceChildren();
+  const vis=tabsList().filter(t=>t.on);
+  vis.forEach(t=>{
+    const d=TABDEF.find(x=>x.id===t.id);
+    const b=el("button",{role:"tab","data-tab":t.id,"aria-selected":String(t.id===curTab)},d.name);
+    b.addEventListener("click",()=>setTab(t.id));nav.append(b);
+  });
+  if(curTab!=="einst"&&!vis.some(t=>t.id===curTab))setTab(vis[0].id);
+}
 function setTab(name){
-  $$("nav [data-tab]").forEach(b=>b.setAttribute("aria-selected",String(b.dataset.tab===name)));
+  curTab=name;$$("nav [data-tab]").forEach(b=>b.setAttribute("aria-selected",String(b.dataset.tab===name)));
   ["heute","lernen","fokus","bib","einst"].forEach(n=>{$("#tab-"+n).hidden=n!==name});
   if(name==="heute")renderHome();
   if(name==="lernen"){fillSrc();renderSets()}
@@ -1404,14 +1451,16 @@ function setTab(name){
   if(name==="einst")renderSettings();
   if(name==="bib"){lib.view="list";lib.deckId=null;renderLib()}
 }
-$$("nav [data-tab]").forEach(b=>b.addEventListener("click",()=>setTab(b.dataset.tab)));
+renderNav();
 let lastTab="heute";
-$("#settingsBtn").addEventListener("click",()=>{const open=!$("#tab-einst").hidden;if(open)setTab(lastTab);else{const cur=$$("nav [data-tab]").find(b=>b.getAttribute("aria-selected")==="true");if(cur)lastTab=cur.dataset.tab;setTab("einst")}});
-$("#settingsClose").addEventListener("click",()=>setTab(lastTab));
+function closeSettings(){const vis=tabsList().filter(t=>t.on).map(t=>t.id);setTab(vis.includes(lastTab)?lastTab:vis[0])}
+$("#settingsBtn").addEventListener("click",()=>{if(curTab==="einst")closeSettings();else{lastTab=curTab;setTab("einst")}});
+$("#settingsClose").addEventListener("click",closeSettings);
 $("#setImport").addEventListener("click",()=>{setTab("bib");goLib("import")});
 $("#setBackup").addEventListener("click",()=>{setTab("bib");goLib("backup")});
 function refreshAll(){renderHome();fillSrc();renderSets()}
 function renderAll(){
+  renderNav();
   renderHome();fillSrc();renderSets();
   if(!$("#tab-bib").hidden)renderLib();
   if(!T.running)T.left=phaseMs(T.phase);
