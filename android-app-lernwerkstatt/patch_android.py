@@ -59,3 +59,11 @@ if 'signingConfigs' not in g:
     print('Signaturschluessel eingetragen')
 
 print('Android-Projekt angepasst, Build-Nummer', run)
+
+# 4) Vibration fuer den Timer erlauben
+mf = os.path.join(MAIN, 'AndroidManifest.xml')
+m = open(mf, encoding='utf-8').read()
+if 'android.permission.VIBRATE' not in m:
+    m = m.replace('</manifest>', '    <uses-permission android:name="android.permission.VIBRATE" />\n</manifest>', 1)
+    open(mf, 'w', encoding='utf-8').write(m)
+    print('VIBRATE-Berechtigung eingetragen')
