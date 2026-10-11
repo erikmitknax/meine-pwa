@@ -194,6 +194,7 @@ input[type=checkbox]{width:18px;height:18px;accent-color:var(--accent);margin:2p
 .tgroup.sub{padding-left:12px;border-left:2px solid var(--line)}
 .tgroup.sub>.tgroup-head{border-bottom:1px solid var(--line)}
 .tgroup-head h3{font-size:1.05rem;overflow-wrap:anywhere;min-width:0}
+.gear{margin-left:auto;display:inline-flex;align-items:center;justify-content:center;padding:8px;width:40px;height:40px}
 .vh{position:absolute;opacity:0;width:1px;height:1px;overflow:hidden}
 .addpdf{position:relative;display:inline-block;cursor:pointer}
 .addpdf:focus-within{outline:3px solid var(--hi);outline-offset:2px}
@@ -214,7 +215,7 @@ input[type=checkbox]{width:18px;height:18px;accent-color:var(--accent);margin:2p
     <button role="tab" data-tab="fokus" aria-selected="false">Fokus</button>
     <button role="tab" data-tab="bib" aria-selected="false">Bibliothek</button>
   </nav>
-  <button class="iconbtn" id="themeBtn" type="button" aria-label="Darstellung wechseln">Hell / Dunkel</button>
+  <button class="iconbtn gear" id="settingsBtn" type="button" aria-label="Einstellungen" title="Einstellungen"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h0a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h0a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v0a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
 </header>
 <p class="syncnote" id="syncNote"></p>
 
@@ -346,6 +347,18 @@ input[type=checkbox]{width:18px;height:18px;accent-color:var(--accent);margin:2p
       <label style="width:110px">Pause (Min.)<input type="number" id="setShort" min="1" max="60" value="5"></label>
       <label style="width:110px">Lange Pause<input type="number" id="setLong" min="1" max="90" value="15"></label>
     </div>
+  </div>
+</section>
+
+<!-- EINSTELLUNGEN -->
+<section id="tab-einst" hidden class="grid">
+  <div class="panel grid">
+    <div class="row between"><h2>Einstellungen</h2><button class="btn small" id="settingsClose" type="button">Schließen</button></div>
+    <div><div class="label">Darstellung</div><div class="row" id="themeOpts" role="group" aria-label="Darstellung" style="margin-top:8px"></div>
+    <p class="syncnote" style="margin-top:8px">„System“ folgt der Einstellung deines Geräts.</p></div>
+    <div><div class="label">Karten und Daten</div><div class="row" style="margin-top:8px">
+      <button class="btn" id="setImport" type="button">Karten importieren (JSON)</button>
+      <button class="btn" id="setBackup" type="button">Sicherung</button></div></div>
   </div>
 </section>
 
@@ -499,10 +512,15 @@ async function initStore(){
 
 /* ---------- Darstellung ---------- */
 function applyTheme(){if(S&&S.theme)document.documentElement.setAttribute("data-theme",S.theme);else document.documentElement.removeAttribute("data-theme")}
-$("#themeBtn").addEventListener("click",()=>{
-  const cur=document.documentElement.getAttribute("data-theme")||(matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light");
-  S.theme=cur==="dark"?"light":"dark";applyTheme();saveMeta();
-});
+function renderSettings(){
+  const box=$("#themeOpts");box.replaceChildren();
+  const cur=S&&S.theme||"";
+  [["","System"],["light","Hell"],["dark","Dunkel"]].forEach(([v,l])=>{
+    const b=el("button",{class:"btn"+(cur===v?" primary":""),type:"button","aria-pressed":String(cur===v)},l);
+    b.addEventListener("click",()=>{if(v)S.theme=v;else delete S.theme;applyTheme();saveMeta();renderSettings()});
+    box.append(b);
+  });
+}
 
 /* ---------- Hilfen ---------- */
 /* Themenbaum: jedes Thema hat optional ein Oberthema (parent). Höchstens MAXD+1 Ebenen. */
@@ -571,6 +589,11 @@ function parseInput(raw){
         return {decks:[{title:"",topic:"",cards:cardsFromArray(o)}]};
       }
       if(o&&typeof o==="object"){
+        if(Array.isArray(o.decks)&&o.decks.length&&o.decks.some(d=>d&&Array.isArray(d.cards)&&d.cards.some(c=>c&&typeof c.f==="string"&&typeof c.b==="string")))return {backup:o};
+        const lst=o.decks||o.stapel||o.sammlungen;
+        if(Array.isArray(lst)&&lst.length&&lst.some(d=>d&&(d.karten||d.cards))){
+          return {decks:lst.map(d=>({title:pick(d,TITLEK)||pick(d,TK),topic:pick(d,TK)||pick(o,TK),cards:cardsFromArray(d.karten||d.cards||[])})).filter(d=>d.cards.length)};
+        }
         const arr=o.karten||o.cards||o.flashcards||o.karteikarten||[];
         return {decks:[{title:pick(o,TITLEK)||pick(o,TK),topic:pick(o,TK),cards:cardsFromArray(arr)}]};
       }
@@ -1036,12 +1059,29 @@ function renderImport(){
   const newTopic=el("input",{type:"text",id:"imp-newtopic",placeholder:"Neues Thema, z. B. Ausbildung › Recht",maxlength:"200","aria-label":"Name des neuen Themas",hidden:""});
   const topicWrap=el("div",{class:"grid",style:"gap:8px"},el("label",{for:"imp-topic"},"Thema",topicSel),newTopic);
   const go=el("button",{class:"btn primary",type:"button"},"Importieren");
+  const fileIn=el("input",{type:"file",id:"imp-file",accept:".json,.txt,application/json,text/plain","aria-label":"JSON-Datei auswählen"});
+  fileIn.addEventListener("change",async()=>{
+    const f=fileIn.files&&fileIn.files[0];if(!f)return;
+    if(f.size>20e6){ta.value="";update();toast("Die Datei ist größer als 20 MB.");fileIn.value="";return}
+    try{ta.value=await f.text();update();toast("„"+f.name+"“ geladen")}catch(e){toast("Die Datei lässt sich nicht lesen.")}
+    fileIn.value="";
+  });
   function update(){
     status.replaceChildren();preview.hidden=true;preview.replaceChildren();
     parsed=parseInput(ta.value);
-    const tg=target.value;titleWrap.hidden=!!tg;topicWrap.hidden=!!tg;
+    const tg=target.value;titleWrap.hidden=!!tg||!!(parsed&&parsed.backup);topicWrap.hidden=titleWrap.hidden;
+    target.parentElement.hidden=!!(parsed&&parsed.backup);
     let n=0;
-    if(parsed&&parsed.error)status.append(el("div",{class:"status err",text:parsed.error}));
+    if(parsed&&parsed.backup){
+      const plan=planRestore(parsed.backup);
+      if(plan.error)status.append(el("div",{class:"status err",text:plan.error}));
+      else{
+        n=plan.cards||0;
+        status.append(el("div",{class:"status ok",text:"Sicherung erkannt: "+plan.decks.length+" Stapel, "+plan.cards+" Karten"+(plan.newTopics.length?", "+plan.newTopics.length+" neue Themen":"")+". Vorhandenes bleibt erhalten."}));
+        parsed.plan=plan;
+      }
+    }
+    else if(parsed&&parsed.error)status.append(el("div",{class:"status err",text:parsed.error}));
     else if(parsed){
       n=parsed.decks.reduce((a,d)=>a+d.cards.length,0);
       if(!n)status.append(el("div",{class:"status err",text:"Keine Karten erkannt. Nutze das JSON-Format aus dem Prompt oder eine Karte pro Zeile: Frage ; Antwort"}));
@@ -1062,6 +1102,7 @@ function renderImport(){
   titleIn.addEventListener("input",()=>{titleIn.dataset.touched=titleIn.value?"1":""});
   go.addEventListener("click",()=>{
     if(!parsed||parsed.error)return;
+    if(parsed.backup){if(!parsed.plan)return;applyRestore(parsed.plan);toast("Sicherung eingespielt");refreshAll();goLib("list");return}
     const tg=target.value,selTopic=topicSel.value;
     const uiTopic=()=>selTopic==="__new"?topicByPath(newTopic.value,true):selTopic;
     const mk=c=>mkCard(c.f,c.b);let added=0;
@@ -1086,7 +1127,10 @@ function renderImport(){
     el("div",{class:"promptbox"},
       el("div",{class:"row between"},el("span",{class:"label",text:"Schreib das in einen anderen Chat"}),el("button",{class:"btn small",type:"button",onclick:()=>copy(PROMPT)},"Kopieren")),
       el("pre",{text:PROMPT})),
-    el("label",{for:"imp-text"},"Antwort von Claude hier einfügen",ta),
+    el("div",{class:"panel grid"},el("h3",{text:"JSON-Datei importieren"}),
+      el("p",{class:"syncnote",text:"Wähle eine .json-Datei mit deinen Karten. Erkannt werden Sicherungen dieser App und der Lernkartei sowie Dateien mit „karten“ (vorne/hinten) oder „cards“ (front/back)."}),
+      fileIn),
+    el("label",{for:"imp-text"},"… oder JSON bzw. Antwort von Claude hier einfügen",ta),
     status,preview,
     el("label",{for:"imp-target"},"Ziel",target),
     titleWrap,topicWrap,
@@ -1353,13 +1397,19 @@ $$("[data-phase]").forEach(b=>b.addEventListener("click",()=>setPhase(b.dataset.
 /* ---------- Tabs & Start ---------- */
 function setTab(name){
   $$("nav [data-tab]").forEach(b=>b.setAttribute("aria-selected",String(b.dataset.tab===name)));
-  ["heute","lernen","fokus","bib"].forEach(n=>{$("#tab-"+n).hidden=n!==name});
+  ["heute","lernen","fokus","bib","einst"].forEach(n=>{$("#tab-"+n).hidden=n!==name});
   if(name==="heute")renderHome();
   if(name==="lernen"){fillSrc();renderSets()}
   if(name==="fokus")drawTimer();
+  if(name==="einst")renderSettings();
   if(name==="bib"){lib.view="list";lib.deckId=null;renderLib()}
 }
 $$("nav [data-tab]").forEach(b=>b.addEventListener("click",()=>setTab(b.dataset.tab)));
+let lastTab="heute";
+$("#settingsBtn").addEventListener("click",()=>{const open=!$("#tab-einst").hidden;if(open)setTab(lastTab);else{const cur=$$("nav [data-tab]").find(b=>b.getAttribute("aria-selected")==="true");if(cur)lastTab=cur.dataset.tab;setTab("einst")}});
+$("#settingsClose").addEventListener("click",()=>setTab(lastTab));
+$("#setImport").addEventListener("click",()=>{setTab("bib");goLib("import")});
+$("#setBackup").addEventListener("click",()=>{setTab("bib");goLib("backup")});
 function refreshAll(){renderHome();fillSrc();renderSets()}
 function renderAll(){
   renderHome();fillSrc();renderSets();
