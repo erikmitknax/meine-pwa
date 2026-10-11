@@ -232,6 +232,10 @@ html.pv-lock,html.pv-lock body{overflow:hidden}
 .pal-prev i{display:block;width:16px;height:16px;border-radius:50%}
 .alarmrow{display:flex;gap:10px;align-items:flex-end}
 .alarmrow label{flex:1;min-width:0}
+.exrow{display:flex;align-items:center;gap:10px;padding:6px 0;cursor:pointer;min-width:0}
+.exrow span{overflow-wrap:anywhere}
+.exrow input{margin:0}
+.status{padding:8px 12px;border-radius:8px;background:var(--surface2);font-size:.9rem}
 </style>
 </head>
 <body>
@@ -376,7 +380,8 @@ html.pv-lock,html.pv-lock body{overflow:hidden}
 
 <!-- EINSTELLUNGEN -->
 <section id="tab-einst" hidden class="grid">
-  <div class="panel grid">
+  <div class="panel grid" id="setSich" hidden></div>
+  <div class="panel grid" id="setMain">
     <div class="row between"><h2>Einstellungen</h2><button class="btn small" id="settingsClose" type="button">Schließen</button></div>
     <div><div class="label">Darstellung</div><div class="row" id="themeOpts" role="group" aria-label="Darstellung" style="margin-top:8px"></div>
     <p class="syncnote" style="margin-top:8px">„System“ folgt der Einstellung deines Geräts.</p></div>
@@ -387,9 +392,9 @@ html.pv-lock,html.pv-lock body{overflow:hidden}
     <div><div class="label">Reiter</div>
     <p class="syncnote" style="margin-top:4px">Hake an, welche Reiter du siehst, ändere ihre Namen und lege mit den Pfeilen die Reihenfolge fest. Ein leeres Namensfeld stellt den Originalnamen wieder her.</p>
     <div class="grid" id="tabOpts" style="gap:8px;margin-top:8px"></div></div>
-    <div><div class="label">Karten und Daten</div><div class="row" style="margin-top:8px">
-      <button class="btn" id="setImport" type="button">Karten importieren (JSON)</button>
-      <button class="btn" id="setBackup" type="button">Sicherung</button></div></div>
+    <div><div class="label">Sicherung</div>
+    <p class="syncnote" style="margin-top:4px">Exportiere deine Stapel als Datei oder lege automatische Sicherungen in deiner Dropbox an.</p>
+    <div class="row" style="margin-top:8px"><button class="btn" id="setSichBtn" type="button">Sicherung öffnen ›</button></div></div>
   </div>
 </section>
 
@@ -471,7 +476,7 @@ const TABDEF=[
  {id:"heute",name:"Heute",desc:"Übersicht: fällige Karten, Serie und Fortschritt je Fach. Von hier startest du die Runde."},
  {id:"lernen",name:"Lernen",desc:"Karten abfragen, wahlweise nach Thema oder als gemischter Lernstapel aus mehreren Themen."},
  {id:"fokus",name:"Fokus",desc:"Lerntimer mit Lern- und Pausenphasen (Pomodoro)."},
- {id:"bib",name:"Bibliothek",desc:"Themen, Stapel und Karten verwalten, importieren, PDFs anhängen und Sicherung."}];
+ {id:"bib",name:"Bibliothek",desc:"Themen, Stapel und Karten verwalten, importieren und PDFs anhängen."}];
 const tabName=t=>t.name||TABDEF.find(x=>x.id===t.id).name;
 function tabsList(){
   const raw=S&&Array.isArray(S.tabs)?S.tabs:[],out=[],seen=new Set();
@@ -504,8 +509,8 @@ function syncNote(t){$("#syncNote").textContent=t}
 function lsWrite(){try{localStorage.setItem(LS,JSON.stringify(S))}catch(e){}}
 function metaBody(){const m=clone(S);delete m.decks;return m}
 function queue(id){if(mode!=="cloud")return;dirty.add(id);clearTimeout(flushTimer);flushTimer=setTimeout(flush,700)}
-function saveMeta(){lsWrite();queue("_meta")}
-function saveDeck(d){lsWrite();queue(d.id)}
+function saveMeta(){lsWrite();queue("_meta");queueBackup()}
+function saveDeck(d){lsWrite();queue(d.id);queueBackup()}
 async function putDoc(id,body){
   try{await col().doc(id).set(clone(body))}
   catch(e){
@@ -556,7 +561,7 @@ async function initStore(){
     if(dirty.size)flush();
     syncNote("Gespeichert in deinem Konto und auf allen Geräten verfügbar.");
     applyTheme();renderAll();
-  }catch(e){mode="local";syncNote("Gespeichert auf diesem Gerät. Sichere regelmäßig unter Bibliothek › Sicherung.")}
+  }catch(e){mode="local";syncNote("Gespeichert auf diesem Gerät. Sichere regelmäßig unter Einstellungen › Sicherung.")}
 }
 
 /* ---------- Darstellung ---------- */
@@ -1157,12 +1162,254 @@ function renderBuilder(){
 }
 $("#newSet").addEventListener("click",()=>{openBuilder(null);$("#builder").scrollIntoView({block:"nearest"})});
 
+/* ---------- Sicherung: Export und Dropbox ---------- */
+const DBX_LS="lernwerkstatt.dropbox",BK_PATH="/lernwerkstatt-sicherung.json";
+/* Zugangsdaten bleiben nur auf diesem Gerät. Sie landen weder in der Sicherung noch im Konto. */
+let DB=(()=>{try{return JSON.parse(localStorage.getItem(DBX_LS))||{}}catch(e){return {}}})();
+const dbSave=()=>{try{localStorage.setItem(DBX_LS,JSON.stringify(DB))}catch(e){}};
+const dbConnected=()=>!!(DB.key&&DB.refresh)||!!(DB.access&&DB.exp>Date.now());
+const b64u=buf=>btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/,"");
+const asciiJson=o=>JSON.stringify(o).replace(/[\u007f-￿]/g,c=>"\\u"+("0000"+c.charCodeAt(0).toString(16)).slice(-4));
+const hashStr=s=>{let h=5381;for(let i=0;i<s.length;i++)h=((h<<5)+h+s.charCodeAt(i))|0;return String(h)+":"+s.length};
+const fmtWhen=t=>new Date(t).toLocaleString("de-DE",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"});
+
+async function dbStartAuth(key){
+  const verifier=b64u(crypto.getRandomValues(new Uint8Array(48)));
+  const challenge=b64u(await crypto.subtle.digest("SHA-256",new TextEncoder().encode(verifier)));
+  DB.pending={key,verifier};dbSave();
+  return "https://www.dropbox.com/oauth2/authorize?client_id="+encodeURIComponent(key)+"&response_type=code&code_challenge="+challenge+"&code_challenge_method=S256&token_access_type=offline";
+}
+async function dbTokenCall(params){
+  let r;
+  try{r=await fetch("https://api.dropboxapi.com/oauth2/token",{method:"POST",body:new URLSearchParams(params)})}
+  catch(e){throw new Error("Keine Verbindung zu Dropbox. Prüfe dein Internet.")}
+  let j={};try{j=await r.json()}catch(e){}
+  if(!r.ok)throw new Error(j.error==="invalid_grant"?"Der Code ist ungültig oder abgelaufen. Hole dir einen neuen.":"Dropbox hat die Anmeldung abgelehnt"+(j.error_description?": "+j.error_description:"."));
+  return j;
+}
+async function dbFinishAuth(code){
+  const p=DB.pending;if(!p)throw new Error("Starte zuerst die Anmeldung bei Dropbox.");
+  const j=await dbTokenCall({code:code.trim(),grant_type:"authorization_code",code_verifier:p.verifier,client_id:p.key});
+  if(!j.refresh_token)throw new Error("Dropbox hat keinen dauerhaften Zugang geliefert. Prüfe, ob die App „Scoped access“ nutzt.");
+  DB.key=p.key;DB.refresh=j.refresh_token;DB.access=j.access_token;DB.exp=Date.now()+Math.max(60,(j.expires_in||14400)-120)*1000;
+  delete DB.pending;DB.err="";dbSave();
+}
+async function dbToken(){
+  if(DB.access&&DB.exp>Date.now())return DB.access;
+  if(!(DB.key&&DB.refresh)){DB.err="Die Dropbox-Verbindung ist abgelaufen. Verbinde neu.";dbSave();throw new Error(DB.err)}
+  const j=await dbTokenCall({grant_type:"refresh_token",refresh_token:DB.refresh,client_id:DB.key});
+  DB.access=j.access_token;DB.exp=Date.now()+Math.max(60,(j.expires_in||14400)-120)*1000;dbSave();
+  return DB.access;
+}
+async function dbErr(r){
+  let t="";try{t=await r.text()}catch(e){}
+  if(r.status===401)return new Error("Dropbox hat den Zugang abgelehnt. Verbinde neu.");
+  if(r.status===429)return new Error("Dropbox bittet um eine Pause. Es wird später erneut versucht.");
+  if(/insufficient_scope|missing_scope/.test(t))return new Error("In deiner Dropbox-App fehlt eine Berechtigung. Aktiviere files.content.write und files.content.read, dann neu verbinden.");
+  if(/insufficient_space/.test(t))return new Error("Dein Dropbox-Speicher ist voll.");
+  return new Error("Dropbox-Fehler "+r.status+".");
+}
+async function dbFetch(url,opts){
+  let r;try{r=await fetch(url,opts)}catch(e){throw new Error("Keine Verbindung zu Dropbox. Prüfe dein Internet.")}
+  return r;
+}
+async function dbUpload(path,body){
+  const tok=await dbToken();
+  const r=await dbFetch("https://content.dropboxapi.com/2/files/upload",{method:"POST",headers:{Authorization:"Bearer "+tok,"Content-Type":"application/octet-stream","Dropbox-API-Arg":asciiJson({path,mode:"overwrite",mute:true,autorename:false})},body});
+  if(!r.ok)throw await dbErr(r);
+}
+async function dbDownload(path){
+  const tok=await dbToken();
+  const r=await dbFetch("https://content.dropboxapi.com/2/files/download",{method:"POST",headers:{Authorization:"Bearer "+tok,"Dropbox-API-Arg":asciiJson({path})}});
+  if(r.status===409)throw new Error("In deiner Dropbox liegt noch keine Sicherung.");
+  if(!r.ok)throw await dbErr(r);
+  return r.text();
+}
+async function dbDelete(path){
+  const tok=await dbToken();
+  const r=await dbFetch("https://api.dropboxapi.com/2/files/delete_v2",{method:"POST",headers:{Authorization:"Bearer "+tok,"Content-Type":"application/json"},body:JSON.stringify({path})});
+  if(r.ok||r.status===409)return;
+  throw await dbErr(r);
+}
+
+/* Automatische Sicherung: gebündelt und nur bei echten Änderungen */
+const pdfFileName=e=>safeName(e.name).replace(/[^\x20-\x7e]/g,"_")+"__"+e.id+".pdf";
+const localPdfs=()=>{const m=new Map();S.topics.forEach(t=>(t.pdfs||[]).forEach(e=>{if(e.kind==="local")m.set(e.id,e)}));return m};
+function backupJson(withTime){const b=makeBackup();if(!withTime)delete b.exported;return JSON.stringify(b)}
+let dbTimer=null,dbBusy=false,dbAgain=false,dbWhy="";
+const onCellular=()=>{try{const c=navigator.connection;return !!(c&&c.type==="cellular")}catch(e){return false}};
+function queueBackup(){
+  if(!DB.auto||!dbConnected())return;
+  clearTimeout(dbTimer);dbTimer=setTimeout(()=>runBackup(false),45000);
+}
+async function syncPdfs(){
+  const want=localPdfs();DB.pdfUp=DB.pdfUp||{};
+  for(const [id,e] of want){
+    if(DB.pdfUp[id])continue;
+    const b=await idbGet(id);if(!b)continue;
+    await dbUpload("/pdfs/"+pdfFileName(e),b);DB.pdfUp[id]=pdfFileName(e);dbSave();
+  }
+  for(const id of Object.keys(DB.pdfUp)){
+    if(want.has(id))continue;
+    await dbDelete("/pdfs/"+DB.pdfUp[id]);delete DB.pdfUp[id];dbSave();
+  }
+}
+async function runBackup(manual){
+  if(!dbConnected())return false;
+  if(dbBusy){dbAgain=true;return false}
+  if(!manual){
+    if(navigator.onLine===false){dbWhy="Kein Internet. Die Sicherung folgt, sobald du wieder online bist.";renderSichStatus();return false}
+    if(DB.wifi&&onCellular()){dbWhy="Mobile Daten aktiv. Die Sicherung wartet auf WLAN.";renderSichStatus();return false}
+  }
+  dbBusy=true;dbWhy="";renderSichStatus();
+  try{
+    const h=hashStr(backupJson(false));
+    if(manual||h!==DB.hash||!DB.last){const txt=backupJson(true);await dbUpload(BK_PATH,txt);DB.hash=h;DB.last=Date.now();DB.size=txt.length}
+    if(DB.pdfs)await syncPdfs();
+    DB.err="";dbSave();
+    return true;
+  }catch(e){DB.err=e&&e.message?e.message:"Die Sicherung ist fehlgeschlagen.";dbSave();return false}
+  finally{dbBusy=false;renderSichStatus();if(dbAgain){dbAgain=false;queueBackup()}}
+}
+addEventListener("online",()=>{if(DB.auto&&dbConnected())queueBackup()});
+
+/* ---------- Export ---------- */
+function exportPlan(sel,none){
+  const topics=S.topics.filter(t=>sel.has(t.id)),keep=new Set(topics.map(t=>t.id));
+  topics.forEach(t=>{let p=t.parent,n=0;while(p&&n++<12){keep.add(p);const x=topicById(p);p=x?x.parent:""}});
+  const decks=S.decks.filter(d=>d.topic&&topicById(d.topic)?sel.has(d.topic):none);
+  return {topics:S.topics.filter(t=>keep.has(t.id)),decks};
+}
+
+/* ---------- Seite „Sicherung“ in den Einstellungen ---------- */
+let settingsView="main";
+function showSettings(v){
+  settingsView=v;$("#setMain").hidden=v!=="main";$("#setSich").hidden=v!=="sich";
+  if(v==="sich")renderSicherung();else renderSettings();
+  window.scrollTo(0,0);
+}
+let sichStatusEl=null;
+function renderSichStatus(){
+  if(!sichStatusEl||!sichStatusEl.isConnected)return;
+  const box=sichStatusEl;box.replaceChildren();
+  if(dbBusy)box.append(el("div",{class:"status ok",text:"Sicherung läuft …"}));
+  else if(DB.err)box.append(el("div",{class:"status err",text:DB.err}));
+  else if(dbWhy)box.append(el("div",{class:"status",text:dbWhy}));
+  if(DB.last&&!dbBusy&&!DB.err)box.append(el("div",{class:"status ok",text:"Letzte Sicherung: "+fmtWhen(DB.last)+(DB.size?" · "+fmtSize(DB.size):"")}));
+  else if(DB.last&&DB.err)box.append(el("p",{class:"syncnote",text:"Letzte erfolgreiche Sicherung: "+fmtWhen(DB.last)}));
+}
+function renderSicherung(){
+  const root=$("#setSich");root.replaceChildren();
+  root.append(el("div",{class:"row between"},el("h2",{text:"Sicherung"}),el("button",{class:"btn small",type:"button",onclick:()=>showSettings("main")},"← Einstellungen")));
+  /* --- Export --- */
+  const flat=flatTopics();
+  const sel=new Set(flat.map(x=>x.t.id));let none=true;
+  const list=el("div",{class:"grid",style:"gap:6px"}),count=el("div",{class:"status ok"}),exp=el("button",{class:"btn primary",type:"button"},"Als Datei exportieren");
+  const boxes=new Map();
+  const kidsOf=id=>[...descIds(id)];
+  function sync(){
+    boxes.forEach((cb,id)=>{if(id==="__none")cb.checked=none;else cb.checked=sel.has(id)});
+    const p=exportPlan(sel,none),n=p.decks.reduce((a,d)=>a+d.cards.length,0);
+    count.textContent=p.decks.length+(p.decks.length===1?" Stapel":" Stapel")+" · "+n+(n===1?" Karte":" Karten")+" ausgewählt";
+    exp.disabled=!p.decks.length&&!p.topics.length;
+  }
+  function row(id,label,depth,toggle){
+    const cb=el("input",{type:"checkbox",id:"ex-"+id,"aria-label":label});boxes.set(id,cb);
+    cb.addEventListener("change",()=>{toggle(cb.checked);sync()});
+    return el("label",{class:"exrow",for:"ex-"+id,style:"padding-left:"+(depth*18)+"px"},cb,el("span",{text:label}));
+  }
+  flat.forEach(x=>list.append(row(x.t.id,x.t.name,x.depth||topicDepth(x.t.id),on=>{kidsOf(x.t.id).forEach(i=>{if(on)sel.add(i);else sel.delete(i)})})));
+  if(S.decks.some(d=>!topicById(d.topic)))list.append(row("__none","Ohne Thema",0,on=>{none=on}));
+  const all=el("button",{class:"btn small",type:"button"},"Alles wählen"),noneBtn=el("button",{class:"btn small",type:"button"},"Nichts wählen");
+  all.addEventListener("click",()=>{flat.forEach(x=>sel.add(x.t.id));none=true;sync()});
+  noneBtn.addEventListener("click",()=>{sel.clear();none=false;sync()});
+  exp.addEventListener("click",async()=>{
+    const p=exportPlan(sel,none),full=p.topics.length===S.topics.length&&p.decks.length===S.decks.length;
+    const b=makeBackup();b.topics=p.topics.map(t=>({id:t.id,name:t.name,parent:t.parent||""}));b.decks=clone(p.decks);if(!full)b.sets=[];
+    const ok=await exportFile("lernwerkstatt-"+(full?"sicherung":"auswahl")+"-"+stampNow()+".json",new Blob([JSON.stringify(b,null,1)],{type:"application/json"}),"Lernwerkstatt Export");
+    if(ok){if(full)markBackup();toast("Export erstellt")}else toast("Die Datei konnte nicht erstellt werden.");
+  });
+  root.append(el("div",{class:"panel grid"},el("h3",{text:"Exportieren"}),
+    el("p",{class:"syncnote",text:"Speichert Stapel samt Lernfortschritt in einer Datei. Wähle Themen aus oder nimm alles. PDF-Unterlagen sind nicht in der Datei. Zurückspielen kannst du sie in der Bibliothek über „Importieren“."}),
+    el("div",{class:"row"},all,noneBtn),list,count,el("div",{class:"row"},exp)));
+  sync();
+  /* --- Dropbox --- */
+  const dp=el("div",{class:"panel grid"});root.append(dp);
+  dp.append(el("h3",{text:"Automatische Sicherung in Dropbox"}));
+  if(!dbConnected())renderDbxConnect(dp);else renderDbxConnected(dp);
+}
+function renderDbxConnect(dp){
+  dp.append(el("p",{class:"syncnote",text:"Die App kann bei jeder Änderung eine Sicherungsdatei in deine Dropbox legen und dabei die alte überschreiben. Dafür brauchst du einen eigenen App-Key von Dropbox. Er bleibt nur auf diesem Gerät."}));
+  const help=el("details",{class:"pdfs"},el("summary",{text:"So bekommst du den App-Key"}),
+    el("ol",{class:"syncnote",style:"padding-left:18px;margin:8px 0;display:grid;gap:4px"},
+      el("li",{text:"Öffne dropbox.com/developers/apps und tippe auf „Create app“."}),
+      el("li",{text:"Wähle „Scoped access“ und „App folder“, vergib einen Namen."}),
+      el("li",{text:"Im Reiter „Permissions“ aktiviere files.content.write und files.content.read. Tippe auf „Submit“."}),
+      el("li",{text:"Im Reiter „Settings“ kopierst du den „App key“. Füge ihn unten ein."})));
+  const keyIn=el("input",{type:"text",id:"dbx-key",placeholder:"App-Key",autocomplete:"off",autocapitalize:"off",spellcheck:"false","aria-label":"Dropbox App-Key"});
+  keyIn.value=(DB.pending&&DB.pending.key)||"";
+  const link=el("a",{class:"linkbtn",target:"_blank",rel:"noopener",hidden:""},"Dropbox-Anmeldung öffnen");
+  const codeIn=el("input",{type:"text",id:"dbx-code",placeholder:"Code aus Dropbox",autocomplete:"off",spellcheck:"false","aria-label":"Code aus Dropbox"});
+  const step2=el("div",{class:"grid",style:"gap:8px",hidden:""});
+  const msg=el("div");
+  const go1=el("button",{class:"btn primary",type:"button"},"1. Bei Dropbox anmelden"),go2=el("button",{class:"btn primary",type:"button"},"2. Verbinden");
+  go1.addEventListener("click",async()=>{
+    const k=keyIn.value.trim();msg.replaceChildren();
+    if(!k){msg.append(el("div",{class:"status err",text:"Füge zuerst deinen App-Key ein."}));return}
+    if(/^sl\./.test(k)){
+      /* direkt eingefügter Zugriffstoken: funktioniert, läuft aber nach etwa 4 Stunden ab */
+      DB.access=k;DB.exp=Date.now()+3.5*3600*1000;DB.key="";DB.refresh="";DB.err="";dbSave();
+      toast("Mit Zugriffstoken verbunden. Er läuft nach etwa 4 Stunden ab.");renderSicherung();return;
+    }
+    try{
+      const url=await dbStartAuth(k);link.href=url;link.hidden=false;step2.hidden=false;
+      const w=window.open(url,"_blank","noopener");
+      msg.append(el("div",{class:"status ok",text:"Melde dich bei Dropbox an, erlaube den Zugriff und kopiere den angezeigten Code hierher."+(w?"":" Der Link wurde nicht geöffnet. Tippe auf „Dropbox-Anmeldung öffnen“.")}));
+    }catch(e){msg.append(el("div",{class:"status err",text:"Die Anmeldung konnte nicht gestartet werden."}))}
+  });
+  go2.addEventListener("click",async()=>{
+    msg.replaceChildren();if(!codeIn.value.trim()){msg.append(el("div",{class:"status err",text:"Füge den Code aus Dropbox ein."}));return}
+    go2.disabled=true;
+    try{await dbFinishAuth(codeIn.value);DB.auto=true;dbSave();toast("Dropbox verbunden");renderSicherung();runBackup(true)}
+    catch(e){msg.append(el("div",{class:"status err",text:e.message||"Verbinden fehlgeschlagen."}))}
+    go2.disabled=false;
+  });
+  step2.append(el("label",{for:"dbx-code"},"Code aus Dropbox",codeIn),go2);
+  if(DB.pending){link.hidden=true}
+  dp.append(help,el("label",{for:"dbx-key"},"App-Key",keyIn),el("div",{class:"row"},go1,link),msg,step2);
+}
+function renderDbxConnected(dp){
+  const temp=!(DB.key&&DB.refresh);
+  const st=el("div");sichStatusEl=st;
+  const mk=(id,label,desc,prop,after)=>{
+    const cb=el("input",{type:"checkbox",id});cb.checked=!!DB[prop];
+    cb.addEventListener("change",()=>{DB[prop]=cb.checked;dbSave();if(after)after(cb.checked)});
+    return el("label",{class:"tabcheck",for:id,style:"cursor:pointer"},cb,el("span",null,el("b",{text:label}),el("small",{text:desc})));
+  };
+  const pdfBytes0=[...localPdfs().values()].reduce((a,e)=>a+(e.size||0),0);
+  dp.append(
+    el("div",{class:"status ok",text:"Mit Dropbox verbunden"+(temp?" (Zugriffstoken, läuft nach etwa 4 Stunden ab)":"")}),
+    mk("dbx-auto","Automatisch sichern","Nach Änderungen an Stapeln, Themen und Karten, kurz nachdem du fertig bist. Die Datei in Dropbox wird dabei überschrieben.","auto",on=>{if(on)runBackup(true);renderSichStatus()}),
+    mk("dbx-wifi","Nur im WLAN","Wartet bei mobilen Daten. Nicht jedes Gerät meldet die Verbindungsart, zum Beispiel iPhones nicht.","wifi"),
+    mk("dbx-pdfs","PDF-Unterlagen mitsichern","Jedes PDF wird einmal hochgeladen, nicht bei jeder Änderung. "+(pdfBytes0?"Aktuell "+fmtSize(pdfBytes0)+" auf diesem Gerät.":"Noch keine PDFs vorhanden."),"pdfs",on=>{if(on)runBackup(true)}),
+    st);
+  const now=el("button",{class:"btn primary",type:"button"},"Jetzt sichern");
+  now.addEventListener("click",async()=>{now.disabled=true;const ok=await runBackup(true);now.disabled=false;toast(ok?"In Dropbox gesichert":"Sicherung fehlgeschlagen")});
+  const off=el("button",{class:"btn danger",type:"button"},"Verbindung trennen");
+  off.addEventListener("click",()=>armConfirm(off,"Wirklich trennen?",()=>{
+    DB={};dbSave();clearTimeout(dbTimer);toast("Dropbox getrennt. Die Dateien dort bleiben erhalten.");renderSicherung();
+  }));
+  dp.append(el("div",{class:"row"},now,off),
+    el("p",{class:"syncnote",text:"Die Sicherungsdatei „lernwerkstatt-sicherung.json“ liegt im App-Ordner deiner Dropbox. Sie enthält nur Text und ist meist unter 1 MB groß, aktuell etwa "+fmtSize(backupJson(true).length)+". Dropbox hebt ältere Fassungen eine Zeit lang auf. Zurückholen kannst du sie in der Bibliothek über „Importieren“ › „Aus Dropbox laden“."}));
+  renderSichStatus();
+}
+
 /* ---------- Bibliothek ---------- */
 let lib={view:"list",deckId:null};
 function renderLib(){
   const v=lib.view;
   if(v==="import")renderImport();else if(v==="topics")renderTopics();else if(v==="deck")renderDeck();
-  else if(v==="backup")renderBackup();else if(v==="newdeck")renderNewDeck();else renderLibList();
+  else if(v==="newdeck")renderNewDeck();else renderLibList();
 }
 function goLib(view,deckId){lib.view=view;lib.deckId=deckId||null;renderLib();window.scrollTo(0,0)}
 const backBtn=()=>el("div",{class:"row"},el("button",{class:"btn small",type:"button",onclick:()=>goLib("list")},"← Bibliothek"));
@@ -1197,8 +1444,7 @@ function renderLibList(){
     el("div",{class:"row"},
       el("button",{class:"btn primary",type:"button",onclick:()=>goLib("import")},"+ Importieren"),
       el("button",{class:"btn",type:"button",onclick:()=>goLib("newdeck")},"+ Neuer Stapel"),
-      el("button",{class:"btn",type:"button",onclick:()=>goLib("topics")},"Themen"),
-      el("button",{class:"btn",type:"button",onclick:()=>goLib("backup")},"Sicherung"))));
+      el("button",{class:"btn",type:"button",onclick:()=>goLib("topics")},"Themen"))));
   if(!S.decks.length&&!S.topics.length){
     b.append(el("div",{class:"panel grid"},
       el("h3",{text:"Noch keine Karteikarten"}),
@@ -1351,6 +1597,10 @@ function renderImport(){
     el("div",{class:"panel grid"},el("h3",{text:"JSON-Datei importieren"}),
       el("p",{class:"syncnote",text:"Wähle eine .json-Datei mit deinen Karten. Erkannt werden Sicherungen dieser App und der Lernkartei sowie Dateien mit „karten“ (vorne/hinten) oder „cards“ (front/back)."}),
       fileIn),
+    dbConnected()?el("div",{class:"panel grid"},el("h3",{text:"Aus Dropbox laden"}),
+      el("p",{class:"syncnote",text:"Holt die zuletzt gesicherte Datei aus deiner Dropbox. Du siehst vorher eine Vorschau."}),
+      (()=>{const b=el("button",{class:"btn",type:"button"},"Sicherung aus Dropbox holen");
+        b.addEventListener("click",async()=>{b.disabled=true;try{ta.value=await dbDownload(BK_PATH);update();toast("Sicherung geladen")}catch(e){toast(e.message||"Laden fehlgeschlagen")}b.disabled=false});return b})()):"",
     el("label",{for:"imp-text"},"… oder JSON bzw. Antwort von Claude hier einfügen",ta),
     status,preview,
     el("label",{for:"imp-target"},"Ziel",target),
@@ -1514,59 +1764,6 @@ function applyRestore(plan){
   });
   normalize();saveMeta();
 }
-async function getCap(n){try{return await window.claude.use(n)}catch(e){return null}}
-function renderBackup(){
-  const b=$("#libBody");b.replaceChildren();
-  const nCards=S.decks.reduce((a,d)=>a+d.cards.length,0),lb=lastBackup();
-  const restoreBox=el("div",{class:"panel grid",hidden:""});
-  function showPlan(plan,label){
-    restoreBox.replaceChildren();restoreBox.hidden=false;
-    if(plan.error){restoreBox.append(el("div",{class:"status err",text:plan.error}));restoreBox.scrollIntoView({block:"nearest"});return}
-    const parts=[];if(plan.add)parts.push(plan.add+" neu");if(plan.upd)parts.push(plan.upd+" aktualisiert");if(plan.keep)parts.push(plan.keep+" unverändert");
-    restoreBox.append(el("h3",{text:"Sicherung aus "+label}),
-      el("div",{class:"status ok",text:plan.decks.length+" Stapel mit "+plan.cards+" Karten"+(parts.length?" ("+parts.join(", ")+")":"")+(plan.newTopics.length?" · "+plan.newTopics.length+" neue Themen":"")+(plan.sets.length?" · "+plan.sets.length+" Lernstapel":"")}),
-      el("p",{class:"syncnote",text:"Es wird nichts gelöscht. Gibt es einen Stapel schon, gewinnt die Version mit der neueren Änderung."}),
-      el("div",{class:"row"},
-        el("button",{class:"btn primary",type:"button",onclick:()=>{applyRestore(plan);toast("Sicherung eingespielt");refreshAll();goLib("list")}},"Einspielen"),
-        el("button",{class:"btn",type:"button",onclick:()=>{restoreBox.hidden=true}},"Abbrechen")));
-    restoreBox.scrollIntoView({block:"nearest"});
-  }
-  function handleText(text,label){let o;try{o=JSON.parse(text)}catch(e){showPlan({error:"Das ist keine gültige Sicherung. Der Text lässt sich nicht lesen."});return}showPlan(planRestore(o),label)}
-  const fileStatus=el("div"),jsonArea=el("textarea",{id:"bk-json",readonly:"",hidden:"","aria-label":"Sicherung als Text"});
-  const saveBtn=el("button",{class:"btn primary",type:"button"},"Als Datei speichern");
-  saveBtn.addEventListener("click",async()=>{
-    const json=JSON.stringify(makeBackup(),null,1),dl=await getCap("downloads");
-    const fallback=msg=>{jsonArea.value=json;jsonArea.hidden=false;jsonArea.select();fileStatus.replaceChildren(el("div",{class:"status "+(msg?"err":"ok"),text:msg||"Kopiere den Text und speichere ihn in einer .json-Datei."}))};
-    if(!dl){
-      if(!window.claude){
-        const ok=await exportFile("lernwerkstatt-sicherung-"+stampNow()+".json",new Blob([json],{type:"application/json"}),"Lernwerkstatt Sicherung");
-        if(ok){markBackup();fileStatus.replaceChildren(el("div",{class:"status ok",text:"Sicherung erstellt."}));return}
-        return fallback("Die Datei konnte nicht erstellt werden. Kopiere stattdessen den Text unten.");
-      }
-      return fallback("");
-    }
-    try{await dl.save({filename:"lernwerkstatt-sicherung-"+stampNow()+".json",data:json});markBackup();fileStatus.replaceChildren(el("div",{class:"status ok",text:"Datei gespeichert."}))}
-    catch(e){if(e&&e.code==="declined")return;fallback("Speichern als Datei klappt hier nicht. Kopiere stattdessen den Text unten.")}
-  });
-  const fileIn=el("input",{type:"file",id:"bk-file",accept:".json,application/json"});
-  fileIn.addEventListener("change",async()=>{
-    const f=fileIn.files&&fileIn.files[0];if(!f)return;
-    if(f.size>20e6){showPlan({error:"Die Datei ist größer als 20 MB und keine Sicherung."});return}
-    try{handleText(await f.text(),"Datei „"+f.name+"“")}catch(e){showPlan({error:"Die Datei lässt sich nicht lesen."})}
-    fileIn.value="";
-  });
-  const paste=el("textarea",{id:"bk-paste",placeholder:"… oder Sicherungstext hier einfügen",spellcheck:"false"});
-  b.append(backBtn(),el("h2",{text:"Sicherung"}),
-    el("p",{class:"syncnote",text:S.decks.length+" Stapel · "+nCards+" Karten · "+S.topics.length+" Themen · "+(lb?"letzte Sicherung am "+new Date(lb).toLocaleString("de-DE"):"noch nicht gesichert")}),
-    restoreBox,
-    el("div",{class:"panel grid"},el("h3",{text:"Sichern"}),
-      el("p",{class:"syncnote",text:"Speichert alle Themen, Stapel, Karten und Lernstapel samt Fortschritt in einer Datei. PDF-Unterlagen sind nicht enthalten."}),
-      el("div",{class:"row"},saveBtn),fileStatus,jsonArea),
-    el("div",{class:"panel grid"},el("h3",{text:"Einspielen"}),
-      el("p",{class:"syncnote",text:"Funktioniert auch mit Sicherungen aus der Lernkartei. So holst du deine bisherigen Karten hierher."}),
-      el("label",{for:"bk-file"},"Sicherung aus Datei",fileIn),
-      paste,el("div",{class:"row"},el("button",{class:"btn",type:"button",onclick:()=>{if(paste.value.trim())handleText(paste.value,"eingefügtem Text")}},"Prüfen"))));
-}
 
 /* ---------- Fokus-Timer ---------- */
 const PH={work:"Lernen",short:"Kurze Pause",long:"Lange Pause"},CIRC=339.29;
@@ -1661,16 +1858,15 @@ function setTab(name){
   if(name==="heute")renderHome();
   if(name==="lernen"){fillSrc();renderSets()}
   if(name==="fokus")drawTimer();
-  if(name==="einst")renderSettings();
+  if(name==="einst"){settingsView==="sich"?renderSicherung():renderSettings()}
   if(name==="bib"){lib.view="list";lib.deckId=null;renderLib()}
 }
 renderNav();
 let lastTab="heute";
-function closeSettings(){const vis=tabsList().filter(t=>t.on).map(t=>t.id);setTab(vis.includes(lastTab)?lastTab:vis[0])}
+function closeSettings(){settingsView="main";$("#setMain").hidden=false;$("#setSich").hidden=true;const vis=tabsList().filter(t=>t.on).map(t=>t.id);setTab(vis.includes(lastTab)?lastTab:vis[0])}
 $("#settingsBtn").addEventListener("click",()=>{if(curTab==="einst")closeSettings();else{lastTab=curTab;setTab("einst")}});
 $("#settingsClose").addEventListener("click",closeSettings);
-$("#setImport").addEventListener("click",()=>{setTab("bib");goLib("import")});
-$("#setBackup").addEventListener("click",()=>{setTab("bib");goLib("backup")});
+$("#setSichBtn").addEventListener("click",()=>showSettings("sich"));
 function refreshAll(){renderHome();fillSrc();renderSets()}
 function renderAll(){
   renderNav();
@@ -1680,6 +1876,7 @@ function renderAll(){
   drawTimer();
 }
 initStore();
+setTimeout(()=>{if(DB.auto&&dbConnected())queueBackup()},4000);
 })();
 
 </script>
