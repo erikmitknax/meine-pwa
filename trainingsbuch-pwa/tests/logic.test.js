@@ -57,6 +57,15 @@ test('METRICS: Top, Volumen, Wdh', () => {
   assert.ok(Number.isNaN(L.METRICS.top.f(ex('Y', [['', 5]]))));
 });
 
+test('METRICS: Alle Sätze liefert jeden Satz, die Linie den Top-Satz', () => {
+  const e = ex('X', [['40', 8], ['42,5', 6], ['', 10], ['Band', 5]]);
+  assert.deepEqual(L.METRICS.sets.all(e), [40, 42.5]);
+  assert.equal(L.METRICS.sets.f(e), 42.5);
+  assert.deepEqual(L.METRICS.setsR.all(e), [8, 6, 10, 5]);
+  assert.equal(L.METRICS.setsR.f(e), 10);
+  assert.ok(Number.isNaN(L.METRICS.sets.f(ex('Y', [['', 5]]))));
+});
+
 test('niceTicks', () => {
   assert.deepEqual(L.niceTicks(0, 100, 4), [0, 25, 50, 75, 100]);
   const t = L.niceTicks(7, 7, 4); assert.ok(t[0] <= 6 && t[t.length - 1] >= 8);

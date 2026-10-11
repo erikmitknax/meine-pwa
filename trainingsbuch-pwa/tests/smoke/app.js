@@ -215,6 +215,28 @@ const server = http.createServer((req, res) => {
   c4('[data-act="tab"][data-tab="prog"]'); await tick();
   ok(!!q4('svg.chart') || /Noch keine Daten|Für diese Kennzahl/.test(q4('#view').textContent), 'Diagramm oder Hinweis wird angezeigt');
 
+  console.log('Fortschritt: alle Sätze, Trend, Auswahl, Zeitraum');
+  const many = {};
+  for (let i = 0; i < 15; i++) {
+    const d = new Date(Date.UTC(2026, 8, 1 + i * 2)).toISOString().slice(0, 10);
+    many['m' + i] = { date: d, unit: 'Push', note: '', exercises: [{ name: 'Bankdrücken', weste: false, griffe: false, sets: [{ w: String(60 + i), r: '8' }, { w: String(55 + i), r: '10' }, { w: String(50 + i), r: '12' }] }], updatedAt: i + 1 };
+  }
+  const dom5 = await JSDOM.fromURL(base + 'index.html', { runScripts: 'dangerously', resources: 'usable', pretendToBeVisual: true, virtualConsole: vc, beforeParse(w5) { w5.Element.prototype.scrollIntoView = function () {}; w5.scrollTo = function () {}; w5.addEventListener('error', e => errors.push('window.onerror: ' + e.message)); w5.localStorage.setItem('tb_sessions', JSON.stringify(many)); w5.localStorage.setItem('tb_tab', JSON.stringify('prog')); w5.localStorage.setItem('tb_progEx', JSON.stringify('Bankdrücken')); } });
+  await tick(300);
+  const w5 = dom5.window, q5 = x => w5.document.querySelector(x), qa5 = x => w5.document.querySelectorAll(x), c5 = x => q5(x).dispatchEvent(new w5.MouseEvent('click', { bubbles: true }));
+  ok(qa5('svg.chart .hit').length === 12, 'Standard: die letzten 12 Trainings, je eine Tippfläche');
+  ok(qa5('svg.chart circle.dot').length === 36, 'jeder Satz ist ein Punkt (12 Trainings × 3 Sätze)');
+  ok(qa5('svg.chart circle.pt').length === 12 && !!q5('svg.chart .trend'), 'Top-Sätze und Trendlinie sind eingezeichnet');
+  ok(/▲ \+14 kg/.test(q5('.trendline').textContent) || /▲ \+11 kg/.test(q5('.trendline').textContent), 'Entwicklung mit Pfeil: ' + q5('.trendline').textContent.trim());
+  ok(/74/.test(q5('.readout').textContent) && /74×8/.test(q5('.setlist').textContent.replace(/\s/g, '')) , 'ausgewählt ist das letzte Training, alle seine Sätze stehen darunter');
+  c5('svg.chart .hit[data-i="0"]'); await tick();
+  ok(/63/.test(q5('.readout').textContent) && /63×8/.test(q5('.setlist').textContent) && /58×10/.test(q5('.setlist').textContent) && /53×12/.test(q5('.setlist').textContent), 'Tippen auf ein Training zeigt dessen drei Sätze');
+  c5('[data-act="range"][data-r="0"]'); await tick();
+  ok(qa5('svg.chart .hit').length === 15, '„Alle“ zeigt alle 15 Trainings');
+  c5('[data-act="metric"][data-m="vol"]'); await tick();
+  ok(qa5('svg.chart circle.dot').length === 0 && qa5('svg.chart circle.pt').length === 15, 'Volumen: nur eine Linie, keine Satzpunkte');
+  dom5.window.close();
+
   console.log('Fehler im Log');
   ok(errors.length === 0, errors.length ? errors.slice(0, 8).join(' | ') : 'keine Fehler in der Konsole');
   console.log(`\n${pass} ok, ${fail} fehlgeschlagen`);

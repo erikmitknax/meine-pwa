@@ -88,7 +88,11 @@
   }
 
   /* ---------- Fortschritt ---------- */
+  const numsOf = (e, key) => (e.sets || []).map(s => num(s[key])).filter(x => !isNaN(x));
   const METRICS = {
+    // Alle Sätze: je Training ein Punkt pro Satz, die Linie folgt dem schwersten Satz (bzw. den meisten Wiederholungen)
+    sets: { label: 'Alle Sätze', unit: 'kg', all: e => numsOf(e, 'w'), f: e => { const v = numsOf(e, 'w'); return v.length ? Math.max(...v) : NaN; } },
+    setsR: { label: 'Alle Sätze', unit: 'Wdh', all: e => numsOf(e, 'r'), f: e => { const v = numsOf(e, 'r'); return v.length ? Math.max(...v) : NaN; } },
     top: { label: 'Top-Gewicht', unit: 'kg', f: e => { const v = (e.sets || []).map(s => num(s.w)).filter(x => !isNaN(x)); return v.length ? Math.max(...v) : NaN; } },
     vol: { label: 'Volumen', unit: 'kg', f: e => { let t = 0, ok = false; for (const s of e.sets || []) { const w = num(s.w), r = num(s.r); if (!isNaN(w) && !isNaN(r)) { t += w * r; ok = true; } } return ok ? t : NaN; } },
     best: { label: 'Beste Wdh', unit: 'Wdh', f: e => { const v = (e.sets || []).map(s => num(s.r)).filter(x => !isNaN(x)); return v.length ? Math.max(...v) : NaN; } },
