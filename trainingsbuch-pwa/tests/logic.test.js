@@ -66,6 +66,38 @@ test('METRICS: Alle Sätze liefert jeden Satz, die Linie den Top-Satz', () => {
   assert.ok(Number.isNaN(L.METRICS.sets.f(ex('Y', [['', 5]]))));
 });
 
+test('estimateRemaining: offene Sätze × Satzdauer + Pausen, nach dem letzten Satz keine Pause', () => {
+  const rest = n => (n === 'A' ? 90 : 60);
+  const exs = [{ name: 'A', sets: [{ done: true }, {}, {}] }, { name: 'B', sets: [{}, {}] }];
+  const r = L.estimateRemaining(exs, { rest, setSec: 45, restLeft: 30 });
+  // offen: A, A, B, B = 4 Sätze (180 s) + Pausen nach A, A, B (90 + 90 + 60) + laufende Pause 30 s
+  assert.deepEqual(r, { sec: 180 + 240 + 30, done: 1, total: 5, left: 4 });
+  assert.equal(L.estimateRemaining([{ name: 'A', sets: [{ done: true }] }], { rest, setSec: 45, restLeft: 50 }).sec, 0, 'alles fertig: 0, auch mit Rest-Pause');
+  assert.equal(L.estimateRemaining([{ name: 'A', sets: [{}] }], { rest, setSec: 45 }).sec, 45, 'ein offener Satz: nur die Satzdauer');
+  assert.equal(L.estimateRemaining([], { rest, setSec: 45 }).total, 0);
+});
+
+test('trainingDuration: erster Haken minus Satzdauer bis letzter Haken', () => {
+  const exs = [{ name: 'A', sets: [{ done: true, at: 1000000 }, { done: true, at: 1100000 }, {}] }, { name: 'B', sets: [{ done: true, at: 1300000 }] }];
+  assert.equal(L.trainingDuration(exs, 45), 345);   // 300 s zwischen erstem und letztem Haken + 45 s für den ersten Satz
+  assert.equal(L.trainingSpan(exs, 45).start, 1000000 - 45000);
+  assert.equal(L.trainingDuration([{ name: 'A', sets: [{}, {}] }], 45), null, 'ohne Haken keine Dauer');
+  assert.equal(L.trainingDuration([{ name: 'A', sets: [{ done: true, at: 0 }, { done: true, at: 90000000 }] }], 45), null, 'unglaubwürdig lange Dauer wird verworfen');
+});
+
+test('fmtDur', () => {
+  assert.equal(L.fmtDur(45), '45 s'); assert.equal(L.fmtDur(60), '1 Min'); assert.equal(L.fmtDur(2790), '47 Min');
+  assert.equal(L.fmtDur(3900), '1 Std 05 Min'); assert.equal(L.fmtDur(-5), '0 s');
+});
+
+test('dur bleibt in Sicherung und Wiederherstellung erhalten und Unsinn wird verworfen', () => {
+  const mk = dur => backupJson({ sessions: { a: { date: '2026-10-01', unit: 'Push', exercises: [{ name: 'X', sets: [{ w: '1', r: '2' }] }], updatedAt: 1, dur } } });
+  assert.equal(L.parseBackup(mk(2700)).data.sessions.a.dur, 2700);
+  assert.ok(!('dur' in L.parseBackup(mk(-5)).data.sessions.a));
+  assert.ok(!('dur' in L.parseBackup(mk('lang')).data.sessions.a));
+  assert.ok(!('dur' in L.parseBackup(mk(999999)).data.sessions.a));
+});
+
 test('niceTicks', () => {
   assert.deepEqual(L.niceTicks(0, 100, 4), [0, 25, 50, 75, 100]);
   const t = L.niceTicks(7, 7, 4); assert.ok(t[0] <= 6 && t[t.length - 1] >= 8);

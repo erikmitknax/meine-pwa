@@ -16,7 +16,8 @@ const ICON={
   up:'<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3.5 10l4.5-4.5 4.5 4.5"/></svg>',
   down:'<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3.5 6l4.5 4.5L12.5 6"/></svg>',
   more:'<svg viewBox="0 0 16 16" fill="currentColor"><circle cx="3.5" cy="8" r="1.4"/><circle cx="8" cy="8" r="1.4"/><circle cx="12.5" cy="8" r="1.4"/></svg>',
-  x:'<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 4l8 8M12 4l-8 8"/></svg>'
+  x:'<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 4l8 8M12 4l-8 8"/></svg>',
+  ok:'<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8.5l3.2 3.2L13 4.6"/></svg>'
 };
 
 const S={
@@ -24,6 +25,8 @@ const S={
   tab:(t=>t==='data'?'settings':t)(LS.get('tb_tab','log')), histFilter:'Alle', progEx:LS.get('tb_progEx',null), progMetric:null, progSel:null,
   draft:LS.get('tb_draft',null), planEdit:null, exInfo:{}, rest:{}, timerOpen:null, vibOK:null, infoOpen:null, infoEdit:false, exMenu:null, showMeta:false, showNote:false, openSess:null, showTbl:false, confirm:null, imports:[], exportText:null, exportName:null, restore:null, rename:null, storageInfo:null, acc:{}, busy:false
 };
+
+S.setSec=(v=>Number.isFinite(v)&&v>=10&&v<=180?Math.round(v):45)(Number(LS.get('tb_setsec',45)));   // geschätzte Dauer eines Satzes in Sekunden
 
 /* ---------- storage ---------- */
 /* Alles liegt in localStorage dieses Browsers. Schreibfehler (voll, gesperrt) werden gemeldet statt verschluckt. */
@@ -151,6 +154,30 @@ function paintRest(){
   bar.querySelector('.rb-time').textContent=T.done?'Los!':fmtSec(left);
 }
 setInterval(tickRest,250);
+/* ---------- Restzeit-Balken: Schätzung aus offenen Sätzen, deren Pausen und der Satzdauer ---------- */
+const fmtClock=sec=>{sec=Math.max(0,Math.floor(sec));const h=Math.floor(sec/3600),m=Math.floor(sec%3600/60);return (h?h+':'+pad(m):m)+':'+pad(sec%60)};
+function progData(){
+  const d=S.draft;if(!d||d.id||!d.exercises.length)return null;
+  const now=Date.now(),restLeft=T&&!T.done?Math.max(0,(T.end-now)/1000):0;
+  const est=L.estimateRemaining(d.exercises,{rest:restFor,setSec:S.setSec,restLeft});
+  if(!est.total)return null;
+  const sp=L.trainingSpan(d.exercises,S.setSec),finished=!!sp&&est.left===0;
+  const elapsed=sp?((finished?sp.end:now)-sp.start)/1000:0;
+  const frac=finished?1:sp?elapsed/(elapsed+est.sec):0;
+  return {est,sp,finished,elapsed,frac,now};
+}
+function progHTML(g){
+  const {est,sp,finished,elapsed}=g,end=new Date(g.now+est.sec*1000),hm=pad(end.getHours())+':'+pad(end.getMinutes());
+  if(!sp)return `<div class="tb-main"><strong>ca. ${esc(L.fmtDur(est.sec))}</strong><span>geplant</span></div><div class="tb-sub">${est.total} Sätze · mit dem Haken am ersten Satz startet die Zeit</div>`;
+  if(finished)return `<div class="tb-main"><strong>Fertig · ${esc(L.fmtDur(elapsed))}</strong></div><div class="tb-sub">${est.done} von ${est.total} Sätzen · jetzt speichern</div>`;
+  return `<div class="tb-main"><strong>Noch ca. ${esc(L.fmtDur(est.sec))}</strong><span>Ende ca. ${hm}</span></div><div class="tb-sub">${est.done} von ${est.total} Sätzen · Dauer ${fmtClock(elapsed)}</div>`;
+}
+function paintProg(){
+  const el=$('#tbar');if(!el)return;const g=progData();
+  if(!g){el.hidden=true;return}
+  el.hidden=false;el.style.setProperty('--p',g.frac);el.innerHTML=progHTML(g);
+}
+setInterval(paintProg,1000);
 document.addEventListener('visibilitychange',()=>{if(!document.hidden){tickRest();if(T&&!T.done)wake()}});
 
 /* ---------- derived data ---------- */
@@ -189,10 +216,12 @@ async function commitDraft(){
     .filter(e=>e.name&&e.sets.length);
   if(!exercises.length&&!d.note.trim()){toast('Trag mindestens einen Satz ein.');return}
   const id=d.id||`${d.date}_${SLUG[d.unit]||'x'}_${Date.now().toString(36)}`;
+  const dur=d.id?(S.sessions.get(d.id)||{}).dur:L.trainingDuration(d.exercises,S.setSec);   // beim Bearbeiten bleibt die gemessene Dauer erhalten
   const doc={date:d.date,unit:d.unit,note:d.note.trim(),exercises,updatedAt:Date.now()};
+  if(dur)doc.dur=dur;
   S.busy=true;
   try{await putDoc('sessions',id,doc)}catch(e){S.busy=false;toast('Nicht gespeichert: '+errMsg(e));return}
-  S.busy=false;S.draft=null;T=null;unwake();lnCancel();persistDraft();S.tab='hist';S.histFilter='Alle';S.openSess=id;toast('Training gespeichert');render();window.scrollTo(0,0);
+  S.busy=false;S.draft=null;T=null;unwake();lnCancel();persistDraft();S.tab='hist';S.histFilter='Alle';S.openSess=id;toast('Training gespeichert'+(dur&&!d.id?' · '+L.fmtDur(dur):''));render();window.scrollTo(0,0);
 }
 function addExToDraft(name){
   name=String(name||'').trim();if(!name||!S.draft)return;
@@ -218,6 +247,7 @@ function viewDraft(){
   const sug=catalog(d.unit).filter(n=>!d.exercises.some(e=>e.name===n)).slice(0,6);
   const showNote=S.showNote||d.note;
   return `<button class="draft-title" data-act="toggleMeta" aria-expanded="${S.showMeta}">${esc(d.plan||d.unit)} <span>${esc(fmtDay(d.date))}</span><small>${d.id?'Gespeichertes Training · ':''}${S.showMeta?'Datum &amp; Einheit ausblenden':'Datum oder Einheit ändern'}</small></button>
+  ${(()=>{if(d.id)return '';const g=progData();return `<div id="tbar" class="tbar" ${g?'':'hidden'} style="--p:${g?g.frac:0}">${g?progHTML(g):''}</div>`})()}
   ${S.showMeta?`<div class="draft-head">
     <div class="field"><label for="dDate">Datum</label><input type="date" id="dDate" value="${esc(d.date)}"></div>
     <div class="field"><label for="dUnit">Einheit</label><select id="dUnit">${UNITS.map(u=>`<option ${u===d.unit?'selected':''}>${esc(u)}</option>`).join('')}</select></div>
@@ -250,7 +280,8 @@ function exCard(e,i,d){
     if(wmode==='var') w=`<button class="cyc ${s.w?'on':''}" data-act="cyc" data-ei="${i}" data-si="${j}" aria-label="Variante Satz ${j+1}">${esc(s.w||(ph&&ph.w)||'wählen')}</button>`;
     else if(bodyweight&&!s.w) w=`<div class="bw ${e.weste?'w':''}">${e.weste?'+'+WESTE_KG+' kg Weste':'Körpergewicht'}</div>`;
     else w=`<input class="in" inputmode="decimal" data-ei="${i}" data-si="${j}" data-f="w" value="${esc(s.w)}" placeholder="${esc(ph&&ph.w?ph.w+' kg':'kg')}" aria-label="Gewicht Satz ${j+1}">`;
-    return `<div class="set"><span class="sn">${j+1}</span>${w}<input class="in" inputmode="numeric" data-ei="${i}" data-si="${j}" data-f="r" value="${esc(s.r)}" placeholder="${esc(ph&&ph.r?ph.r+' Wdh':'Wdh')}" aria-label="Wiederholungen Satz ${j+1}"></div>`;
+    const chk=d.id?'':`<button class="chk ${s.done?'on':''}" data-act="setDone" data-ei="${i}" data-si="${j}" aria-pressed="${!!s.done}" aria-label="Satz ${j+1} fertig">${ICON.ok}</button>`;
+    return `<div class="set ${s.done?'done':''} ${d.id?'nochk':''}"><span class="sn">${j+1}</span>${w}<input class="in" inputmode="numeric" data-ei="${i}" data-si="${j}" data-f="r" value="${esc(s.r)}" placeholder="${esc(ph&&ph.r?ph.r+' Wdh':'Wdh')}" aria-label="Wiederholungen Satz ${j+1}">${chk}</div>`;
   }).join('');
   const canCopy=last&&(k.numeric||k.text.length)&&(last.ex.sets||[]).some(s=>String(s.w).trim());
   const menu=S.exMenu===i;
@@ -305,7 +336,7 @@ function sessionCard(s){
   return `<article class="card ${open?'open':''}">
     <button class="s-sum" data-act="openSess" data-id="${esc(s.id)}" aria-expanded="${open}">
       <span class="s-date">${esc(fmtDay(s.date))}</span><span class="badge">${esc(s.unit)}</span>
-      <span class="s-meta">${n} ${n===1?'Übung':'Übungen'}${s.note?' · mit Notiz':''}</span>
+      <span class="s-meta">${n} ${n===1?'Übung':'Übungen'}${s.dur?' · '+esc(L.fmtDur(s.dur)):''}${s.note?' · mit Notiz':''}</span>
     </button>
     ${open?`<dl class="s-ex">${(s.exercises||[]).map(e=>`<dt title="${esc(e.name)}">${esc(e.name)}</dt><dd>${esc((e.sets||[]).map(setStr).join(' · '))}${e.weste?'<span class="tag">Weste</span>':''}${e.griffe?'<span class="tag">Griffe</span>':''}</dd>`).join('')}</dl>
     ${s.note?`<p class="note">${esc(s.note)}</p>`:''}
@@ -604,6 +635,9 @@ function viewSettings(){
     <div class="row"><button class="btn" data-set="test">Signal testen</button>${native?'<button class="btn" data-set="testLock">Test in 10 s</button>':''}</div>
     ${native?'<p class="hint">„Test in 10 s“: tippen, Handy sperren, warten.</p>':''}`));
   }else out.push('<p class="empty">Design, Logo und Signal konnten nicht geladen werden. Öffne die App einmal mit Internet.</p>');
+  out.push(accSec('training','Training',`Satzdauer ${S.setSec} s`,()=>`<span class="lbl">Dauer eines Satzes (für die Restzeit)</span>
+    <div class="chips">${[30,45,60,75,90].map(v=>`<button class="chip ${S.setSec===v?'on':''}" data-act="setsec" data-v="${v}" aria-pressed="${S.setSec===v}">${v} s</button>`).join('')}</div>
+    <p class="hint">Mit dem Haken nach jedem Satz startet die Pause automatisch. Die Restzeit schätzt die App aus den offenen Sätzen, deren Pausen und dieser Satzdauer. Gespeichert wird die tatsächliche Dauer vom ersten bis zum letzten abgehakten Satz.</p>`));
   const dbx=window.DropboxBackup?DropboxBackup.state():null;
   out.push(accSec('backup','Sicherung & Wiederherstellung',`${S.sessions.size} Trainings`,backupBody));
   out.push(accSec('dropbox','Dropbox-Backup',dbx&&dbx.refresh?'Verbunden':'Nicht verbunden',()=>window.DropboxBackup?DropboxBackup.html('btn'):'<p class="hint">Nicht verfügbar.</p>'));
@@ -691,7 +725,7 @@ function render(){
   renderTabs();renderDatalist();
   const tabOn=S.tab;const v={log:viewLog,hist:viewHist,prog:viewProg,plans:viewPlans,settings:viewSettings}[S.tab]||viewLog;
   const gb=$('#gearBtn');if(gb){gb.classList.toggle('on',S.tab==='settings');if(S.tab==='settings')gb.setAttribute('aria-current','page');else gb.removeAttribute('aria-current')}
-  setTimeout(paintRest,0);
+  setTimeout(()=>{paintRest();paintProg()},0);
   $('#view').innerHTML=(S.tab==='plans'||S.tab==='settings'?'<button class="link back" data-act="tab" data-tab="log">‹ Zurück zum Training</button>':'')+v();
   navSync();
 }
@@ -738,6 +772,20 @@ document.addEventListener('click',async ev=>{
     case 'up':case 'down':{const j=a==='up'?ei-1:ei+1;if(j<0||j>=d.exercises.length)break;const t=d.exercises[ei];d.exercises[ei]=d.exercises[j];d.exercises[j]=t;S.exMenu=j;S.infoOpen=null;persistDraft();S.confirm=null;render();break}
     case 'delEx':S.confirm='delEx'+ei;render();break;
     case 'delExYes':d.exercises.splice(ei,1);S.confirm=null;S.exMenu=null;S.infoOpen=null;persistDraft();render();break;
+    case 'setDone':{
+      const e=d&&d.exercises[ei],st=e&&e.sets[si];if(!st||d.id)break;
+      if(st.done){delete st.done;delete st.at;if(T&&T.name===e.name&&T.si===si&&!T.done)stopRest();persistDraft();render();break}
+      // Leere Felder übernehmen die Werte vom letzten Mal (graue Platzhalter)
+      const last=lastFor(e.name,d.id,d.date),ph=last&&last.ex.sets?last.ex.sets[si]:null;
+      if(!String(st.r).trim()&&ph&&String(ph.r||'').trim())st.r=String(ph.r);
+      if(!String(st.w).trim()&&ph&&String(ph.w||'').trim())st.w=String(ph.w);
+      if(!String(st.r).trim()){toast('Trag erst die Wiederholungen ein.');break}
+      st.done=true;st.at=Date.now();persistDraft();render();
+      const left=L.estimateRemaining(d.exercises,{rest:restFor,setSec:S.setSec,restLeft:0}).left;
+      if(!left){stopRest();toast('Alle Sätze fertig. Speichern nicht vergessen.')}
+      else if(restFor(e.name))startRest(ei,si);
+      paintProg();break}
+    case 'setsec':S.setSec=+b.dataset.v;LS.set('tb_setsec',S.setSec);settingsRerender();break;
     case 'save':await commitDraft();break;
     case 'discard':S.confirm='discard';render();break;
     case 'discardYes':{const wasEdit=d&&d.id;S.draft=null;T=null;unwake();lnCancel();S.confirm=null;persistDraft();if(wasEdit)S.tab='hist';render();break}

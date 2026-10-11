@@ -27,7 +27,14 @@ Das sind Unit-Tests für `logic.js` und `sw.js` sowie zwei Durchläufe der ganze
 
 ## Einstellungen
 
-Zahnrad oben rechts. Alle Abschnitte sind eingeklappt und lassen sich einzeln aufklappen: Design, Logo, Signal am Pausenende, Sicherung & Wiederherstellung, Dropbox-Backup, CSV importieren, Übungen verwalten. Auf der Startseite führt „Sicherung & Import“ direkt zum aufgeklappten Abschnitt Sicherung.
+Zahnrad oben rechts. Alle Abschnitte sind eingeklappt und lassen sich einzeln aufklappen: Training (Satzdauer), Design, Logo, Signal am Pausenende, Sicherung & Wiederherstellung, Dropbox-Backup, CSV importieren, Übungen verwalten. Auf der Startseite führt „Sicherung & Import“ direkt zum aufgeklappten Abschnitt Sicherung.
+
+## Satz fertig, Restzeit und Trainingsdauer
+
+- Jeder Satz hat rechts einen **Haken**. Sind Gewicht oder Wiederholungen noch leer, übernimmt der Haken die grauen Werte vom letzten Training.
+- Mit dem Haken startet automatisch die **Pause** der Übung (Zeit am Zeitfeld). Nach dem allerletzten Satz startet keine mehr. Erneutes Tippen nimmt den Haken zurück.
+- Der **Balken oben** zeigt „Noch ca. 16 Min“, die Endzeit und die bisherige Dauer. Berechnet wird: offene Sätze × Satzdauer + deren Pausen (ohne die nach dem letzten Satz) + die gerade laufende Pause. Vor dem ersten Haken steht dort die geplante Dauer. Die Satzdauer (Standard 45 s) steht unter Einstellungen → Training.
+- Beim Speichern wird die **tatsächliche Dauer** abgelegt: vom ersten abgehakten Satz (minus eine Satzdauer) bis zum letzten abgehakten Satz, als `dur` in Sekunden am Training. Sie steht im Verlauf und in der Komplett-Sicherung. Ohne Haken wird keine Dauer gespeichert. Beim Bearbeiten bleibt sie erhalten. Die CSV enthält sie nicht.
 
 ## Fortschritt
 

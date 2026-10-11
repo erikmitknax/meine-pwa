@@ -93,6 +93,21 @@ textarea{min-height:84px;resize:vertical}
 .flags{display:flex;gap:6px;flex-wrap:wrap;margin:0 8px 8px}
 .sets{display:grid;gap:6px}
 .set,.set-head{display:grid;grid-template-columns:22px minmax(0,1fr) minmax(0,1fr);gap:8px;align-items:center}
+.set{grid-template-columns:22px minmax(0,1fr) minmax(0,1fr) 46px}
+.set.nochk,.set-head{grid-template-columns:22px minmax(0,1fr) minmax(0,1fr)}
+.chk{display:grid;place-items:center;width:46px;height:44px;border-radius:10px;border:1px solid var(--line);background:var(--surface);color:var(--muted);cursor:pointer;padding:0}
+.chk svg{width:20px;height:20px;opacity:.5}
+.chk.on{background:var(--gold);border-color:var(--gold);color:var(--on-accent)}
+.chk.on svg{opacity:1}
+.set.done .sn{color:var(--gold)}
+.set.done .in{border-color:color-mix(in srgb,var(--gold) 55%,var(--line))}
+.tbar{position:sticky;top:0;z-index:5;margin:0 0 12px;padding:10px 14px 12px;border:1px solid var(--line);border-radius:12px;overflow:hidden;
+  background:linear-gradient(90deg,color-mix(in srgb,var(--gold) 26%,var(--bg)) calc(var(--p,0)*100%),var(--surface) calc(var(--p,0)*100%))}
+.tbar[hidden]{display:none}
+.tb-main{display:flex;align-items:baseline;justify-content:space-between;gap:10px}
+.tb-main strong{font-family:var(--display);font-size:22px;font-weight:600;font-variant-numeric:tabular-nums}
+.tb-main span{color:var(--muted);font-size:13px}
+.tb-sub{margin-top:2px;color:var(--muted);font-size:12px;font-variant-numeric:tabular-nums}
 .set-head{font-size:11px;color:var(--muted);letter-spacing:.1em;text-transform:uppercase;padding-inline:0}
 .set-head span:first-child{text-align:center}
 .sn{font-family:var(--display);font-size:18px;color:var(--muted);text-align:center;font-variant-numeric:tabular-nums}

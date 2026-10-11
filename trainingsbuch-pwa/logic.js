@@ -87,6 +87,38 @@
     return null;
   }
 
+  /* ---------- Trainingsdauer (Satz fertig, Restzeit) ---------- */
+  // exercises: Entwurf [{name, sets:[{done, at}]}], setSec: geschätzte Dauer eines Satzes in Sekunden
+  // opt.rest(name) liefert die Pausenzeit der Übung, opt.restLeft die noch laufende Pause in Sekunden.
+  // Nach jedem offenen Satz kommt eine Pause, außer nach dem allerletzten.
+  function estimateRemaining(exercises, opt) {
+    const setSec = Math.max(0, Number(opt.setSec) || 0), todo = []; let total = 0, done = 0;
+    for (const e of exercises || []) for (const st of (e && e.sets) || []) {
+      total++; if (st && st.done) done++; else todo.push(Math.max(0, Number(opt.rest(e.name)) || 0));
+    }
+    let sec = 0;
+    if (todo.length) sec = todo.length * setSec + todo.slice(0, -1).reduce((a, b) => a + b, 0) + Math.max(0, Number(opt.restLeft) || 0);
+    return { sec: Math.round(sec), done, total, left: todo.length };
+  }
+  // Beginn = erster abgehakter Satz minus Satzdauer, Ende = letzter abgehakter Satz (Zeitstempel in ms)
+  function trainingSpan(exercises, setSec) {
+    const ts = [];
+    for (const e of exercises || []) for (const st of (e && e.sets) || []) if (st && st.done && Number.isFinite(st.at)) ts.push(st.at);
+    if (!ts.length) return null;
+    return { start: Math.min(...ts) - Math.max(0, Number(setSec) || 0) * 1000, end: Math.max(...ts) };
+  }
+  function trainingDuration(exercises, setSec) {
+    const sp = trainingSpan(exercises, setSec); if (!sp) return null;
+    const d = Math.round((sp.end - sp.start) / 1000);
+    return d >= 1 && d <= 86400 ? d : null;
+  }
+  function fmtDur(sec) {
+    sec = Math.max(0, Math.round(Number(sec) || 0));
+    if (sec < 60) return sec + ' s';
+    const m = Math.round(sec / 60);
+    return m < 60 ? m + ' Min' : Math.floor(m / 60) + ' Std ' + pad(m % 60) + ' Min';
+  }
+
   /* ---------- Fortschritt ---------- */
   const numsOf = (e, key) => (e.sets || []).map(s => num(s[key])).filter(x => !isNaN(x));
   const METRICS = {
@@ -187,7 +219,9 @@
       for (const st of Array.isArray(e.sets) ? e.sets : []) { if (!isObj(st)) continue; sets.push({ w: cleanW(st.w ?? ''), r: String(st.r ?? '').trim() }); }
       exercises.push({ name, weste: !!e.weste, griffe: !!e.griffe, sets });
     }
-    return { date: s.date, unit, note: typeof s.note === 'string' ? s.note : '', exercises, updatedAt: Number.isFinite(s.updatedAt) ? s.updatedAt : 0 };
+    const out = { date: s.date, unit, note: typeof s.note === 'string' ? s.note : '', exercises, updatedAt: Number.isFinite(s.updatedAt) ? s.updatedAt : 0 };
+    if (Number.isFinite(s.dur) && s.dur > 0 && s.dur <= 86400) out.dur = Math.round(s.dur);   // gemessene Trainingsdauer in Sekunden (optional)
+    return out;
   }
   function cleanPlan(p) {
     if (!isObj(p)) return null;
@@ -275,7 +309,7 @@
 
   return {
     UNITS, SLUG, esc, clone, pad, isObj, num, cleanW, todayISO, parseISO, isISODate, fmtLong, fmtDay, fmtShort, daysAgo, agoText, fmtNum, setStr,
-    weightKinds, defaultWMode, catalog, unitOf, lastFor, METRICS, niceTicks,
+    weightKinds, defaultWMode, catalog, unitOf, lastFor, METRICS, niceTicks, estimateRemaining, trainingSpan, trainingDuration, fmtDur,
     splitCSVLine, normKey, KEYMAP, parseDate, parseCSV, guessUnit, truthy, matchUnit, buildCSV, planImport,
     parseBackup, planRestore, planRename
   };

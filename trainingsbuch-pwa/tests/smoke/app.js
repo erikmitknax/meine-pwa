@@ -103,11 +103,11 @@ const server = http.createServer((req, res) => {
   const wx = w2, dx = d2, lsx = k => JSON.parse(wx.localStorage.getItem(k) || 'null');
   const qx = s => dx.querySelector(s), cx = s => qx(s).click();
   cx('#gearBtn'); await tick();
-  ok(dx.querySelectorAll('.acc').length === 7, 'Einstellungen haben 7 Abschnitte');
+  ok(dx.querySelectorAll('.acc').length === 8, 'Einstellungen haben 8 Abschnitte');
   ok(dx.querySelectorAll('.acc.open').length === 0 && dx.querySelectorAll('.acc-b').length === 0, 'alle Abschnitte sind eingeklappt');
   ok([...dx.querySelectorAll('.acc-h')].every(h => h.getAttribute('aria-expanded') === 'false'), 'aria-expanded ist überall "false"');
   const titles = [...dx.querySelectorAll('.acc-h')].map(h => h.textContent);
-  ok(['Design', 'Logo', 'Signal am Pausenende', 'Sicherung & Wiederherstellung', 'Dropbox-Backup', 'CSV importieren', 'Übungen verwalten'].every(t => titles.some(x => x.includes(t))), 'Titel: Design, Logo, Signal, Sicherung, Dropbox, CSV, Übungen');
+  ok(['Training', 'Design', 'Logo', 'Signal am Pausenende', 'Sicherung & Wiederherstellung', 'Dropbox-Backup', 'CSV importieren', 'Übungen verwalten'].every(t => titles.some(x => x.includes(t))), 'Titel: Training, Design, Logo, Signal, Sicherung, Dropbox, CSV, Übungen');
   cx('[data-act="acc"][data-id="design"]'); await tick();
   ok(dx.querySelectorAll('.acc.open').length === 1 && !!qx('.swatches'), 'Antippen klappt "Design" auf');
   ok(qx('[data-act="acc"][data-id="design"]').getAttribute('aria-expanded') === 'true', 'aria-expanded wird "true"');
@@ -236,6 +236,44 @@ const server = http.createServer((req, res) => {
   c5('[data-act="metric"][data-m="vol"]'); await tick();
   ok(qa5('svg.chart circle.dot').length === 0 && qa5('svg.chart circle.pt').length === 15, 'Volumen: nur eine Linie, keine Satzpunkte');
   dom5.window.close();
+
+  console.log('Satz fertig: Haken, automatische Pause, Restzeit, gemessene Dauer');
+  const prior = { h1: { date: '2026-10-01', unit: 'Push', note: '', exercises: [{ name: 'Bankdrücken', weste: false, griffe: false, sets: [{ w: '60', r: '8' }, { w: '60', r: '8' }, { w: '55', r: '10' }] }], updatedAt: 1 } };
+  const plans6 = { p1: { name: 'Push A', unit: 'Push', exercises: ['Bankdrücken', 'Schulterdrücken'] } };
+  const dom6 = await JSDOM.fromURL(base + 'index.html', { runScripts: 'dangerously', resources: 'usable', pretendToBeVisual: true, virtualConsole: vc, beforeParse(w6) { w6.Element.prototype.scrollIntoView = function () {}; w6.scrollTo = function () {}; w6.addEventListener('error', e => errors.push('window.onerror: ' + e.message)); w6.localStorage.setItem('tb_sessions', JSON.stringify(prior)); w6.localStorage.setItem('tb_plans', JSON.stringify(plans6)); } });
+  await tick(300);
+  const w6 = dom6.window, q6 = x => w6.document.querySelector(x), qa6 = x => [...w6.document.querySelectorAll(x)], c6 = x => q6(x).click(), L6 = k => JSON.parse(w6.localStorage.getItem(k) || 'null');
+  const t6 = (el, v) => { el.value = v; el.dispatchEvent(new w6.Event('input', { bubbles: true })); };
+  c6('[data-act="startPlan"]'); await tick(60);
+  ok(qa6('.chk').length === 6, 'jeder Satz hat einen Haken (2 Übungen × 3 Sätze)');
+  ok(/ca\. 12 Min/.test(q6('#tbar').textContent) && /geplant/.test(q6('#tbar').textContent), 'vor dem Start: geplante Dauer 6 × 45 s + 5 × 90 s Pause = 12 Min: ' + q6('#tbar').textContent.trim());
+  c6('.chk[data-ei="0"][data-si="0"]'); await tick(60);
+  const dr = L6('tb_draft');
+  ok(dr.exercises[0].sets[0].done === true && dr.exercises[0].sets[0].w === '60' && dr.exercises[0].sets[0].r === '8', 'Haken übernimmt leere Felder vom letzten Training (60 × 8) und merkt sich den Zeitpunkt');
+  ok(q6('.set.done') && q6('.chk.on'), 'abgehakter Satz ist markiert');
+  ok(!q6('#restbar').hidden && /Pause · Bankdrücken · Satz 1/.test(q6('#restbar').textContent), 'Pause startet automatisch');
+  ok(/Noch ca\. 11 Min/.test(q6('#tbar').textContent) && /1 von 6 Sätzen/.test(q6('#tbar').textContent), 'Restzeit: 5 Sätze × 45 s + 4 × 90 s + laufende Pause = 11 Min: ' + q6('#tbar').textContent.trim());
+  c6('.chk[data-ei="0"][data-si="0"]'); await tick(30);
+  ok(!L6('tb_draft').exercises[0].sets[0].done && /geplant/.test(q6('#tbar').textContent) && q6('#restbar').hidden, 'Haken wieder weg: Satz offen, Pause gestoppt, Anzeige wieder „geplant“');
+  c6('.chk[data-ei="1"][data-si="0"]'); await tick(30);
+  ok(/Wiederholungen/.test(q6('#toast').textContent) && !L6('tb_draft').exercises[1].sets[0].done, 'ohne Wiederholungen und ohne Vorlage lässt sich kein Satz abhaken');
+  for (let j = 0; j < 3; j++) { if (j) c6(`.chk[data-ei="0"][data-si="${j}"]`); else c6('.chk[data-ei="0"][data-si="0"]'); await tick(20); }
+  for (let j = 0; j < 3; j++) { t6(q6(`input[data-ei="1"][data-si="${j}"][data-f="r"]`), '10'); c6(`.chk[data-ei="1"][data-si="${j}"]`); await tick(20); }
+  ok(/Fertig/.test(q6('#tbar').textContent) && /6 von 6/.test(q6('#tbar').textContent) && q6('#tbar').style.getPropertyValue('--p') === '1', 'alle Sätze abgehakt: Balken voll, „Fertig“');
+  ok(q6('#restbar').hidden, 'nach dem letzten Satz startet keine Pause mehr');
+  c6('[data-act="save"]'); await tick(80);
+  const sv = Object.values(L6('tb_sessions')).find(x => x.exercises.some(e => e.name === 'Schulterdrücken'));
+  ok(sv && Number.isFinite(sv.dur) && sv.dur >= 45 && sv.dur <= 60, 'gemessene Dauer gespeichert (Satzdauer 45 s + Zeit zwischen erstem und letztem Haken): ' + (sv && sv.dur) + ' s');
+  ok(sv && sv.exercises.every(e => e.sets.every(st => !('done' in st) && !('at' in st))), 'Haken-Daten stehen nicht im gespeicherten Training');
+  ok(/Training gespeichert · \d+ s/.test(q6('#toast').textContent) && /\d+ s/.test(q6('.s-meta').textContent), 'Meldung und Verlauf zeigen die Dauer');
+  c6('[data-act="edit"]'); await tick(60);
+  ok(qa6('.chk').length === 0 && !q6('#tbar'), 'beim Bearbeiten gibt es weder Haken noch Balken');
+  c6('[data-act="save"]'); await tick(80);
+  ok(Object.values(L6('tb_sessions')).find(x => x.exercises.some(e => e.name === 'Schulterdrücken')).dur === sv.dur, 'Bearbeiten behält die gemessene Dauer');
+  c6('#gearBtn'); await tick(); c6('[data-act="acc"][data-id="training"]'); await tick();
+  c6('[data-act="setsec"][data-v="60"]'); await tick();
+  ok(L6('tb_setsec') === 60 && /Satzdauer 60 s/.test(q6('.acc-h').parentNode.textContent + qa6('.acc-h').map(h => h.textContent).join()), 'Satzdauer lässt sich in den Einstellungen ändern und bleibt gespeichert');
+  dom6.window.close();
 
   console.log('Fehler im Log');
   ok(errors.length === 0, errors.length ? errors.slice(0, 8).join(' | ') : 'keine Fehler in der Konsole');
