@@ -25,21 +25,24 @@ npm test
 
 Das sind Unit-Tests für `logic.js` und `sw.js` sowie zwei Durchläufe der ganzen App in jsdom (`tests/smoke/`). GitHub Actions führt sie bei jeder Änderung an `trainingsbuch-pwa/` aus.
 
+## Einstellungen
+
+Zahnrad oben rechts. Alle Abschnitte sind eingeklappt und lassen sich einzeln aufklappen: Design, Logo, Signal am Pausenende, Sicherung & Wiederherstellung, Dropbox-Backup, CSV importieren, Übungen verwalten. Auf der Startseite führt „Sicherung & Import“ direkt zum aufgeklappten Abschnitt Sicherung.
+
 ## Sichern und Wiederherstellen
 
-- **Daten → Sichern → Komplett-Sicherung (JSON)** enthält Trainings, Pläne, Übungshinweise und Pausenzeiten.
-- **Daten → Wiederherstellen** liest diese Datei wieder ein: *Zusammenführen* (Vorhandenes bleibt, bei gleichem Training gewinnt die neuere Fassung) oder *Alles ersetzen*.
+- **Einstellungen → Sicherung & Wiederherstellung → Komplett-Sicherung (JSON)** enthält Trainings, Pläne, Übungshinweise und Pausenzeiten.
+- Dort liest **Wiederherstellen** diese Datei wieder ein: *Zusammenführen* (Vorhandenes bleibt, bei gleichem Training gewinnt die neuere Fassung) oder *Alles ersetzen*.
 - Die CSV ist nur für Tabellenkalkulationen gedacht und enthält keine Pläne.
 
-### Dropbox
+### Dropbox (Einstellungen → Dropbox-Backup)
 
 Beim Sichern schreibt die App `trainingsbuch.csv` und `trainingsbuch-komplett.json` in den App-Ordner.
 
-Fürs **Wiederherstellen aus Dropbox** braucht die Dropbox-App zusätzlich die Berechtigung `files.content.read`:
+Einmal einrichten, in der Dropbox App Console (dropbox.com/developers/apps):
 
-1. Dropbox App Console öffnen, die App wählen, Reiter *Permissions*.
-2. `files.content.read` anhaken, *Submit*.
-3. In der Trainingsbuch-App unter Daten *Trennen* und danach *Mit Dropbox verbinden* (nur so bekommt der Zugang die neue Berechtigung).
+1. Reiter *Settings* → *OAuth 2* → *Redirect URIs*: genau die Adresse eintragen, die die App im Abschnitt anzeigt (zum Beispiel `https://erikmitknax.github.io/meine-pwa/trainingsbuch-pwa/`, mit Schrägstrich am Ende, ohne `index.html`), dann *Add*. Ohne diesen Eintrag zeigt Dropbox „Invalid redirect_uri“. Die App hat dafür einen Kopieren-Knopf.
+2. Fürs **Wiederherstellen aus Dropbox** zusätzlich Reiter *Permissions*: `files.content.read` anhaken, *Submit*. Danach in der App *Trennen* und *Mit Dropbox verbinden* (nur so bekommt der Zugang die neue Berechtigung).
 
 Das automatische Sichern startet auf einem Gerät erst, nachdem du dort einmal „Jetzt sichern“ oder „Aus Dropbox wiederherstellen“ benutzt hast. So überschreibt ein neues Gerät mit leerem Stand keine vorhandene Sicherung.
 

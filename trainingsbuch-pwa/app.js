@@ -21,8 +21,8 @@ const ICON={
 
 const S={
   sessions:new Map(), plans:new Map(), loaded:{s:false,p:false},
-  tab:LS.get('tb_tab','log'), histFilter:'Alle', progEx:LS.get('tb_progEx',null), progMetric:null, progSel:null,
-  draft:LS.get('tb_draft',null), planEdit:null, exInfo:{}, rest:{}, timerOpen:null, vibOK:null, infoOpen:null, infoEdit:false, exMenu:null, showMeta:false, showNote:false, openSess:null, showTbl:false, confirm:null, imports:[], exportText:null, exportName:null, restore:null, rename:null, storageInfo:null, busy:false
+  tab:(t=>t==='data'?'settings':t)(LS.get('tb_tab','log')), histFilter:'Alle', progEx:LS.get('tb_progEx',null), progMetric:null, progSel:null,
+  draft:LS.get('tb_draft',null), planEdit:null, exInfo:{}, rest:{}, timerOpen:null, vibOK:null, infoOpen:null, infoEdit:false, exMenu:null, showMeta:false, showNote:false, openSess:null, showTbl:false, confirm:null, imports:[], exportText:null, exportName:null, restore:null, rename:null, storageInfo:null, acc:{}, busy:false
 };
 
 /* ---------- storage ---------- */
@@ -49,7 +49,7 @@ async function refreshStorageInfo(){
   const info={persisted:null,usage:null};
   try{if(navigator.storage&&navigator.storage.persisted)info.persisted=await navigator.storage.persisted()}catch(e){}
   try{if(navigator.storage&&navigator.storage.estimate){const e=await navigator.storage.estimate();info.usage=e.usage}}catch(e){}
-  S.storageInfo=info;if(S.tab==='data')render();
+  S.storageInfo=info;if(S.tab==='settings'&&S.acc.backup)settingsRerender();
 }
 async function initStore(){
   try{localStorage.setItem('tb_probe','1');localStorage.removeItem('tb_probe')}catch(e){toast('Der Browser blockiert den Speicher. Trainings können so nicht gespeichert werden.')}
@@ -211,7 +211,7 @@ function viewLog(){
   <h2>Ohne Plan</h2>
   <div class="chips">${UNITS.map(u=>`<button class="chip" data-act="startUnit" data-unit="${esc(u)}">${esc(u)}</button>`).join('')}</div>
   ${S.loaded.s&&S.sessions.size===0?'<p class="hint" style="margin-top:18px">Noch keine Trainings gespeichert.</p>':''}
-  <div class="links"><button class="link" data-act="tab" data-tab="plans">Pläne bearbeiten</button><button class="link" data-act="tab" data-tab="data">Import &amp; Export</button></div>`;
+  <div class="links"><button class="link" data-act="tab" data-tab="plans">Pläne bearbeiten</button><button class="link" data-act="tab" data-tab="settings" data-open="backup">Sicherung &amp; Import</button></div>`;
 }
 function viewDraft(){
   const d=S.draft;
@@ -438,7 +438,7 @@ const doExportJSON=()=>deliverFile(`trainingsbuch-komplett-${todayISO()}.json`,b
 function openRestore(text,name){
   const p=L.parseBackup(text);
   S.restore=p.error?{name,error:p.error}:{name,parsed:p,mode:'merge'};
-  S.confirm=null;S.tab='data';render();window.scrollTo(0,0);
+  S.confirm=null;S.tab='settings';S.acc=Object.assign({},S.acc,{backup:true});render();window.scrollTo(0,0);
 }
 function restoreOps(plan){
   return [...plan.sessionOps.map(o=>({coll:'sessions',id:o.id,doc:o.doc})),...plan.sessionDel.map(id=>({coll:'sessions',id,doc:null})),
@@ -501,7 +501,7 @@ function runRename(){
 function renameView(){
   const names=catalog(null).slice().sort((a,b)=>a.localeCompare(b,'de'));
   const R=S.rename||{from:'',to:'',plan:null};
-  const head=`<h2>Übungen verwalten</h2><p class="hint">Benennt eine Übung in allen Trainings, Plänen, Hinweisen und Pausenzeiten um. Gibt es den neuen Namen schon, werden beide zusammengeführt, zum Beispiel nach einem Tippfehler.</p>`;
+  const head=`<p class="hint" style="margin-top:0">Benennt eine Übung in allen Trainings, Plänen, Hinweisen und Pausenzeiten um. Gibt es den neuen Namen schon, werden beide zusammengeführt, zum Beispiel nach einem Tippfehler.</p>`;
   if(!names.length)return head+'<p class="hint">Noch keine Übungen vorhanden.</p>';
   const locked=!!R.plan;
   return head+`<div class="draft-head">
@@ -514,57 +514,63 @@ function renameView(){
     :`<div class="actions"><button class="btn" data-act="rnPrepare">Weiter</button></div>`}`;
 }
 
-function viewData(){
-  const total=S.sessions.size,si=S.storageInfo;
-  const stor=si&&si.persisted===true?'Der Browser hält den Speicher dauerhaft vor.':si&&si.persisted===false?'Der Browser darf die Daten bei Platzmangel löschen, sichere deshalb regelmäßig.':'';
-  return `<h2>Alte Daten importieren</h2>
-  <p class="hint">CSV mit den Spalten Datum, Übung, Satz, Gewicht_kg, Wiederholungen (Semikolon oder Komma). Ein Training mit gleichem Datum und gleicher Einheit wird ersetzt.</p>
+/* ---------- Einstellungen: aufklappbare Abschnitte, alle zu, bis man sie öffnet ---------- */
+function accSec(id,title,sub,body){
+  const open=!!S.acc[id];
+  return `<section class="acc ${open?'open':''}"><button class="acc-h" data-act="acc" data-id="${id}" aria-expanded="${open}" aria-controls="acc-${id}"><span>${esc(title)}${sub?`<small>${esc(sub)}</small>`:''}</span>${ICON.down}</button>${open?`<div class="acc-b" id="acc-${id}">${body()}</div>`:''}</section>`;
+}
+function importBody(){
+  return `<p class="hint">CSV mit den Spalten Datum, Übung, Satz, Gewicht_kg, Wiederholungen (Semikolon oder Komma). Ein Training mit gleichem Datum und gleicher Einheit wird ersetzt.</p>
   <label class="file" for="csvIn"><input type="file" id="csvIn" accept=".csv,text/csv,text/plain" multiple>CSV-Dateien auswählen</label>
   ${S.imports.length?`<div style="margin-top:8px">${S.imports.map((f,i)=>`<div class="imp"><div><strong>${esc(f.name)}</strong><small>${f.error?esc(f.error):`${f.rows.length} Sätze · ${new Set(f.rows.map(r=>r.date)).size} Trainings`}</small></div>
     ${f.hasUnit?'<span class="hint">Einheit aus Datei</span>':`<select data-imp="${i}" aria-label="Einheit für ${esc(f.name)}"><option value="">Einheit wählen …</option>${UNITS.map(u=>`<option ${u===f.unit?'selected':''}>${esc(u)}</option>`).join('')}</select>`}</div>`).join('')}
-    <div class="actions"><button class="btn gold" data-act="runImport" ${S.imports.some(f=>!f.hasUnit&&!f.unit&&f.rows.length)?'disabled style="opacity:.5"':''}>Importieren</button><button class="btn ghost" data-act="clearImport">Abbrechen</button></div></div>`:''}
-  <h2>Sichern</h2>
+    <div class="actions"><button class="btn gold" data-act="runImport" ${S.imports.some(f=>!f.hasUnit&&!f.unit&&f.rows.length)?'disabled style="opacity:.5"':''}>Importieren</button><button class="btn ghost" data-act="clearImport">Abbrechen</button></div></div>`:''}`;
+}
+function backupBody(){
+  const total=S.sessions.size,si=S.storageInfo;
+  const stor=si&&si.persisted===true?'Der Browser hält den Speicher dauerhaft vor.':si&&si.persisted===false?'Der Browser darf die Daten bei Platzmangel löschen, sichere deshalb regelmäßig.':'';
+  return `<h2>Sichern</h2>
   <p class="hint">${total} Trainings liegen nur auf diesem Gerät. ${esc(stor)}</p>
   <div class="row"><button class="btn" data-act="exportJSON">Komplett-Sicherung (JSON)</button><button class="btn" data-act="export">Nur Trainings (CSV)</button></div>
   <p class="hint">Die JSON-Sicherung enthält auch Pläne, Hinweise und Pausenzeiten und lässt sich unten wiederherstellen. Die CSV ist für Tabellenkalkulationen.</p>
   ${S.exportText!=null?`<div style="margin-top:12px"><p class="hint">Download ist hier nicht möglich. Kopier den Text und speichere ihn als Datei ${esc(S.exportName||'trainingsbuch.csv')}:</p><textarea id="expText" readonly style="min-height:180px;font-size:13px">${esc(S.exportText)}</textarea><div class="row" style="margin-top:8px"><button class="btn sm" data-act="copyExport">Kopieren</button></div></div>`:''}
   <h2>Wiederherstellen</h2>
-  <p class="hint">Wähle eine Komplett-Sicherung (trainingsbuch-komplett.json) von diesem oder einem anderen Gerät. Mit Dropbox-Anbindung geht es unten auch direkt von dort.</p>
+  <p class="hint">Wähle eine Komplett-Sicherung (trainingsbuch-komplett.json) von diesem oder einem anderen Gerät. Mit Dropbox-Anbindung geht es auch direkt von dort (Abschnitt „Dropbox-Backup“).</p>
   <label class="file" for="bkIn"><input type="file" id="bkIn" accept=".json,application/json,text/plain">Sicherung auswählen</label>
-  ${restoreView()}
-  ${renameView()}
-  ${window.DropboxBackup?DropboxBackup.html('btn'):''}`;
+  ${restoreView()}`;
 }
-
-/* ---------- Einstellungen ---------- */
 function viewSettings(){
-  const TS=window.TBSettings;
-  if(!TS)return '<p class="empty">Einstellungen konnten nicht geladen werden. Öffne die App einmal mit Internet.</p>';
-  const st=TS.get(),c=TS.baseColors(),native=!!LN();
-  const sw=TS.THEMES.map(t=>`<button class="sw ${!st.colors&&st.theme===t.id?'on':''}" data-set="theme" data-v="${t.id}" aria-pressed="${!st.colors&&st.theme===t.id}"><span class="sw-prev" style="background:${t.bg};border-color:${t.surface}"><i style="background:${t.accent}"></i><i style="background:${t.fg}"></i></span><span class="sw-name">${esc(t.name)}</span></button>`).join('');
-  const cols=[['accent','Akzent'],['bg','Hintergrund'],['surface','Flächen'],['fg','Schrift']].map(([k,l])=>`<label class="colrow"><span>${l}</span><input type="color" data-col="${k}" value="${c[k]}" aria-label="${l}"></label>`).join('');
-  const logos=TS.LOGOS.map(l=>`<button class="lg ${st.logo===l.id?'on':''}" data-set="logo" data-v="${l.id}" aria-pressed="${st.logo===l.id}">${l.svg?TS.logoSvg(l.id,30):'<span style="font-size:20px;color:var(--muted)">–</span>'}<small>${esc(l.name)}</small></button>`).join('')
-    +`<label class="lg ${st.logo==='custom'?'on':''}">${st.logoData?`<img src="${st.logoData}" width="30" height="30" alt="" style="border-radius:7px;object-fit:cover">`:'<span style="font-size:22px">+</span>'}<small>Eigenes Bild</small><input type="file" accept="image/*" id="logoFile" aria-label="Eigenes Logo hochladen"></label>`;
-  const chip=(kind,list,curv)=>list.map(o=>`<button class="chip ${curv===o.id?'on':''}" data-set="${kind}" data-v="${o.id}" aria-pressed="${curv===o.id}">${esc(o.name)}</button>`).join('');
-  return `<div class="set-sec"><h2>Design</h2>
-    <p class="hint" style="margin-top:0">Wähle eine Vorlage und pass danach einzelne Farben an.</p>
+  const TS=window.TBSettings,out=[];
+  if(TS){
+    const st=TS.get(),c=TS.baseColors(),native=!!LN();
+    const sw=TS.THEMES.map(t=>`<button class="sw ${!st.colors&&st.theme===t.id?'on':''}" data-set="theme" data-v="${t.id}" aria-pressed="${!st.colors&&st.theme===t.id}"><span class="sw-prev" style="background:${t.bg};border-color:${t.surface}"><i style="background:${t.accent}"></i><i style="background:${t.fg}"></i></span><span class="sw-name">${esc(t.name)}</span></button>`).join('');
+    const cols=[['accent','Akzent'],['bg','Hintergrund'],['surface','Flächen'],['fg','Schrift']].map(([k,l])=>`<label class="colrow"><span>${l}</span><input type="color" data-col="${k}" value="${c[k]}" aria-label="${l}"></label>`).join('');
+    const logos=TS.LOGOS.map(l=>`<button class="lg ${st.logo===l.id?'on':''}" data-set="logo" data-v="${l.id}" aria-pressed="${st.logo===l.id}">${l.svg?TS.logoSvg(l.id,30):'<span style="font-size:20px;color:var(--muted)">–</span>'}<small>${esc(l.name)}</small></button>`).join('')
+      +`<label class="lg ${st.logo==='custom'?'on':''}">${st.logoData?`<img src="${st.logoData}" width="30" height="30" alt="" style="border-radius:7px;object-fit:cover">`:'<span style="font-size:22px">+</span>'}<small>Eigenes Bild</small><input type="file" accept="image/*" id="logoFile" aria-label="Eigenes Logo hochladen"></label>`;
+    const chip=(kind,list,curv)=>list.map(o=>`<button class="chip ${curv===o.id?'on':''}" data-set="${kind}" data-v="${o.id}" aria-pressed="${curv===o.id}">${esc(o.name)}</button>`).join('');
+
+    const themeName=(TS.THEMES.find(t=>t.id===st.theme)||{}).name||'';
+    const logoName=st.logo==='custom'?'Eigenes Bild':((TS.LOGOS.find(l=>l.id===st.logo)||{}).name||'');
+    const vibName=(TS.VIBS.find(v=>v.id===st.vib)||{}).name||'',sndName=(TS.SOUNDS.find(o=>o.id===st.snd)||{}).name||'';
+    out.push(accSec('design','Design',st.colors?'Eigene Farben':themeName,()=>`<p class="hint" style="margin-top:0">Wähle eine Vorlage und pass danach einzelne Farben an.</p>
     <div class="swatches">${sw}</div>
     <div class="colrows">${cols}</div>
     <p class="hint">${st.colors?'Eigene Farben aktiv, Grundlage: '+esc((TS.THEMES.find(t=>t.id===st.theme)||{}).name||''):'Vorlage aktiv.'}</p>
-    <div class="row"><button class="btn sm" data-set="resetDesign">Design zurücksetzen</button></div>
-  </div>
-  <div class="set-sec"><h2>Logo</h2>
-    <div class="logos">${logos}</div>
-    <p class="hint">Das Logo erscheint oben in der App und im Browser-Tab. Das Symbol auf dem Startbildschirm kann die App nicht selbst ändern.</p>
-  </div>
-  <div class="set-sec"><h2>Signal am Pausenende</h2>
-    <span class="lbl">Vibration</span><div class="chips">${chip('vib',TS.VIBS,st.vib)}</div>
+    <div class="row"><button class="btn sm" data-set="resetDesign">Design zurücksetzen</button></div>`));
+    out.push(accSec('logo','Logo',logoName,()=>`<div class="logos">${logos}</div>
+    <p class="hint">Das Logo erscheint oben in der App und im Browser-Tab. Das Symbol auf dem Startbildschirm kann die App nicht selbst ändern.</p>`));
+    out.push(accSec('signal','Signal am Pausenende',`Vibration: ${vibName} · Ton: ${sndName}`,()=>`<span class="lbl">Vibration</span><div class="chips">${chip('vib',TS.VIBS,st.vib)}</div>
     <span class="lbl">Ton</span><div class="chips">${chip('snd',TS.SOUNDS,st.snd)}</div>
     <p class="hint">${native?'Bei gesperrtem Handy kommt eine Benachrichtigung mit dem gewählten Vibrationsmuster. Ist ein Ton gewählt, spielt Android dann seinen Benachrichtigungston, den gewählten Ton gibt es nur bei offener App.':'Ton und Vibration kommen, solange die App offen ist und der Bildschirm an ist. Bei gesperrtem Handy hilft nur die Android-App.'}</p>
     <div class="row"><button class="btn" data-set="test">Signal testen</button>${native?'<button class="btn" data-set="testLock">Test in 10 s</button>':''}</div>
-    ${native?'<p class="hint">„Test in 10 s“: tippen, Handy sperren, warten.</p>':''}
-  </div>
-  <p class="hint" style="text-align:center">Weitere Einstellungen kommen nach und nach hierher.</p>`;
+    ${native?'<p class="hint">„Test in 10 s“: tippen, Handy sperren, warten.</p>':''}`));
+  }else out.push('<p class="empty">Design, Logo und Signal konnten nicht geladen werden. Öffne die App einmal mit Internet.</p>');
+  const dbx=window.DropboxBackup?DropboxBackup.state():null;
+  out.push(accSec('backup','Sicherung & Wiederherstellung',`${S.sessions.size} Trainings`,backupBody));
+  out.push(accSec('dropbox','Dropbox-Backup',dbx&&dbx.refresh?'Verbunden':'Nicht verbunden',()=>window.DropboxBackup?DropboxBackup.html('btn'):'<p class="hint">Nicht verfügbar.</p>'));
+  out.push(accSec('import','CSV importieren','Alte Daten einlesen',importBody));
+  out.push(accSec('manage','Übungen verwalten','Umbenennen und zusammenführen',renameView));
+  return out.join('');
 }
 function settingsRerender(){if(S.tab==='settings'){const y=window.scrollY;render();window.scrollTo(0,y)}}
 document.addEventListener('click',ev=>{
@@ -638,16 +644,16 @@ function navInit(){
 }
 /* ---------- render ---------- */
 function renderTabs(){
-  $('#tabs').innerHTML=TABS.map(([k,l])=>`<button class="tab ${(S.tab===k||(k==='log'&&['plans','data'].includes(S.tab)))?'on':''}" data-act="tab" data-tab="${k}" ${S.tab===k?'aria-current="page"':''}>${esc(l)}${k==='log'&&S.draft&&!['log','plans','data'].includes(S.tab)?'<span class="dot" aria-label="offen"></span>':''}</button>`).join('');
+  $('#tabs').innerHTML=TABS.map(([k,l])=>`<button class="tab ${(S.tab===k||(k==='log'&&['plans'].includes(S.tab)))?'on':''}" data-act="tab" data-tab="${k}" ${S.tab===k?'aria-current="page"':''}>${esc(l)}${k==='log'&&S.draft&&!['log','plans'].includes(S.tab)?'<span class="dot" aria-label="offen"></span>':''}</button>`).join('');
 }
 function renderDatalist(){$('#exlist').innerHTML=catalog(null).map(n=>`<option value="${esc(n)}"></option>`).join('')}
 function render(){
   LS.set('tb_tab',S.tab);
   renderTabs();renderDatalist();
-  const tabOn=S.tab;const v={log:viewLog,hist:viewHist,prog:viewProg,plans:viewPlans,data:viewData,settings:viewSettings}[S.tab]||viewLog;
+  const tabOn=S.tab;const v={log:viewLog,hist:viewHist,prog:viewProg,plans:viewPlans,settings:viewSettings}[S.tab]||viewLog;
   const gb=$('#gearBtn');if(gb){gb.classList.toggle('on',S.tab==='settings');if(S.tab==='settings')gb.setAttribute('aria-current','page');else gb.removeAttribute('aria-current')}
   setTimeout(paintRest,0);
-  $('#view').innerHTML=(S.tab==='plans'||S.tab==='data'||S.tab==='settings'?'<button class="link back" data-act="tab" data-tab="log">‹ Zurück zum Training</button>':'')+v();
+  $('#view').innerHTML=(S.tab==='plans'||S.tab==='settings'?'<button class="link back" data-act="tab" data-tab="log">‹ Zurück zum Training</button>':'')+v();
   navSync();
 }
 let toastT=null;
@@ -659,7 +665,7 @@ document.addEventListener('click',async ev=>{
   const a=b.dataset.act,d=S.draft;
   const ei=b.dataset.ei!=null?+b.dataset.ei:null,si=b.dataset.si!=null?+b.dataset.si:null;
   switch(a){
-    case 'tab':S.tab=b.dataset.tab;S.confirm=null;S.planEdit=null;S.showTbl=false;S.exportText=null;S.restore=null;S.rename=null;render();window.scrollTo(0,0);break;
+    case 'tab':S.tab=b.dataset.tab;S.confirm=null;S.planEdit=null;S.showTbl=false;S.exportText=null;S.restore=null;S.rename=null;if(b.dataset.tab==='settings')S.acc=b.dataset.open?{[b.dataset.open]:true}:{};render();window.scrollTo(0,0);break;
     case 'startPlan':if(S.draft&&!S.draft.id&&S.draft.exercises.length){S.tab='log';render();toast('Es ist noch ein Training offen.');break}startDraft(null,b.dataset.id);break;
     case 'startUnit':startDraft(b.dataset.unit,null);break;
     case 'addEx':{const i=$('#addEx');addExToDraft(i&&i.value);break}
@@ -720,6 +726,7 @@ document.addEventListener('click',async ev=>{
     case 'peCancel':S.planEdit=null;render();break;
     case 'runImport':await runImport();break;
     case 'clearImport':S.imports=[];render();break;
+    case 'acc':S.acc=Object.assign({},S.acc,{[b.dataset.id]:!S.acc[b.dataset.id]});settingsRerender();break;
     case 'export':await doExport();break;
     case 'exportJSON':await doExportJSON();break;
     case 'wmode':{const e=d.exercises[ei];const cur=e.wmode||L.defaultWMode(weightKinds(e.name));e.wmode=cur==='var'?'num':'var';persistDraft();render();break}
@@ -775,7 +782,7 @@ function dbxFiles(){
     {name:'trainingsbuch-komplett.json',text:buildBackupJSON()}
   ];
 }
-if(window.DropboxBackup)DropboxBackup.init({app:'trainingsbuch',files:dbxFiles,hasData:()=>S.loaded.s&&S.sessions.size>0,restoreFile:'trainingsbuch-komplett.json',onRestoreText:text=>openRestore(text,'Sicherung aus Dropbox'),onUpdate:()=>{if(S.tab==='data'&&S.loaded.s)render()}});
+if(window.DropboxBackup)DropboxBackup.init({app:'trainingsbuch',files:dbxFiles,hasData:()=>S.loaded.s&&S.sessions.size>0,restoreFile:'trainingsbuch-komplett.json',onRestoreText:text=>openRestore(text,'Sicherung aus Dropbox'),onRedirect:()=>{S.tab='settings';S.acc={dropbox:true}},onUpdate:()=>{if(S.tab==='settings'&&S.acc.dropbox&&S.loaded.s)settingsRerender()}});
 initStore();
 })();
 

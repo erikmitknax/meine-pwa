@@ -141,6 +141,11 @@
     busy = false; save(); update();
   }
 
+  async function copyRedirect() {
+    try { await navigator.clipboard.writeText(redirect()); setMsg('Adresse kopiert. Jetzt in der Dropbox App Console einfügen.'); }
+    catch (e) { setMsg('Kopieren geht hier nicht. Halte die Adresse gedrückt und kopiere sie von Hand.'); }
+  }
+
   function disconnect() {
     st.access = null; st.refresh = null; st.exp = 0; st.hash = null; st.last = null; st.armed = false; save();
     msg = 'Verbindung getrennt. Die Dateien in Dropbox bleiben erhalten.'; update();
@@ -162,8 +167,10 @@
     } else {
       h += '<div class="dbx-small">Speichert deine Daten als Datei in deiner Dropbox und überschreibt dort immer das letzte Backup.</div>';
       h += '<input type="text" id="dbx-key" placeholder="Dropbox App Key" autocomplete="off" autocapitalize="off" spellcheck="false" value="' + esc(st.appKey || '') + '">';
-      h += '<div class="dbx-small">Adresse für Dropbox (Redirect URI): ' + esc(redirect()) + '</div>';
-      h += '<div class="dbx-row"><button type="button"' + c + ' data-dbx="connect">Mit Dropbox verbinden</button></div>';
+      h += '<div class="dbx-small" style="margin-top:10px"><b>Einmal einrichten:</b> Öffne dropbox.com/developers/apps, wähle deine App und trage unter <i>Settings → OAuth 2 → Redirect URIs</i> genau diese Adresse ein, dann <i>Add</i> tippen. Sie muss exakt stimmen, auch der Schrägstrich am Ende:</div>';
+      h += '<div class="dbx-small" style="margin-top:6px;user-select:all"><code>' + esc(redirect()) + '</code></div>';
+      h += '<div class="dbx-small" style="margin-top:6px">Zum Wiederherstellen aus Dropbox zusätzlich unter <i>Permissions</i> die Berechtigung <code>files.content.read</code> aktivieren und <i>Submit</i> tippen.</div>';
+      h += '<div class="dbx-row"><button type="button"' + c + ' data-dbx="copy">Adresse kopieren</button><button type="button"' + c + ' data-dbx="connect">Mit Dropbox verbinden</button></div>';
     }
     if (msg) h += '<div class="dbx-small" style="margin-top:8px"><b>' + esc(msg) + '</b></div>';
     return h + '</div>';
@@ -183,14 +190,14 @@
     document.addEventListener('click', function (e) {
       var b = e.target.closest && e.target.closest('[data-dbx]'); if (!b) return;
       var a = b.getAttribute('data-dbx');
-      if (a === 'connect') connect(); else if (a === 'backup') backup(true); else if (a === 'restore') restore(); else if (a === 'disconnect') disconnect();
+      if (a === 'connect') connect(); else if (a === 'backup') backup(true); else if (a === 'restore') restore(); else if (a === 'copy') copyRedirect(); else if (a === 'disconnect') disconnect();
     });
     document.addEventListener('change', function (e) {
       if (e.target && e.target.hasAttribute && e.target.hasAttribute('data-dbx-auto')) { st.auto = !!e.target.checked; save(); if (st.auto) backup(false); }
     });
     document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'hidden' && st.auto !== false) backup(false); });
     window.addEventListener('online', function () { if (st.auto !== false) backup(false); });
-    if (await handleRedirect()) update();
+    if (await handleRedirect()) { if (cfg.onRedirect) { try { cfg.onRedirect(); } catch (e) { /* ignore */ } } update(); }
     update();
     if (st.refresh && st.auto !== false) {
       setTimeout(function () { backup(false); }, 2000);
