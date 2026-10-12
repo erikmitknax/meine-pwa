@@ -1006,17 +1006,27 @@ function blobToBase64(blob) {
   return new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result).split(",")[1]); r.onerror = rej; r.readAsDataURL(blob); });
 }
 async function exportFile(name, blob) {
+  let why = "";
   if (NATIVE) {
     try {
       const p = window.Capacitor.registerPlugin("ErnDownload");
       await p.save({ filename: name, data: await blobToBase64(blob), mime: blob.type || "application/octet-stream" });
-      toast("In „Download“ gespeichert: " + name); return;
-    } catch (e) { /* weiter mit Browser-Download */ }
+      toast("In „Download“ gespeichert: " + name); return true;
+    } catch (e) { why = (e && (e.message || e.errorMessage)) || String(e); }
   }
+  // Teilen-Menü (Handy): „In Dateien/Drive speichern“, an sich selbst senden usw.
+  try {
+    const f = new File([blob], name, { type: blob.type || "application/octet-stream" });
+    if (navigator.canShare && navigator.canShare({ files: [f] })) {
+      await navigator.share({ files: [f], title: name });
+      toast("Datei geteilt/gespeichert: " + name); return true;
+    }
+  } catch (e) { if (e && e.name === "AbortError") { toast("Abgebrochen – nichts gespeichert"); return false; } why = why || (e && e.message) || ""; }
+  if (NATIVE) { toast("Speichern nicht möglich" + (why ? ": " + why : "")); return false; }
   const u = URL.createObjectURL(blob), a = document.createElement("a");
   a.href = u; a.download = name; document.body.append(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(u), 4000);
-  toast("Datei erstellt: " + name);
+  toast("Datei heruntergeladen: " + name); return true;
 }
 const readText = f => new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result)); r.onerror = rej; r.readAsText(f); });
 
@@ -1303,9 +1313,10 @@ document.addEventListener("click", async ev => {
     const chk = () => { $("#wGo", sh).disabled = !(done && $("#wTxt", sh).value.trim().toUpperCase() === "LÖSCHEN"); };
     $("#wBk", sh).onclick = async () => {
       try {
-        await exportFile("foodpro-backup-" + iso(new Date()) + ".json", new Blob([JSON.stringify(exportData())], { type: "application/json" }));
+        const saved = await exportFile("foodpro-backup-" + iso(new Date()) + ".json", new Blob([JSON.stringify(exportData())], { type: "application/json" }));
+        if (!saved) throw new Error("nicht gespeichert");
         done = true; $("#wBkState", sh).innerHTML = "✓ Backup gespeichert. Prüfe kurz, dass die Datei da ist."; $("#wTxt", sh).disabled = false; $("#wTxt", sh).focus();
-      } catch (e) { $("#wBkState", sh).textContent = "Backup fehlgeschlagen – es wird nichts gelöscht."; }
+      } catch (e) { $("#wBkState", sh).textContent = "Backup wurde nicht gespeichert – es wird nichts gelöscht. Versuche es nochmal."; }
       chk();
     };
     $("#wTxt", sh).oninput = chk;
