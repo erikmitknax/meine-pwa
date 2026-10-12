@@ -600,9 +600,11 @@ function shrink(file, max = 1280) {
   });
 }
 async function analyzePhoto(file, note) {
-  const data = await shrink(file);
+  const data = await shrink(file, 1024);
   const prompt = `Analysiere dieses Foto (Mahlzeit, Lebensmittel oder Nährwert-Etikett). Erkenne jedes einzelne Lebensmittel, schätze die Menge in Gramm und nenne die Nährwerte pro 100 g. Wenn ein Nährwert-Etikett zu sehen ist, nutze dessen Werte. Antworte ausschließlich mit JSON ohne weiteren Text im Format: {"items":[{"name":"deutscher Name","grams":150,"kcal":120,"protein":5,"carbs":20,"fat":2,"sugar":1,"fiber":3}]}. Alle Nährwerte beziehen sich auf 100 g.` + (note ? `\n\nZusatzinfos vom Nutzer (verlässlich, haben Vorrang vor deiner Schätzung aus dem Bild, z. B. Gewicht, Zutaten, Zubereitung, Marke): ${note}` : "");
-  const body = JSON.stringify({ contents: [{ parts: [{ inline_data: { mime_type: "image/jpeg", data } }, { text: prompt }] }], generationConfig: { responseMimeType: "application/json", maxOutputTokens: 2000 } });
+  const bodyFor = model => JSON.stringify({ contents: [{ parts: [{ inline_data: { mime_type: "image/jpeg", data } }, { text: prompt }] }],
+    // „Nachdenken“ abschalten (Gemini 2.5 Flash): deutlich schneller, für diese Aufgabe reicht es
+    generationConfig: { responseMimeType: "application/json", maxOutputTokens: 1500, temperature: 0.2, ...(/2\.5-flash(?!-lite)/.test(model) ? { thinkingConfig: { thinkingBudget: 0 } } : {}) } });
   // Bei Überlastung (503), unbekanntem Modell (404) oder Limit (429) automatisch erneut bzw. mit anderem Modell versuchen
   const models = [...new Set([(D.settings.geminiModel || "gemini-2.5-flash").trim(), "gemini-2.5-flash", "gemini-flash-latest", "gemini-2.5-flash-lite"])];
   let r, j, lastErr = "", net = false;
@@ -610,9 +612,9 @@ async function analyzePhoto(file, note) {
     for (let attempt = 0; attempt < 2; attempt++) {
       try {
         r = await fetchT("https://generativelanguage.googleapis.com/v1beta/models/" + encodeURIComponent(model) + ":generateContent", {
-          method: "POST", headers: { "content-type": "application/json", "x-goog-api-key": D.settings.geminiKey.trim() }, body,
-        }, 60000);
-      } catch (e) { net = true; r = null; break; }
+          method: "POST", headers: { "content-type": "application/json", "x-goog-api-key": D.settings.geminiKey.trim() }, body: bodyFor(model),
+        }, 30000);
+      } catch (e) { r = null; if (e && e.name === "AbortError") { lastErr = "Zeitüberschreitung"; break; } net = true; break; }
       j = await r.json().catch(() => ({}));
       if (r.ok) break;
       lastErr = r.status + ((j.error && j.error.message) ? ": " + j.error.message : "");
@@ -625,7 +627,7 @@ async function analyzePhoto(file, note) {
     if (net) break;
   }
   if (net && !(r && r.ok)) throw new Error("Keine Verbindung zur KI. Bist du online?");
-  if (!r || !r.ok) throw new Error(r && (r.status === 503 || r.status === 500) ? "Gemini ist gerade überlastet (Google-Seite). Bitte in ein bis zwei Minuten nochmal versuchen." : r && r.status === 429 ? "Das kostenlose Limit ist gerade erreicht. Warte kurz und versuche es erneut." : "KI-Fehler " + lastErr);
+  if (!r || !r.ok) throw new Error(!r && lastErr === "Zeitüberschreitung" ? "Gemini antwortet gerade zu langsam. Bitte gleich nochmal versuchen." : r && (r.status === 503 || r.status === 500) ? "Gemini ist gerade überlastet (Google-Seite). Bitte in ein bis zwei Minuten nochmal versuchen." : r && r.status === 429 ? "Das kostenlose Limit ist gerade erreicht. Warte kurz und versuche es erneut." : "KI-Fehler " + lastErr);
   const txt = ((((j.candidates || [])[0] || {}).content || {}).parts || []).map(c => c.text || "").join("");
   const m = txt.match(/\{[\s\S]*\}/);
   if (!m) throw new Error("Antwort der KI war nicht lesbar");
