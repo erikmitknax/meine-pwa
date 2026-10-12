@@ -104,3 +104,32 @@ if 'signingConfigs' not in g:
     print('Signaturschluessel eingetragen')
 
 print('Android-Projekt angepasst, Build-Nummer', run)
+
+# 7) Pausentimer als laufende Benachrichtigung mit Countdown (eigenes Plugin, Quelltext in native/)
+PKG_DIR = os.path.join(MAIN, 'java', 'io', 'github', 'erikmitknax', 'trainingsbuch')
+assert os.path.isdir(PKG_DIR), 'Java-Ordner der App nicht gefunden: ' + PKG_DIR
+shutil.copy(os.path.join(ROOT, 'native', 'RestTimerPlugin.java'), os.path.join(PKG_DIR, 'RestTimerPlugin.java'))
+open(os.path.join(PKG_DIR, 'MainActivity.java'), 'w', encoding='utf-8').write(
+    'package io.github.erikmitknax.trainingsbuch;\n\n'
+    'import android.os.Bundle;\n'
+    'import com.getcapacitor.BridgeActivity;\n\n'
+    'public class MainActivity extends BridgeActivity {\n'
+    '    @Override\n'
+    '    public void onCreate(Bundle savedInstanceState) {\n'
+    '        registerPlugin(RestTimerPlugin.class);\n'
+    '        super.onCreate(savedInstanceState);\n'
+    '    }\n'
+    '}\n')
+drawable = os.path.join(MAIN, 'res', 'drawable')
+os.makedirs(drawable, exist_ok=True)
+open(os.path.join(drawable, 'ic_stat_timer.xml'), 'w', encoding='utf-8').write(
+    '<?xml version="1.0" encoding="utf-8"?>\n'
+    '<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24">\n'
+    '    <path android:fillColor="#FFFFFFFF" android:pathData="M15,1L9,1v2h6L15,1zM11,14h2L13,8h-2v6zM19.03,7.39l1.42,-1.42c-0.43,-0.51 -0.9,-0.99 -1.41,-1.41l-1.42,1.42C16.07,4.74 14.12,4 12,4c-4.97,0 -9,4.03 -9,9s4.02,9 9,9 9,-4.03 9,-9c0,-2.12 -0.74,-4.07 -1.97,-5.61zM12,20c-3.87,0 -7,-3.13 -7,-7s3.13,-7 7,-7 7,3.13 7,7 -3.13,7 -7,7z"/>\n'
+    '</vector>\n')
+s = open(mf, encoding='utf-8').read()
+promo = '<uses-permission android:name="android.permission.POST_PROMOTED_NOTIFICATIONS" />'
+if promo not in s:
+    s = s.replace('</manifest>', '    ' + promo + '\n</manifest>', 1)
+    open(mf, 'w', encoding='utf-8').write(s)
+print('Pausentimer-Plugin eingebaut')

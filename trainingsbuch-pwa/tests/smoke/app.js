@@ -275,6 +275,32 @@ const server = http.createServer((req, res) => {
   ok(L6('tb_setsec') === 60 && /Satzdauer 60 s/.test(q6('.acc-h').parentNode.textContent + qa6('.acc-h').map(h => h.textContent).join()), 'Satzdauer lässt sich in den Einstellungen ändern und bleibt gespeichert');
   dom6.window.close();
 
+  console.log('Android-App: Countdown in der Benachrichtigung');
+  const rtCalls = [], lnCalls = [];
+  const dom7 = await JSDOM.fromURL(base + 'index.html', { runScripts: 'dangerously', resources: 'usable', pretendToBeVisual: true, virtualConsole: vc, beforeParse(w7) {
+    w7.Element.prototype.scrollIntoView = function () {}; w7.scrollTo = function () {}; w7.addEventListener('error', e => errors.push('window.onerror: ' + e.message));
+    w7.localStorage.setItem('tb_sessions', JSON.stringify(prior)); w7.localStorage.setItem('tb_plans', JSON.stringify(plans6));
+    const ok7 = async () => ({ display: 'granted' });
+    w7.Capacitor = { isNativePlatform: () => true, Plugins: {
+      LocalNotifications: { checkPermissions: ok7, requestPermissions: ok7, createChannel: async () => {}, deleteChannel: async () => {}, cancel: async () => {}, schedule: async o => { lnCalls.push(o); }, removeAllDeliveredNotifications: async () => {} },
+      RestTimer: { start: async o => { rtCalls.push(['start', o]); }, cancel: async () => { rtCalls.push(['cancel']); } } } };
+  } });
+  await tick(300);
+  const w7 = dom7.window, q7 = x => w7.document.querySelector(x), c7 = x => q7(x).click();
+  c7('[data-act="startPlan"]'); await tick(60);
+  c7('.chk[data-ei="0"][data-si="0"]'); await tick(80);
+  const st7 = rtCalls.filter(c => c[0] === 'start');
+  ok(st7.length === 1 && st7[0][1].seconds >= 88 && st7[0][1].seconds <= 90 && st7[0][1].title === 'Pause · Bankdrücken', 'Haken startet den Countdown in der Benachrichtigung (90 s, Übungsname im Titel): ' + JSON.stringify(st7[0] && st7[0][1]));
+  ok(lnCalls.length === 1, 'das Signal am Pausenende wird weiter eingeplant');
+  rtCalls.length = 0;
+  c7('[data-act="stopRest"]'); await tick(40);
+  ok(rtCalls.some(c => c[0] === 'cancel'), 'Stopp entfernt den Countdown aus der Benachrichtigung');
+  rtCalls.length = 0;
+  c7('.chk[data-ei="0"][data-si="1"]'); await tick(80);
+  c7('.chk[data-ei="0"][data-si="1"]'); await tick(40);
+  ok(rtCalls.filter(c => c[0] === 'start').length === 1 && rtCalls.some(c => c[0] === 'cancel'), 'Haken zurücknehmen entfernt den Countdown wieder');
+  dom7.window.close();
+
   console.log('Fehler im Log');
   ok(errors.length === 0, errors.length ? errors.slice(0, 8).join(' | ') : 'keine Fehler in der Konsole');
   console.log(`\n${pass} ok, ${fail} fehlgeschlagen`);

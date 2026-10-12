@@ -116,11 +116,15 @@ async function lnSchedule(endMs,name,nid){
     await ln.schedule({notifications:[n]});return true;
   }catch(e){return false}
 }
-function lnCancel(){const ln=LN();if(!ln)return;try{ln.cancel({notifications:[{id:1},{id:2},{id:3}]}).catch(()=>{});ln.removeAllDeliveredNotifications().catch(()=>{})}catch(e){}}
+/* Countdown in der Benachrichtigung (nur Android-App, braucht die APK mit dem Plugin "RestTimer"; sonst passiert nichts) */
+const RT=()=>{try{return (window.Capacitor&&Capacitor.isNativePlatform&&Capacitor.isNativePlatform()&&Capacitor.Plugins&&Capacitor.Plugins.RestTimer)||null}catch(e){return null}};
+function liveStart(name,si,endMs){const p=RT();if(!p)return;try{const sec=Math.round((endMs-Date.now())/1000);if(sec>=1)Promise.resolve(p.start({seconds:sec,title:'Pause · '+name,text:'Satz '+(si+1)+' fertig · tippen zum Öffnen'})).catch(()=>{})}catch(e){}}
+function liveStop(){const p=RT();if(!p)return;try{Promise.resolve(p.cancel()).catch(()=>{})}catch(e){}}
+function lnCancel(){liveStop();const ln=LN();if(!ln)return;try{ln.cancel({notifications:[{id:1},{id:2},{id:3}]}).catch(()=>{});ln.removeAllDeliveredNotifications().catch(()=>{})}catch(e){}}
 function startRest(ei,si){
   if(!S.draft)return;const e=S.draft.exercises[ei];if(!e)return;
   const dur=restFor(e.name);if(!dur)return;
-  T={name:e.name,si,dur,end:Date.now()+dur*1000,done:false,buzzed:0};wake();if(window.TBSettings){TBSettings.audioUnlock();if(TBSettings.get().vib!=='aus')buzz(30)}else buzz(30);lnSchedule(T.end,e.name);paintRest();
+  T={name:e.name,si,dur,end:Date.now()+dur*1000,done:false,buzzed:0};wake();if(window.TBSettings){TBSettings.audioUnlock();if(TBSettings.get().vib!=='aus')buzz(30)}else buzz(30);const endMs=T.end;lnSchedule(endMs,e.name).then(ok=>{if(ok&&T&&T.end===endMs)liveStart(e.name,si,endMs)});paintRest();
 }
 function lastFilledSet(e){let k=0;(e.sets||[]).forEach((st,j)=>{if(String(st.r||'').trim()||String(st.w||'').trim())k=j});return k}
 function buzz(p){try{if(navigator.vibrate)return navigator.vibrate(p)}catch(e){}return false}
