@@ -531,24 +531,24 @@ function bodyPhoto(b) {
   let thumb = null;
   const analyze = async f => {
     const note = ($("#pNote", b) ? $("#pNote", b).value : "").trim();
-    ui.photoNote = note;
+    ui.photoNote = ""; // Notiz wird nach dem Abschicken geleert
     $("#pres", b).innerHTML = `<div class="muted" style="margin-top:14px"><span class="spin"></span>Analysiere Foto …</div>`;
     try { photoItems = await analyzePhoto(f, note); renderPhotoItems(); }
-    catch (e) { $("#pres", b).innerHTML = `<div class="warn small" style="margin-top:14px">${esc(e.message)}</div><button class="btn sec block" style="margin-top:10px" id="pRetry">Nochmal versuchen</button>`; $("#pRetry", b).onclick = () => preview(f); }
+    catch (e) { $("#pres", b).innerHTML = `<div class="warn small" style="margin-top:14px">${esc(e.message)}</div><button class="btn sec block" style="margin-top:10px" id="pRetry">Nochmal versuchen</button>`; $("#pRetry", b).onclick = () => preview(f, note); }
   };
-  const preview = f => {
+  const preview = (f, preset) => {
     if (!f) return;
     if (thumb) URL.revokeObjectURL(thumb);
     thumb = URL.createObjectURL(f);
     $("#pres", b).innerHTML = `<img class="pthumb" src="${thumb}" alt="Vorschau">
       <label style="margin-top:12px">Notiz für die KI (optional)</label>
-      <textarea id="pNote" rows="2" placeholder="z. B. 250 g Hähnchenbrust gebraten, Reis ca. 180 g gekocht, Soße ist Joghurtdressing">${esc(ui.photoNote || "")}</textarea>
+      <textarea id="pNote" rows="2" placeholder="z. B. 250 g Hähnchenbrust gebraten, Reis ca. 180 g gekocht, Soße ist Joghurtdressing">${esc(preset || "")}</textarea>
       <div class="grid2" style="margin-top:12px"><button class="btn" id="pGo">Analysieren</button><button class="btn sec" id="pDrop">Anderes Foto</button></div>`;
     $("#pGo", b).onclick = () => analyze(f);
     $("#pDrop", b).onclick = () => { $("#pres", b).innerHTML = ""; };
     $("#pNote", b).focus({ preventScroll: true });
   };
-  const run = preview;
+  const run = f => preview(f);
   $("#cam", b).onclick = () => liveCamera(b, run, () => $("#img", b).click());
   $("#gal", b).onclick = () => $("#img2", b).click();
   $("#img", b).onchange = e => run(e.target.files[0]);
