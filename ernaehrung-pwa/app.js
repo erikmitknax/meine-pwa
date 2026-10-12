@@ -1292,7 +1292,26 @@ document.addEventListener("click", async ev => {
   else if (a === "exRecipes") { if (!D.recipes.length) return toast("Noch keine Rezepte"); exportFile("foodpro-rezepte.csv", csvBlob(recipesCsv())); }
   else if (a === "dayChart") dayChart();
   else if (a.startsWith("dbx")) dbxAction(a);
-  else if (a === "wipe") { if (confirm("Wirklich ALLE Daten (Tagebuch, Gewicht, Lebensmittel, Einstellungen) löschen?")) { D = DEFAULTS(); save(); applyTheme(); render(); toast("Alles gelöscht"); } }
+  else if (a === "wipe") {
+    const sh = sheet(`<h3>Alle Daten löschen</h3>
+      <div class="muted small" style="margin-bottom:14px">Tagebuch, Gewicht, Rezepte, Lebensmittel und Einstellungen werden unwiderruflich entfernt. Damit nichts versehentlich verloren geht, wird zuerst ein Backup gespeichert.</div>
+      <div class="steps" style="margin:0 0 14px"><b>Schritt 1:</b> Backup erstellen<div style="margin-top:10px"><button class="btn block" id="wBk">Backup jetzt speichern</button></div><div id="wBkState" class="small muted" style="margin-top:8px">Noch kein Backup erstellt.</div></div>
+      <div class="steps" style="margin:0 0 14px"><b>Schritt 2:</b> Löschen bestätigen<label style="margin-top:8px">Tippe LÖSCHEN zur Bestätigung</label><input type="text" id="wTxt" autocomplete="off" autocapitalize="characters" placeholder="LÖSCHEN" disabled></div>
+      <button class="btn danger block" id="wGo" disabled>Alles endgültig löschen</button>
+      <button class="btn sec block" style="margin-top:8px" id="wNo">Abbrechen</button>`);
+    let done = false;
+    const chk = () => { $("#wGo", sh).disabled = !(done && $("#wTxt", sh).value.trim().toUpperCase() === "LÖSCHEN"); };
+    $("#wBk", sh).onclick = async () => {
+      try {
+        await exportFile("foodpro-backup-" + iso(new Date()) + ".json", new Blob([JSON.stringify(exportData())], { type: "application/json" }));
+        done = true; $("#wBkState", sh).innerHTML = "✓ Backup gespeichert. Prüfe kurz, dass die Datei da ist."; $("#wTxt", sh).disabled = false; $("#wTxt", sh).focus();
+      } catch (e) { $("#wBkState", sh).textContent = "Backup fehlgeschlagen – es wird nichts gelöscht."; }
+      chk();
+    };
+    $("#wTxt", sh).oninput = chk;
+    $("#wNo", sh).onclick = () => closeSheet();
+    $("#wGo", sh).onclick = () => { if (!done) return; D = DEFAULTS(); save(); applyTheme(); closeSheet(); render(); toast("Alles gelöscht"); };
+  }
 });
 document.addEventListener("keydown", ev => { if ((ev.key === "Enter" || ev.key === " ") && ev.target.matches && ev.target.matches("[role=button][data-act]")) { ev.preventDefault(); ev.target.click(); } });
 document.addEventListener("change", async ev => {
