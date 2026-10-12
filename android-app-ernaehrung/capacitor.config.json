@@ -1,8 +1,8 @@
 {
   "appId": "io.github.erikmitknax.ernaehrung",
-  "appName": "Ernährung",
+  "appName": "Fuelwise",
   "webDir": "www",
-  "backgroundColor": "#0F1714",
+  "backgroundColor": "#0B0D11",
   "server": {
     "url": "https://erikmitknax.github.io/meine-pwa/ernaehrung-pwa/",
     "androidScheme": "https",

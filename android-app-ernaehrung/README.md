@@ -1,4 +1,4 @@
-# Ernährung als Android-App (APK)
+# Fuelwise als Android-App (APK)
 
 Die App ist eine Hülle (Capacitor), die die Seite
 https://erikmitknax.github.io/meine-pwa/ernaehrung-pwa/ lädt.

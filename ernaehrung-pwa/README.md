@@ -1,4 +1,4 @@
-# Ernährung (PWA)
+# Fuelwise (PWA)
 
 Kalorien- und Makro-Tracker. Alle Daten bleiben lokal im Gerät (localStorage).
 

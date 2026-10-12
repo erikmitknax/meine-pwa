@@ -1,14 +1,14 @@
 {
-  "name": "Ernährung",
-  "short_name": "Ernährung",
+  "name": "Fuelwise",
+  "short_name": "Fuelwise",
   "description": "Kalorien, Makros, Mahlzeiten und Gewicht tracken – mit Barcode-Scanner und Foto-KI.",
   "lang": "de",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
   "orientation": "portrait",
-  "background_color": "#0f1714",
-  "theme_color": "#0f1714",
+  "background_color": "#0b0d11",
+  "theme_color": "#0b0d11",
   "icons": [
     { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
     { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
