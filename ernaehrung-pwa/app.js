@@ -512,13 +512,16 @@ function bodyPhoto(b) {
     return;
   }
   b.innerHTML = `<div class="muted small">Fotografiere dein Essen oder ein Nährwert-Etikett. Die KI schätzt Lebensmittel, Menge und Nährwerte.</div>
+    <label style="margin-top:12px">Notiz für die KI (optional)</label>
+    <textarea id="pNote" rows="2" placeholder="z. B. 250 g Hähnchenbrust gebraten, Reis ca. 180 g gekocht, Soße ist Joghurtdressing">${esc(ui.photoNote || "")}</textarea>
     <input type="file" id="img" accept="image/*" capture="environment" hidden>
     <div class="grid2" style="margin-top:10px"><button class="btn" id="cam">Foto aufnehmen</button><button class="btn sec" id="gal">Aus Galerie</button></div>
     <input type="file" id="img2" accept="image/*" hidden><div id="pres"></div>`;
+  $("#pNote", b).oninput = e => { ui.photoNote = e.target.value; };
   const run = async f => {
     if (!f) return;
     $("#pres", b).innerHTML = `<div class="muted" style="margin-top:14px"><span class="spin"></span>Analysiere Foto …</div>`;
-    try { photoItems = await analyzePhoto(f); renderPhotoItems(); }
+    try { photoItems = await analyzePhoto(f, ($("#pNote", b).value || "").trim()); renderPhotoItems(); }
     catch (e) { $("#pres", b).innerHTML = `<div class="warn small" style="margin-top:14px">${esc(e.message)}</div>`; }
   };
   $("#cam", b).onclick = () => liveCamera(b, run, () => $("#img", b).click());
@@ -571,9 +574,9 @@ function shrink(file, max = 1280) {
     img.src = u;
   });
 }
-async function analyzePhoto(file) {
+async function analyzePhoto(file, note) {
   const data = await shrink(file);
-  const prompt = `Analysiere dieses Foto (Mahlzeit, Lebensmittel oder Nährwert-Etikett). Erkenne jedes einzelne Lebensmittel, schätze die Menge in Gramm und nenne die Nährwerte pro 100 g. Wenn ein Nährwert-Etikett zu sehen ist, nutze dessen Werte. Antworte ausschließlich mit JSON ohne weiteren Text im Format: {"items":[{"name":"deutscher Name","grams":150,"kcal":120,"protein":5,"carbs":20,"fat":2,"sugar":1,"fiber":3}]}. Alle Nährwerte beziehen sich auf 100 g.`;
+  const prompt = `Analysiere dieses Foto (Mahlzeit, Lebensmittel oder Nährwert-Etikett). Erkenne jedes einzelne Lebensmittel, schätze die Menge in Gramm und nenne die Nährwerte pro 100 g. Wenn ein Nährwert-Etikett zu sehen ist, nutze dessen Werte. Antworte ausschließlich mit JSON ohne weiteren Text im Format: {"items":[{"name":"deutscher Name","grams":150,"kcal":120,"protein":5,"carbs":20,"fat":2,"sugar":1,"fiber":3}]}. Alle Nährwerte beziehen sich auf 100 g.` + (note ? `\n\nZusatzinfos vom Nutzer (verlässlich, haben Vorrang vor deiner Schätzung aus dem Bild, z. B. Gewicht, Zutaten, Zubereitung, Marke): ${note}` : "");
   const body = JSON.stringify({ contents: [{ parts: [{ inline_data: { mime_type: "image/jpeg", data } }, { text: prompt }] }], generationConfig: { responseMimeType: "application/json", maxOutputTokens: 2000 } });
   // Bei Überlastung (503), unbekanntem Modell (404) oder Limit (429) automatisch erneut bzw. mit anderem Modell versuchen
   const models = [...new Set([(D.settings.geminiModel || "gemini-2.5-flash").trim(), "gemini-2.5-flash", "gemini-flash-latest", "gemini-2.5-flash-lite"])];
