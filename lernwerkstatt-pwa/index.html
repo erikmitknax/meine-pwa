@@ -992,6 +992,7 @@ function pdfsFor(topicId){
   return out;
 }
 const openPdf=new Set();
+let renamingPdf=null;
 const fmtSize=n=>n>=1048576?(n/1048576).toFixed(1).replace(".",",")+" MB":Math.max(1,Math.round(n/1024))+" KB";
 function pdfPanel(t){
   const list=t.pdfs||[];
@@ -1008,8 +1009,24 @@ function pdfPanel(t){
     }));
     const ck=el("input",{type:"checkbox","aria-label":"„"+e.name+"“ als erledigt markieren",title:"Als erledigt markieren"});ck.checked=!!e.done;
     ck.addEventListener("change",()=>{e.done=ck.checked;saveMeta();renderLib();toast(e.done?"Als erledigt markiert":"Markierung entfernt")});
+    if(renamingPdf===e.id){
+      const inp=el("input",{type:"text",maxlength:"120","aria-label":"Neuer Name der Datei",style:"flex:1;min-width:0"});inp.value=e.name;
+      const save=()=>{const v=inp.value.trim().replace(/\.pdf$/i,"").slice(0,120);if(!v){toast("Der Name darf nicht leer sein");return}
+        e.name=v;renamingPdf=null;saveMeta();renderLib();toast("Name geändert")};
+      inp.addEventListener("keydown",ev=>{if(ev.key==="Enter"){ev.preventDefault();save()}else if(ev.key==="Escape"){renamingPdf=null;renderLib()}});
+      box.append(el("div",{class:"pdfrow"},
+        el("div",{style:"display:flex;gap:8px;align-items:center;min-width:0;flex:1"},inp),
+        el("div",{class:"row",style:"gap:6px;flex-wrap:nowrap"},
+          el("button",{class:"btn small primary",type:"button",onclick:save},"Speichern"),
+          el("button",{class:"btn small",type:"button",onclick:()=>{renamingPdf=null;renderLib()}},"Abbrechen"))));
+      setTimeout(()=>{inp.focus();inp.select()},30);
+      return;
+    }
+    const ren=el("button",{class:"btn small",type:"button","aria-label":"„"+e.name+"“ umbenennen"},"Umbenennen");
+    ren.addEventListener("click",()=>{renamingPdf=e.id;openPdf.add(t.id);renderLib()});
     box.append(el("div",{class:"pdfrow"+(e.done?" done":"")},
-      el("div",{style:"display:flex;gap:12px;align-items:flex-start;min-width:0"},ck,el("div",{style:"min-width:0"},linkFor(e),el("div",{class:"syncnote",text:fmtSize(e.size||0)+(e.kind==="local"?" · nur auf diesem Gerät":"")+(e.done?" · erledigt":"")}))),del));
+      el("div",{style:"display:flex;gap:12px;align-items:flex-start;min-width:0"},ck,el("div",{style:"min-width:0"},linkFor(e),el("div",{class:"syncnote",text:fmtSize(e.size||0)+(e.kind==="local"?" · nur auf diesem Gerät":"")+(e.done?" · erledigt":"")}))),
+      el("div",{class:"row",style:"gap:6px;flex-wrap:wrap;justify-content:flex-end"},ren,del)));
   });
   if(!list.length)box.append(el("p",{class:"syncnote",text:"Noch keine Unterlagen. Beim Lernen siehst du die PDFs eines Themas und seiner Oberthemen unter der Karte."}));
   const input=el("input",{type:"file",accept:"application/pdf,.pdf",multiple:"",class:"vh","aria-label":"PDF auswählen"});
