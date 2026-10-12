@@ -173,10 +173,10 @@ function viewWeek() {
     const over = r.kcal > g.kcal * 1.1;
     return `<g data-act="goDay" data-d="${r.d}" style="cursor:pointer"><rect x="${x}" y="${H - pad - (r.n ? h : 4)}" width="${bw}" height="${r.n ? h : 4}" rx="10" fill="${r.n ? (over ? "var(--danger)" : "var(--accent)") : "var(--card2)"}"/>
     <text x="${x + bw / 2}" y="${H - 6}" text-anchor="middle" ${r.d === iso(new Date()) ? 'style="fill:var(--text)"' : ""}>${WD[fromIso(r.d).getDay()]}</text>
-    ${r.n ? `<text x="${x + bw / 2}" y="${H - pad - h - 6}" text-anchor="middle" style="fill:var(--text)">${fmt(r.kcal)}</text>` : ""}</g>`;
+    ${r.n ? (h > 44 ? `<text x="${x + bw / 2}" y="${H - pad - h + 15}" text-anchor="middle" style="fill:#fff;font-weight:700;font-size:10px">${fmt(r.kcal)}</text>` : `<text x="${x + bw / 2}" y="${H - pad - h - 6}" text-anchor="middle" style="fill:var(--text)">${fmt(r.kcal)}</text>`) : ""}</g>`;
   }).join("");
   const chart = `<svg viewBox="0 0 ${W} ${H}" width="100%"><line x1="0" x2="${W}" y1="${y(g.kcal)}" y2="${y(g.kcal)}" stroke="var(--muted)" stroke-dasharray="3 5" opacity=".6"/>
-    <text x="${W}" y="${y(g.kcal) - 5}" text-anchor="end">Ziel ${fmt(g.kcal)}</text>${bars}</svg>`;
+${bars}</svg><div class="goalkey"><i></i>Ziel ${fmt(g.kcal)} kcal</div>`;
   // Typische Wochentage (letzte 8 Wochen)
   const today = iso(new Date()), byWd = {};
   for (let i = 0; i < 56; i++) { const d = addDays(today, -i), es = dayEntries(d); if (es.length) (byWd[fromIso(d).getDay()] = byWd[fromIso(d).getDay()] || []).push(sum(es).kcal); }
