@@ -99,6 +99,7 @@ const IC = {
   left: '<path d="m15 6-6 6 6 6"/>',
   right: '<path d="m9 6 6 6-6 6"/>',
   search: '<circle cx="11" cy="11" r="6.5"/><path d="m16 16 4 4"/>',
+  scan: '<path d="M4 8V6a2 2 0 0 1 2-2h2M16 4h2a2 2 0 0 1 2 2v2M20 16v2a2 2 0 0 1-2 2h-2M8 20H6a2 2 0 0 1-2-2v-2M7 12h10"/>',
   cal: '<rect x="4" y="5" width="16" height="15" rx="3"/><path d="M8 3v4M16 3v4M4 10h16"/>',
 };
 const icon = (n, s = 22, w = 2) => `<svg class="ic" width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round">${IC[n]}</svg>`;
@@ -692,7 +693,7 @@ function drawRecipeEditor() {
 
 /* Zutat wählen: Suche in eigener Datenbank und Open Food Facts */
 function foodPicker(onPick, onBack) {
-  const s = sheet(`<h3>Zutat hinzufügen</h3><div class="row"><input type="search" id="zq" placeholder="Name oder Marke …" autocomplete="off"><button class="btn" id="zGo" aria-label="Online suchen">${icon("search", 22)}</button></div>
+  const s = sheet(`<h3>Zutat hinzufügen</h3><div class="row"><input type="search" id="zq" placeholder="Name oder Marke …" autocomplete="off"><button class="btn" id="zGo" aria-label="Online suchen">${icon("search", 22)}</button><button class="btn sec" id="zScan" aria-label="Barcode scannen">${icon("scan", 22)}</button></div>
     <div id="zl"></div><div id="zo"></div>
     <button class="btn sec block" style="margin-top:14px" id="zNew">Neues Lebensmittel anlegen</button>
     <button class="btn sec block" style="margin-top:8px" id="zBack">Zurück zum Rezept</button>`);
@@ -717,11 +718,32 @@ function foodPicker(onPick, onBack) {
   $("#zGo", s).onclick = online;
   q.onkeydown = e => { if (e.key === "Enter") { e.preventDefault(); online(); } };
   $("#zBack", s).onclick = onBack;
-  $("#zNew", s).onclick = () => {
-    const f = sheet(`<h3>Neues Lebensmittel</h3>${foodForm({})}<button class="btn block" style="margin-top:14px" id="nSave">Speichern & Menge wählen</button><button class="btn sec block" style="margin-top:8px" id="nBack">Zurück</button>`);
-    $("#nBack", f).onclick = again;
-    $("#nSave", f).onclick = () => { const n = readFoodForm(f); if (!n) return; D.foods.push(n); save(); pickAmount(n, onPick, again); };
+  $("#zScan", s).onclick = () => pickerScan(onPick, onBack);
+  $("#zNew", s).onclick = () => newFoodSheet(onPick, again, "");
+}
+function newFoodSheet(onPick, again, barcode) {
+  const f = sheet(`<h3>Neues Lebensmittel</h3>${foodForm({ barcode })}<button class="btn block" style="margin-top:14px" id="nSave">Speichern & Menge wählen</button><button class="btn sec block" style="margin-top:8px" id="nBack">Zurück</button>`);
+  $("#nBack", f).onclick = again;
+  $("#nSave", f).onclick = () => { const n = readFoodForm(f); if (!n) return; D.foods.push(n); save(); pickAmount(n, onPick, again); };
+}
+/* Zutat per Barcode: Kamera oder Nummer eintippen */
+function pickerScan(onPick, onBack) {
+  const again = () => foodPicker(onPick, onBack);
+  const s = sheet(`<h3>Zutat scannen</h3><video id="vid" playsinline muted></video><div class="muted small center" id="scanMsg" style="margin:8px 0">Kamera wird gestartet …</div>
+    <label>Oder Barcode eintippen</label><div class="row"><input type="text" inputmode="numeric" id="bc" placeholder="EAN, z. B. 4001234567890"><button class="btn" id="bcGo">Suchen</button></div>
+    <button class="btn sec block" style="margin-top:14px" id="sBack">Zurück zur Suche</button>`);
+  const handle = async code => {
+    stopScan();
+    const m = $("#scanMsg", s); if (m) m.innerHTML = `<span class="spin"></span>Suche ${esc(code)} …`;
+    let f = D.foods.find(x => x.barcode === code), offline = false;
+    if (!f) { try { f = await offBarcode(code); } catch (e) { offline = true; } }
+    if (f) return pickAmount(f, onPick, again);
+    toast(offline ? "Offline oder Fehler. Bitte selbst anlegen." : "Nicht in Open Food Facts. Bitte selbst anlegen.");
+    newFoodSheet(onPick, again, code);
   };
+  $("#bcGo", s).onclick = () => { const c = $("#bc", s).value.replace(/\D/g, ""); if (c.length >= 6) handle(c); else toast("Barcode zu kurz"); };
+  $("#sBack", s).onclick = again;
+  startScan($("#vid", s), handle, msg => { const m = $("#scanMsg", s); if (m) m.textContent = msg; });
 }
 function pickAmount(food, onPick, onBack) {
   if (!food) return;
