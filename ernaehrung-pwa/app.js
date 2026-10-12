@@ -145,7 +145,7 @@ function viewToday() {
   const full = fromIso(ui.date).toLocaleDateString("de-DE", { day: "numeric", month: "short" });
   return `<header class="top"><div class="brand"><img class="logo" src="icons/logo.svg" alt="">FoodPro</div><button class="ghost" data-act="pickDate" aria-label="Datum wählen">${icon("cal", 20)}</button></header>
   ${weekStrip()}
-  <section class="hero" data-act="dayChart" role="button" tabindex="0" aria-label="Tagesübersicht öffnen"><div class="ht"><span>${niceDate(ui.date) === full ? full : niceDate(ui.date) + ", " + full}</span><span class="hchev">Ziel ${fmt(g.kcal)} ${icon("right", 16, 2.4)}</span></div>
+  <section class="hero ${g.kcal > 0 && t.kcal >= g.kcal ? "over" : ""}" data-act="dayChart" role="button" tabindex="0" aria-label="Tagesübersicht öffnen"><div class="ht"><span>${niceDate(ui.date) === full ? full : niceDate(ui.date) + ", " + full}</span><span class="hchev">Ziel ${fmt(g.kcal)} ${icon("right", 16, 2.4)}</span></div>
     <div class="hn"><b>${fmt(Math.abs(left))}</b><span>${left >= 0 ? "kcal übrig" : "kcal drüber"}</span></div>
     <div class="hbar"><i style="width:${pct}%"></i></div><div class="hf">${fmt(t.kcal)} kcal gegessen</div></section>
   <section class="macros" data-act="dayChart" role="button" tabindex="0" aria-label="Tagesübersicht öffnen">${macroCol("Eiweiß", t.p, g.p, "p")}${macroCol("Kohlenhydrate", t.c, g.c, "c")}${macroCol("Fett", t.f, g.f, "f")}</section>

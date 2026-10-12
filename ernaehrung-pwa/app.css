@@ -231,3 +231,7 @@ textarea::placeholder{color:var(--muted);opacity:.8}
 .steps{margin:14px 0 0;padding:12px 14px;border-radius:16px;background:var(--card2);font-size:13.5px;line-height:1.45}
 .steps ol{margin:6px 0 0;padding-left:20px}.steps li{margin:5px 0}
 .steps a{color:var(--accent);font-weight:600}
+
+.hero{transition:background .4s,box-shadow .4s}
+.hero.over{background:#e5483d;color:#fff;box-shadow:0 18px 36px -18px rgba(229,72,61,.8)}
+.hero.over .hbar i{background:#fff}
