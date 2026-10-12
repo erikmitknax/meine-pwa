@@ -1241,7 +1241,14 @@ document.addEventListener("click", async ev => {
   const a = t.dataset.act;
   if (a === "day") { ui.date = addDays(ui.date, +t.dataset.d); render(); }
   else if (a === "setDay") { ui.date = t.dataset.d; render(); }
-  else if (a === "pickDate") { const i = document.createElement("input"); i.type = "date"; i.value = ui.date; i.style.cssText = "position:fixed;opacity:0;top:0"; document.body.append(i); i.onchange = () => { if (i.value) { ui.date = i.value; render(); } i.remove(); }; i.onblur = () => setTimeout(() => i.remove(), 300); (i.showPicker ? i.showPicker() : i.click()); }
+  else if (a === "pickDate") {
+    const sh = sheet(`<h3>Tag wählen</h3><div class="muted small" style="margin-bottom:10px">Springe zu einem beliebigen Datum, um Einträge anzusehen oder nachzutragen.</div>
+      <input type="date" id="pdDate" value="${ui.date}" max="2100-12-31"><div class="grid2" style="margin-top:14px"><button class="btn sec" id="pdToday">Heute</button><button class="btn" id="pdGo">Anzeigen</button></div>`);
+    const go = v => { if (v) { ui.date = v; closeSheet(); render(); } };
+    $("#pdGo", sh).onclick = () => go($("#pdDate", sh).value);
+    $("#pdToday", sh).onclick = () => go(iso(new Date()));
+    $("#pdDate", sh).onchange = e => go(e.target.value);
+  }
   else if (a === "toggleMeal") { ui.open[t.dataset.meal] = !ui.open[t.dataset.meal]; render(); }
   else if (a === "add") openAdd(t.dataset.meal);
   else if (a === "editEntry") editEntry(t.dataset.id);
