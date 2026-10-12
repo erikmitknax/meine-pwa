@@ -1274,5 +1274,9 @@ buildNav();
 applyTheme();
 if (window.matchMedia) matchMedia("(prefers-color-scheme: light)").addEventListener?.("change", () => { if (D.settings.mode === "auto") applyTheme(); });
 render();
-if ("serviceWorker" in navigator && location.protocol.startsWith("http")) navigator.serviceWorker.register("sw.js").catch(() => { });
+if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
+  const had = !!navigator.serviceWorker.controller; let rl = false;
+  navigator.serviceWorker.addEventListener("controllerchange", () => { if (had && !rl) { rl = true; location.reload(); } });
+  navigator.serviceWorker.register("sw.js").then(r => r.update()).catch(() => { });
+}
 window.__ern = { parseFoodsText, get D() { return D; }, importCsv, importAny: importAnyCsv, parseCsv, foodsToCsv, mapOff };
