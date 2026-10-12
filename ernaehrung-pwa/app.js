@@ -19,7 +19,7 @@ const DEFAULTS = () => ({
   settings: { kcal: 2200, pP: 30, pC: 40, pF: 30, mode: "auto", accent: "#12935f", apiKey: "", model: "claude-sonnet-5-5", goalWeight: "" },
 });
 let D = load();
-let ui = { tab: "today", date: iso(new Date()), weekOffset: 0, wRange: 90, meal: "b" };
+let ui = { tab: "today", date: iso(new Date()), weekOffset: 0, wRange: 90, meal: "b", open: {} };
 
 function load() {
   try {
@@ -134,10 +134,11 @@ function viewToday() {
   const left = g.kcal - t.kcal, pct = g.kcal > 0 ? Math.min(t.kcal / g.kcal * 100, 100) : 0;
   const meals = MEALS.map(m => {
     const es = list.filter(e => e.meal === m.id), s = sum(es);
-    return `<section class="meal"><div class="mh"><h3>${m.name}</h3>${es.length ? `<span class="kc">${fmt(s.kcal)} kcal</span>` : ""}<button class="addbtn" data-act="add" data-meal="${m.id}" aria-label="${m.name} hinzufügen">${icon("plus", 18, 2.6)}</button></div>` +
-      (es.length ? `<div class="list">${es.map(e => `<div class="entry" data-act="editEntry" data-id="${e.id}"><div class="nm"><div class="t">${esc(e.name)}</div>
+    const op = !!ui.open[m.id] && es.length > 0;
+    return `<section class="meal ${op ? "open" : ""}"><div class="mh ${es.length ? "tg" : ""}" ${es.length ? `data-act="toggleMeal" data-meal="${m.id}" role="button" tabindex="0" aria-expanded="${op}"` : ""}><h3>${m.name}${es.length ? `<span class="cnt">${es.length}</span>` : ""}</h3>${es.length ? `<span class="kc">${fmt(s.kcal)} kcal</span><span class="chev">${icon("right", 16, 2.4)}</span>` : ""}<button class="addbtn" data-act="add" data-meal="${m.id}" aria-label="${m.name} hinzufügen">${icon("plus", 18, 2.6)}</button></div>` +
+      (es.length ? (op ? `<div class="list">${es.map(e => `<div class="entry" data-act="editEntry" data-id="${e.id}"><div class="nm"><div class="t">${esc(e.name)}</div>
         <div class="s"><span class="g">${r0(e.grams)} g</span><span class="cp">E ${r0(e.p)}</span><span class="cc">KH ${r0(e.c)}</span><span class="cf">F ${r0(e.f)}</span></div></div>
-        <div class="kcal">${fmt(e.kcal)}<small>kcal</small></div></div>`).join("")}</div>${es.length > 1 ? `<button class="linkbtn" data-act="mealToRecipe" data-meal="${m.id}">Als Rezept speichern</button>` : ""}`
+        <div class="kcal">${fmt(e.kcal)}<small>kcal</small></div></div>`).join("")}</div>${es.length > 1 ? `<button class="linkbtn" data-act="mealToRecipe" data-meal="${m.id}">Als Rezept speichern</button>` : ""}` : "")
         : `<button class="empty" data-act="add" data-meal="${m.id}">${icon("plus", 18, 2.4)}${m.name} eintragen</button>`) + `</section>`;
   }).join("");
   const full = fromIso(ui.date).toLocaleDateString("de-DE", { day: "numeric", month: "short" });
@@ -1204,6 +1205,7 @@ document.addEventListener("click", async ev => {
   if (a === "day") { ui.date = addDays(ui.date, +t.dataset.d); render(); }
   else if (a === "setDay") { ui.date = t.dataset.d; render(); }
   else if (a === "pickDate") { const i = document.createElement("input"); i.type = "date"; i.value = ui.date; i.style.cssText = "position:fixed;opacity:0;top:0"; document.body.append(i); i.onchange = () => { if (i.value) { ui.date = i.value; render(); } i.remove(); }; i.onblur = () => setTimeout(() => i.remove(), 300); (i.showPicker ? i.showPicker() : i.click()); }
+  else if (a === "toggleMeal") { ui.open[t.dataset.meal] = !ui.open[t.dataset.meal]; render(); }
   else if (a === "add") openAdd(t.dataset.meal);
   else if (a === "editEntry") editEntry(t.dataset.id);
   else if (a === "wk") { ui.weekOffset = Math.min(0, ui.weekOffset + +t.dataset.d); render(); }

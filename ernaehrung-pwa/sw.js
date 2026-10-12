@@ -1,6 +1,6 @@
 // Netz zuerst (Updates kommen ohne Neuinstallation), sonst Cache -> App startet auch offline.
 // VERSION nur hochzählen, wenn sich die Dateiliste ändert.
-const VERSION = 'ern-v6';
+const VERSION = 'ern-v7';
 const SHELL = ['./', './index.html', './app.css', './app.js', './manifest.webmanifest', './lib/zxing.min.js', './fonts/bricolage-grotesque-latin-wght-normal.woff2',
   './icons/logo.svg', './icons/icon-192.png', './icons/icon-512.png', './icons/icon-maskable-512.png', './icons/apple-touch-icon.png'];
 
