@@ -599,12 +599,30 @@ function shrink(file, max = 1280) {
     img.src = u;
   });
 }
+const PHOTO_SCHEMA = { type: "OBJECT", properties: { items: { type: "ARRAY", items: { type: "OBJECT", properties: {
+  name: { type: "STRING" }, grams: { type: "NUMBER" }, kcal: { type: "NUMBER" }, protein: { type: "NUMBER" }, carbs: { type: "NUMBER" }, fat: { type: "NUMBER" }, sugar: { type: "NUMBER" }, fiber: { type: "NUMBER" } },
+  required: ["name", "grams", "kcal", "protein", "carbs", "fat"] } } }, required: ["items"] };
+/* tolerant: Dezimalkommas, hängende Kommas, abgeschnittene Antworten reparieren */
+function parseAiJson(txt) {
+  let t = String(txt || "").replace(/```(?:json)?/gi, "");
+  const a = t.indexOf("{"); if (a < 0) throw new Error("Antwort der KI war nicht lesbar");
+  t = t.slice(a);
+  const tries = [t.slice(0, t.lastIndexOf("}") + 1)];
+  const fixed = x => x.replace(/(\d),(\d)/g, "$1.$2").replace(/,\s*([}\]])/g, "$1");
+  tries.push(fixed(tries[0]));
+  // abgeschnitten: nach dem letzten vollständigen Eintrag schließen
+  const cut = t.lastIndexOf("}");
+  if (cut > 0) tries.push(fixed(t.slice(0, cut + 1)) + "]}", fixed(t.slice(0, cut + 1)) + "}");
+  for (const c of tries) { try { const j = JSON.parse(c); if (j && Array.isArray(j.items)) return j; } catch (e) { /* nächster Versuch */ } }
+  throw new Error("Antwort der KI war nicht lesbar. Bitte nochmal versuchen.");
+}
 async function analyzePhoto(file, note) {
   const data = await shrink(file, 1024);
-  const prompt = `Analysiere dieses Foto (Mahlzeit, Lebensmittel oder Nährwert-Etikett). Erkenne jedes einzelne Lebensmittel, schätze die Menge in Gramm und nenne die Nährwerte pro 100 g. Wenn ein Nährwert-Etikett zu sehen ist, nutze dessen Werte. Antworte ausschließlich mit JSON ohne weiteren Text im Format: {"items":[{"name":"deutscher Name","grams":150,"kcal":120,"protein":5,"carbs":20,"fat":2,"sugar":1,"fiber":3}]}. Alle Nährwerte beziehen sich auf 100 g.` + (note ? `\n\nZusatzinfos vom Nutzer (verlässlich, haben Vorrang vor deiner Schätzung aus dem Bild, z. B. Gewicht, Zutaten, Zubereitung, Marke): ${note}` : "");
-  const bodyFor = model => JSON.stringify({ contents: [{ parts: [{ inline_data: { mime_type: "image/jpeg", data } }, { text: prompt }] }],
+  const prompt = `Analysiere dieses Foto (Mahlzeit, Lebensmittel oder Nährwert-Etikett). Erkenne jedes einzelne Lebensmittel, schätze die Menge in Gramm und nenne die Nährwerte pro 100 g. Wenn ein Nährwert-Etikett zu sehen ist, nutze dessen Werte. Antworte ausschließlich mit JSON ohne weiteren Text im Format: {"items":[{"name":"deutscher Name","grams":150,"kcal":120,"protein":5,"carbs":20,"fat":2,"sugar":1,"fiber":3}]}. Alle Nährwerte beziehen sich auf 100 g. Zahlen immer als JSON-Zahlen mit Punkt als Dezimaltrennzeichen (z. B. 5.5, niemals 5,5).` + (note ? `\n\nZusatzinfos vom Nutzer (verlässlich, haben Vorrang vor deiner Schätzung aus dem Bild, z. B. Gewicht, Zutaten, Zubereitung, Marke): ${note}` : "");
+  let lean = false; // bei Ablehnung von Schema/Denk-Einstellung ohne diese Extras erneut versuchen
+  const bodyFor = model => lean ? JSON.stringify({ contents: [{ parts: [{ inline_data: { mime_type: "image/jpeg", data } }, { text: prompt }] }], generationConfig: { responseMimeType: "application/json", maxOutputTokens: 1500 } }) : JSON.stringify({ contents: [{ parts: [{ inline_data: { mime_type: "image/jpeg", data } }, { text: prompt }] }],
     // „Nachdenken“ abschalten (Gemini 2.5 Flash): deutlich schneller, für diese Aufgabe reicht es
-    generationConfig: { responseMimeType: "application/json", maxOutputTokens: 1500, temperature: 0.2, ...(/2\.5-flash(?!-lite)/.test(model) ? { thinkingConfig: { thinkingBudget: 0 } } : {}) } });
+    generationConfig: { responseMimeType: "application/json", responseSchema: PHOTO_SCHEMA, maxOutputTokens: 1500, temperature: 0.2, ...(/2\.5-flash(?!-lite)/.test(model) ? { thinkingConfig: { thinkingBudget: 0 } } : {}) } });
   // Bei Überlastung (503), unbekanntem Modell (404) oder Limit (429) automatisch erneut bzw. mit anderem Modell versuchen
   const models = [...new Set([(D.settings.geminiModel || "gemini-2.5-flash").trim(), "gemini-2.5-flash", "gemini-flash-latest", "gemini-2.5-flash-lite"])];
   let r, j, lastErr = "", net = false;
@@ -619,6 +637,7 @@ async function analyzePhoto(file, note) {
       if (r.ok) break;
       lastErr = r.status + ((j.error && j.error.message) ? ": " + j.error.message : "");
       if (r.status === 401 || r.status === 403 || (r.status === 400 && /API key/i.test(lastErr))) throw new Error("Der Gemini-Schlüssel wird nicht akzeptiert. Prüfe ihn in den Einstellungen.");
+      if (r.status === 400 && !lean) { lean = true; attempt = -1; continue; }
       if (r.status === 400) throw new Error("KI-Fehler " + lastErr);
       if (r.status === 503 || r.status === 500 || r.status === 502 || r.status === 504) { if (attempt === 0) { $("#pres") && ($("#pres").innerHTML = `<div class="muted" style="margin-top:14px"><span class="spin"></span>Gemini ist ausgelastet – neuer Versuch …</div>`); await new Promise(res => setTimeout(res, 1800)); continue; } }
       break; // 404/429/anderes: nächstes Modell
@@ -629,9 +648,7 @@ async function analyzePhoto(file, note) {
   if (net && !(r && r.ok)) throw new Error("Keine Verbindung zur KI. Bist du online?");
   if (!r || !r.ok) throw new Error(!r && lastErr === "Zeitüberschreitung" ? "Gemini antwortet gerade zu langsam. Bitte gleich nochmal versuchen." : r && (r.status === 503 || r.status === 500) ? "Gemini ist gerade überlastet (Google-Seite). Bitte in ein bis zwei Minuten nochmal versuchen." : r && r.status === 429 ? "Das kostenlose Limit ist gerade erreicht. Warte kurz und versuche es erneut." : "KI-Fehler " + lastErr);
   const txt = ((((j.candidates || [])[0] || {}).content || {}).parts || []).map(c => c.text || "").join("");
-  const m = txt.match(/\{[\s\S]*\}/);
-  if (!m) throw new Error("Antwort der KI war nicht lesbar");
-  const items = (JSON.parse(m[0]).items || []).filter(i => i && i.name);
+  const items = (parseAiJson(txt).items || []).filter(i => i && i.name);
   if (!items.length) throw new Error("Es wurde nichts erkannt. Versuche ein schärferes Foto.");
   return items.map(i => ({ name: String(i.name), grams: Math.max(1, num(i.grams) || 100), kcal: num(i.kcal), protein: num(i.protein), carbs: num(i.carbs), fat: num(i.fat), sugar: num(i.sugar), fiber: num(i.fiber), on: true }));
 }
