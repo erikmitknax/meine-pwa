@@ -4,6 +4,15 @@
    unter users/<uid>/<typ>/<id> = { d: Daten, u: Zeitstempel, del: gelöscht? }. Letzte Änderung gewinnt. */
 const SYK = "foodpro.sync";
 const SY_V = "10.14.1";
+/* Öffentliche Web-Konfiguration des Firebase-Projekts (kein Geheimnis – geschützt wird über Anmeldung + Firestore-Regeln). */
+const SY_DEFAULT_CFG = {
+  apiKey: "AIzaSyAlCKl6VVzqbLOoYMD1zlswFDLt47sI_2I",
+  authDomain: "foodpro-e2a44.firebaseapp.com",
+  projectId: "foodpro-e2a44",
+  storageBucket: "foodpro-e2a44.firebasestorage.app",
+  messagingSenderId: "803117480250",
+  appId: "1:803117480250:web:0f54697c6e1ac470ae3803",
+};
 const SY = { cfg: null, uid: "", meta: {}, last: 0, user: null, fb: null, ready: false, pushing: false, again: false, unsub: [], err: "", state: "off", t: null, rt: null };
 const SYT = {
   foods: () => D.foods.map(f => [f.id, f]),
@@ -186,12 +195,12 @@ function syPanel() {
   }
   if (!SY.user) {
     const st = SY.state === "connect" ? `<div class="muted small" style="margin-top:12px"><span class="spin"></span>Verbinde …</div>` : "";
-    return `<div class="panel"><div class="muted small" style="margin-top:14px">Projekt: <b>${esc(SY.cfg.projectId)}</b>. Melde dich mit E-Mail und Passwort an. Auf dem ersten Gerät erstellst du das Konto, auf allen weiteren meldest du dich mit denselben Daten an.</div>
+    return `<div class="panel"><div class="muted small" style="margin-top:14px">Melde dich mit E-Mail und Passwort an. Auf dem ersten Gerät erstellst du das Konto („Konto erstellen“), auf allen weiteren meldest du dich mit denselben Daten an („Anmelden“).</div>
       <label>E-Mail</label><input type="email" id="syMail" autocomplete="email" inputmode="email">
       <label>Passwort (mind. 6 Zeichen)</label><input type="password" id="syPass" autocomplete="current-password">
       <div class="grid2" style="margin-top:14px"><button class="btn" data-act="syLogin">Anmelden</button><button class="btn sec" data-act="syRegister">Konto erstellen</button></div>
       <button class="linkbtn" data-act="syForgot">Passwort vergessen?</button>${st}${SY.err ? `<div class="status err">${esc(SY.err)}</div>` : ""}
-      <button class="linkbtn" data-act="syCfgReset">Projekt-Daten ändern</button></div>`;
+      </div>`;
   }
   const label = SY.state === "live" ? `<div class="dbx-state"><i></i>Echtzeit aktiv</div>` : SY.state === "sync" ? `<div class="muted"><span class="spin"></span>Gleiche ab …</div>` : `<div class="warn small">Nicht verbunden</div>`;
   return `<div class="panel"><div style="margin-top:14px">${label}</div>
@@ -231,4 +240,5 @@ document.addEventListener("click", async ev => {
 });
 window.addEventListener("online", () => { if (SY.cfg && !SY.fb) syInit(); });
 syLoad();
-if (SY.cfg) syInit();
+if (!SY.cfg) SY.cfg = SY_DEFAULT_CFG;
+if (SY.uid) syInit(); // nur starten, wenn auf diesem Gerät schon angemeldet; sonst erst beim Anmelden
