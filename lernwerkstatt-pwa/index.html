@@ -77,7 +77,7 @@ section[hidden]{display:none}
 .btn.danger{color:var(--bad)}
 .btn.small{padding:5px 10px;font-size:.85rem}
 .btn:disabled{opacity:.45;cursor:not-allowed}
-input[type=text],input[type=number],select,textarea{width:100%;background:var(--bg);border:1px solid var(--line);border-radius:9px;padding:9px 12px}
+input[type=text],input[type=number],input[type=email],input[type=password],select,textarea{width:100%;background:var(--bg);border:1px solid var(--line);border-radius:9px;padding:9px 12px}
 textarea{resize:vertical;min-height:84px}
 label{display:grid;gap:5px;font-size:.85rem;font-weight:600;color:var(--muted)}
 .empty{color:var(--muted);padding:18px;text-align:center;border:1px dashed var(--line);border-radius:var(--r)}
@@ -421,6 +421,9 @@ html.pv-lock,html.pv-lock body{overflow:hidden}
       <p class="syncnote" style="margin-top:0">Hake an, welche Reiter du siehst, ändere ihre Namen und lege mit den Pfeilen die Reihenfolge fest. Ein leeres Namensfeld stellt den Originalnamen wieder her.</p>
       <div class="grid" id="tabOpts" style="gap:8px;margin-top:8px"></div>
     </div>
+    <div data-acc="konto" data-title="Konto &amp; Echtzeit-Sync">
+      <div class="grid" id="setKonto" style="gap:10px"></div>
+    </div>
     <div data-acc="sich" data-title="Sicherung und Export">
       <div class="grid" id="setSich" style="gap:10px"></div>
     </div>
@@ -538,8 +541,8 @@ function syncNote(t){$("#syncNote").textContent=t}
 function lsWrite(){try{localStorage.setItem(LS,JSON.stringify(S))}catch(e){}}
 function metaBody(){const m=clone(S);delete m.decks;return m}
 function queue(id){if(mode!=="cloud")return;dirty.add(id);clearTimeout(flushTimer);flushTimer=setTimeout(flush,700)}
-function saveMeta(){lsWrite();queue("_meta");queueBackup()}
-function saveDeck(d){lsWrite();queue(d.id);queueBackup()}
+function saveMeta(){lsWrite();queue("_meta");queueBackup();fbOnSave()}
+function saveDeck(d){lsWrite();queue(d.id);queueBackup();fbOnSave()}
 async function putDoc(id,body){
   try{await col().doc(id).set(clone(body))}
   catch(e){
@@ -1883,6 +1886,179 @@ function applyRestore(plan){
   });
   normalize();saveMeta();
 }
+/* ---------- Firebase-Konto & Echtzeit-Sync (wie FoodPro) ----------
+   Gleiches Firebase-Projekt wie FoodPro (Anmeldung per E-Mail/Passwort + Firestore).
+   Lokal zuerst: alles liegt weiter im Gerät, Firebase gleicht nur ab. Dokumente:
+   users/<uid>/lw_meta/main  und  users/<uid>/lw_decks/<stapel-id>  = { j: JSON-Text, u: Zeitstempel, del } */
+const FBK="lernwerkstatt.fb",FB_V="10.14.1";
+const FB_CFG={apiKey:"AIzaSyAlCKl6VVzqbLOoYMD1zlswFDLt47sI_2I",authDomain:"foodpro-e2a44.firebaseapp.com",projectId:"foodpro-e2a44",storageBucket:"foodpro-e2a44.firebasestorage.app",messagingSenderId:"803117480250",appId:"1:803117480250:web:0f54697c6e1ac470ae3803"};
+const FB={uid:"",meta:{},last:0,user:null,m:null,ready:false,pushing:false,again:false,unsub:[],err:"",state:"off",t:null,rt:null};
+try{const j=JSON.parse(localStorage.getItem(FBK)||"null");if(j){FB.uid=j.uid||"";FB.meta=j.meta||{};FB.last=j.last||0}}catch(e){}
+function fbSave(){try{localStorage.setItem(FBK,JSON.stringify({uid:FB.uid,meta:FB.meta,last:FB.last}))}catch(e){}}
+function fbStable(v){
+  if(v===null||typeof v!=="object")return JSON.stringify(v);
+  if(Array.isArray(v))return "["+v.map(fbStable).join(",")+"]";
+  return "{"+Object.keys(v).filter(k=>v[k]!==undefined).sort().map(k=>JSON.stringify(k)+":"+fbStable(v[k])).join(",")+"}";
+}
+function fbH(v){const s=fbStable(v);let h=5381;for(let i=0;i<s.length;i++)h=((h<<5)+h+s.charCodeAt(i))|0;return h}
+const FT={lw_meta:()=>[["main",metaBody()]],lw_decks:()=>S.decks.map(d=>[d.id,d])};
+const fbIsSample=()=>S.topics.length>0&&S.topics.every(t=>/^Beispiel:/.test(t.name))&&S.decks.every(d=>["Zellorganellen","Vokabeln B2"].includes(d.title));
+function fbLocalHash(t,id){
+  if(t==="lw_meta")return fbH(metaBody());
+  const d=S.decks.find(x=>x.id===id);return d?fbH(d):undefined;
+}
+function fbMergeMeta(local,remote){
+  const out=clone(remote);
+  const byId=(a,b)=>{const m=new Map();(a||[]).forEach(x=>x&&x.id&&m.set(x.id,x));(b||[]).forEach(x=>x&&x.id&&m.set(x.id,x));return [...m.values()]};
+  out.topics=byId(local.topics,remote.topics);out.sets=byId(local.sets,remote.sets);
+  out.log=Object.assign({},remote.log||{});
+  Object.keys(local.log||{}).forEach(k=>{const a=local.log[k]||{},b=out.log[k]||{};out.log[k]={r:Math.max(a.r||0,b.r||0),q:Math.max(a.q||0,b.q||0),f:Math.max(a.f||0,b.f||0)}});
+  return out;
+}
+function fbApply(t,id,doc){
+  let data=null;
+  if(!doc.del){try{data=JSON.parse(doc.j)}catch(e){return false}}
+  if(t==="lw_meta"){
+    if(doc.del||!data)return false;
+    const first=!FB.meta["lw_meta/main"];
+    const body=first?fbMergeMeta(metaBody(),data):data;
+    S=Object.assign(body,{decks:S.decks});
+  }else{
+    const i=S.decks.findIndex(x=>x.id===id);
+    if(doc.del){if(i>=0)S.decks.splice(i,1)}
+    else if(data&&Array.isArray(data.cards)){if(i>=0)S.decks[i]=data;else S.decks.push(data)}
+  }
+  return true;
+}
+function fbRemote(t,id,doc){
+  if(!doc||typeof doc.u!=="number")return false;
+  const k=t+"/"+id,m=FB.meta[k];
+  if(m&&m.u>=doc.u)return false;
+  if(m&&!m.del&&fbLocalHash(t,id)!==m.h)return false;
+  if(!Object.keys(FB.meta).length&&fbIsSample()){S.decks=[];S.topics=[];S.sets=[]}
+  if(!fbApply(t,id,doc))return false;
+  FB.meta[k]=doc.del?{u:doc.u,h:null,del:true}:{u:doc.u,h:fbLocalHash(t,id)};
+  return true;
+}
+function fbDiff(){
+  const ops=[],now=Date.now(),seen=new Set();
+  Object.keys(FT).forEach(t=>FT[t]().forEach(([id,item])=>{
+    const k=t+"/"+id;seen.add(k);const h=fbH(item),m=FB.meta[k];
+    if(!m||m.h!==h){const u=Math.max(now,(m?m.u:0)+1);ops.push({t,id,k,doc:{j:JSON.stringify(item),u,del:false},m:{u,h}})}
+  }));
+  Object.keys(FB.meta).forEach(k=>{
+    if(seen.has(k)||FB.meta[k].del)return;
+    const i=k.indexOf("/"),u=Math.max(now,FB.meta[k].u+1);
+    ops.push({t:k.slice(0,i),id:k.slice(i+1),k,doc:{del:true,u},m:{u,h:null,del:true}});
+  });
+  return ops;
+}
+async function fbInit(){
+  if(FB.m)return;
+  try{
+    FB.state="connect";fbRefresh();
+    const base="https://www.gstatic.com/firebasejs/"+FB_V+"/";
+    const [app,auth,fs]=await Promise.all([import(base+"firebase-app.js"),import(base+"firebase-auth.js"),import(base+"firebase-firestore.js")]);
+    const a=app.initializeApp(FB_CFG,"lernwerkstatt");
+    const au=auth.getAuth(a),dbs=fs.initializeFirestore(a,{experimentalAutoDetectLongPolling:true});
+    FB.m={auth,fs,au,dbs};
+    auth.onAuthStateChanged(au,u=>{FB.user=u;if(u)fbStart(u);else{fbStop();FB.state="login";fbRefresh()}});
+  }catch(e){FB.m=null;FB.state="error";FB.err="Verbindung zu Firebase nicht möglich (offline?).";fbRefresh()}
+}
+function fbStop(){FB.unsub.forEach(u=>{try{u()}catch(e){}});FB.unsub=[];FB.ready=false;clearTimeout(FB.t)}
+async function fbStart(user){
+  fbStop();
+  if(FB.uid!==user.uid){FB.meta={};FB.uid=user.uid;fbSave()}
+  FB.state="sync";FB.err="";fbRefresh();
+  const {fs,dbs}=FB.m,types=Object.keys(FT);
+  let pending=types.length,done;const first=new Promise(r=>{done=r});
+  types.forEach(t=>{
+    let got=false;
+    const un=fs.onSnapshot(fs.collection(dbs,"users",user.uid,t),snap=>{
+      let changed=false;
+      /* Stapel zuerst, Meta zuletzt: so ist der Erstabgleich der Themen vollständig */
+      snap.docChanges().forEach(ch=>{if(ch.type!=="removed"&&fbRemote(t,ch.doc.id,ch.doc.data()))changed=true});
+      if(changed)fbChanged();
+      if(!got){got=true;if(--pending===0)done()}
+    },err=>{FB.err=err.code==="permission-denied"?"Keine Berechtigung. Prüfe die Firestore-Regeln im Firebase-Projekt.":(err.message||"Abgleich-Fehler");FB.state="error";fbRefresh();if(!got){got=true;if(--pending===0)done()}});
+    FB.unsub.push(un);
+  });
+  await first;
+  if(FB.state==="error")return;
+  FB.ready=true;FB.state="live";
+  await fbPush();
+  FB.last=Date.now();fbSave();fbRefresh();
+}
+function fbChanged(){
+  normalize();lsWrite();fbSave();applyTheme();
+  const a=document.activeElement;
+  if(a&&/INPUT|TEXTAREA|SELECT/.test(a.tagName)&&!$("#setKonto").contains(a)){clearTimeout(FB.rt);FB.rt=setTimeout(fbChanged,1500);return}
+  renderAll();if(curTab==="einst")renderSettings();
+}
+async function fbPush(){
+  if(!FB.ready)return;
+  if(FB.pushing){FB.again=true;return}
+  const ops=fbDiff();if(!ops.length)return;
+  FB.pushing=true;
+  try{
+    const {fs,dbs}=FB.m;
+    for(let i=0;i<ops.length;i+=200){
+      const batch=fs.writeBatch(dbs),part=ops.slice(i,i+200);
+      part.forEach(o=>batch.set(fs.doc(dbs,"users",FB.uid,o.t,o.id),o.doc));
+      await batch.commit();
+      part.forEach(o=>{FB.meta[o.k]=o.m});
+    }
+    FB.last=Date.now();FB.err="";fbSave();
+  }catch(e){FB.err=/exceeds|too large|size/i.test(e.message||"")?"Ein Stapel ist für die Online-Speicherung zu groß. Teile ihn in kleinere Stapel.":"Hochladen fehlgeschlagen: "+(e.message||e)}
+  FB.pushing=false;
+  if(FB.again){FB.again=false;fbOnSave()}
+  fbRefresh();
+}
+function fbOnSave(){if(!FB.ready)return;clearTimeout(FB.t);FB.t=setTimeout(fbPush,1200)}
+addEventListener("online",()=>{if(FB.uid&&!FB.m)fbInit()});
+document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="hidden"&&FB.ready){clearTimeout(FB.t);fbPush()}});
+
+/* ---- Oberfläche ---- */
+function fbRefresh(){
+  if(typeof curTab==="undefined"||curTab!=="einst")return;
+  const a=document.activeElement;if(a&&$("#setKonto").contains(a)&&/INPUT/.test(a.tagName)&&!FB.user)return;
+  renderKonto();
+}
+const fbMsg=c=>({"auth/invalid-email":"Ungültige E-Mail-Adresse.","auth/missing-password":"Bitte Passwort eingeben.","auth/weak-password":"Das Passwort ist zu kurz (mindestens 6 Zeichen).","auth/email-already-in-use":"Für diese E-Mail gibt es schon ein Konto. Bitte „Anmelden“.","auth/invalid-credential":"E-Mail oder Passwort stimmt nicht.","auth/wrong-password":"E-Mail oder Passwort stimmt nicht.","auth/user-not-found":"Dazu gibt es noch kein Konto. Bitte „Konto erstellen“.","auth/network-request-failed":"Keine Verbindung. Bist du online?","auth/operation-not-allowed":"E-Mail/Passwort ist im Firebase-Projekt nicht aktiviert.","auth/too-many-requests":"Zu viele Versuche. Bitte kurz warten."}[c]||"Das hat nicht geklappt ("+c+").");
+function renderKonto(){
+  const root=$("#setKonto");if(!root)return;root.replaceChildren();
+  const ago=FB.last?new Date(FB.last).toLocaleString("de-DE",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"}):"";
+  const err=()=>FB.err?el("div",{class:"status err",text:FB.err}):"";
+  if(!FB.user){
+    accSum("konto",FB.uid?"Verbinde …":"nicht angemeldet");
+    const mail=el("input",{type:"email",id:"fbMail",autocomplete:"email",inputmode:"email","aria-label":"E-Mail"}),pw=el("input",{type:"password",id:"fbPass",autocomplete:"current-password","aria-label":"Passwort"});
+    const go=async reg=>{
+      const m=mail.value.trim(),p=pw.value;if(!m||!p)return toast("Bitte E-Mail und Passwort eingeben");
+      if(!FB.m){await fbInit();if(!FB.m)return toast(FB.err||"Keine Verbindung")}
+      try{FB.err="";reg?await FB.m.auth.createUserWithEmailAndPassword(FB.m.au,m,p):await FB.m.auth.signInWithEmailAndPassword(FB.m.au,m,p)}
+      catch(e){FB.err=fbMsg(e.code);renderKonto()}
+    };
+    const login=el("button",{class:"btn primary",type:"button"},"Anmelden"),reg=el("button",{class:"btn",type:"button"},"Konto erstellen"),forgot=el("button",{class:"btn small",type:"button"},"Passwort vergessen?");
+    login.addEventListener("click",()=>go(false));reg.addEventListener("click",()=>go(true));
+    forgot.addEventListener("click",async()=>{
+      const m=mail.value.trim();if(!m)return toast("Gib oben deine E-Mail ein");
+      if(!FB.m){await fbInit();if(!FB.m)return toast("Keine Verbindung")}
+      try{await FB.m.auth.sendPasswordResetEmail(FB.m.au,m);toast("E-Mail zum Zurücksetzen gesendet")}catch(e){toast(fbMsg(e.code))}
+    });
+    root.append(el("p",{class:"syncnote",text:"Melde dich an, damit Karten, Themen und Lernfortschritt live auf allen deinen Geräten erscheinen. Auf dem ersten Gerät „Konto erstellen“, danach überall „Anmelden“. Du kannst dasselbe Konto wie in FoodPro nutzen. Ohne Anmeldung bleibt alles wie gewohnt auf diesem Gerät."}),
+      el("label",{class:"fld"},"E-Mail",mail),el("label",{class:"fld"},"Passwort (mind. 6 Zeichen)",pw),
+      el("div",{class:"row"},login,reg,forgot),FB.state==="connect"?el("div",{class:"syncnote",text:"Verbinde …"}):"",err());
+    return;
+  }
+  accSum("konto",FB.state==="live"?"live":FB.state==="sync"?"gleicht ab …":"nicht verbunden");
+  const now=el("button",{class:"btn",type:"button"},"Jetzt abgleichen"),out=el("button",{class:"btn",type:"button"},"Abmelden");
+  now.addEventListener("click",async()=>{if(!FB.ready)return toast("Noch nicht verbunden");await fbPush();toast("Abgeglichen")});
+  out.addEventListener("click",async()=>{fbStop();try{await FB.m.auth.signOut(FB.m.au)}catch(e){}FB.meta={};FB.uid="";FB.user=null;fbSave();renderKonto();toast("Abgemeldet. Die Daten bleiben auf diesem Gerät.")});
+  root.append(el("div",{class:"status "+(FB.state==="live"?"ok":""),text:FB.state==="live"?"Echtzeit aktiv":FB.state==="sync"?"Gleiche ab …":"Nicht verbunden"}),
+    el("p",{class:"syncnote",text:"Angemeldet als "+(FB.user.email||"")+(ago?" · zuletzt abgeglichen "+ago:"")}),
+    el("p",{class:"syncnote",text:"Änderungen erscheinen innerhalb weniger Sekunden auf allen angemeldeten Geräten. Offline arbeitest du normal weiter, der Abgleich holt sich später nach. PDF-Unterlagen werden nicht synchronisiert (dafür Dropbox)."}),
+    err(),el("div",{class:"row"},now,out));
+}
 
 /* ---------- Fokus-Timer ---------- */
 const PH={work:"Lernen",short:"Kurze Pause",long:"Lange Pause"},CIRC=339.29;
@@ -1977,7 +2153,7 @@ function setTab(name){
   if(name==="heute")renderHome();
   if(name==="lernen"){fillSrc();renderSets()}
   if(name==="fokus")drawTimer();
-  if(name==="einst"){renderSettings();renderSicherung()}
+  if(name==="einst"){renderSettings();renderSicherung();renderKonto()}
   if(name==="bib"){lib.view="list";lib.deckId=null;renderLib()}
 }
 renderNav();
@@ -1994,6 +2170,7 @@ function renderAll(){
   drawTimer();
 }
 initStore();
+if(FB.uid)fbInit();
 setTimeout(()=>{if(DB.auto&&dbConnected())queueBackup()},4000);
 })();
 
