@@ -1,4 +1,4 @@
-# Fuelwise als Android-App (APK)
+# FoodPro als Android-App (APK)
 
 Die App ist eine Hülle (Capacitor), die die Seite
 https://erikmitknax.github.io/meine-pwa/ernaehrung-pwa/ lädt.

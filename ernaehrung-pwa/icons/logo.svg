@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="28 18 208 208">
+  <defs>
+    <linearGradient id="fp-body" x1="70" y1="60" x2="190" y2="226" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#9be15d"/><stop offset=".55" stop-color="#3fbf7f"/><stop offset="1" stop-color="#14967d"/>
+    </linearGradient>
+    <linearGradient id="fp-leaf" x1="130" y1="30" x2="170" y2="66" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#b7ee7a"/><stop offset="1" stop-color="#4cc46a"/>
+    </linearGradient>
+    <linearGradient id="fp-arrow" x1="84" y1="152" x2="188" y2="76" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#ffb21f"/><stop offset="1" stop-color="#ff7a1a"/>
+    </linearGradient>
+  </defs>
+  <path d="M130 66C128 44 144 30 170 27 170 52 154 66 130 66Z" fill="url(#fp-leaf)"/>
+  <path d="M128 70C112 58 82 58 68 82 54 106 62 150 84 182 98 202 114 214 128 222 142 214 158 202 172 182 194 150 202 106 188 82 174 58 144 58 128 70Z" fill="url(#fp-body)"/>
+  <path d="M84 152 110 126 126 140 166 96" fill="none" stroke="#fff" stroke-width="22" stroke-linecap="round" stroke-linejoin="round"/>
+  <polygon points="190,72 183,110 152,82" fill="#fff" stroke="#fff" stroke-width="10" stroke-linejoin="round"/>
+  <path d="M84 152 110 126 126 140 166 96" fill="none" stroke="url(#fp-arrow)" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>
+  <polygon points="190,72 183,110 152,82" fill="url(#fp-arrow)" stroke="url(#fp-arrow)" stroke-width="4" stroke-linejoin="round"/>
+</svg>

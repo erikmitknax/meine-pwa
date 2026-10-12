@@ -1,6 +1,6 @@
 {
-  "name": "Fuelwise",
-  "short_name": "Fuelwise",
+  "name": "FoodPro",
+  "short_name": "FoodPro",
   "description": "Kalorien, Makros, Mahlzeiten und Gewicht tracken – mit Barcode-Scanner und Foto-KI.",
   "lang": "de",
   "start_url": "./",

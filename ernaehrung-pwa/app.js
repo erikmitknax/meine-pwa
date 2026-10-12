@@ -9,14 +9,14 @@ const MEALS = [
   { id: "d", name: "Abendessen", icon: "🌙" },
   { id: "s", name: "Snacks", icon: "🍎" },
 ];
-const ACCENTS = ["#ff4d2e", "#3d5afe", "#00a88f", "#f5a300", "#9b51e0", "#e5336d", "#2ecc71"];
+const ACCENTS = ["#12935f", "#3d5afe", "#ff4d2e", "#e8458b", "#9b51e0", "#0891b2", "#f59e0b"];
 const WD = ["So", "Mo", "Di", "Mi", "Do", "Fr", "Sa"];
 const WD_ORDER = [1, 2, 3, 4, 5, 6, 0];
 const NATIVE = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
 
 const DEFAULTS = () => ({
-  ver: 2, foods: [], recipes: [], entries: [], weights: {},
-  settings: { kcal: 2200, pP: 30, pC: 40, pF: 30, mode: "auto", accent: "#ff4d2e", apiKey: "", model: "claude-sonnet-5-5", goalWeight: "" },
+  ver: 3, foods: [], recipes: [], entries: [], weights: {},
+  settings: { kcal: 2200, pP: 30, pC: 40, pF: 30, mode: "auto", accent: "#12935f", apiKey: "", model: "claude-sonnet-5-5", goalWeight: "" },
 });
 let D = load();
 let ui = { tab: "today", date: iso(new Date()), weekOffset: 0, wRange: 90, meal: "b" };
@@ -26,14 +26,18 @@ function load() {
     const raw = JSON.parse(localStorage.getItem(KEY) || "null");
     if (raw) {
       const d = DEFAULTS(), out = { ...d, ...raw, settings: { ...d.settings, ...(raw.settings || {}) } };
-      if (!raw.ver && out.settings.accent === "#2ecc71") out.settings.accent = d.settings.accent; // altes Standardgrün -> neue Standardfarbe
-      out.ver = 2;
+      // frühere Standardfarben (Grün, Orange-Rot) auf die neue Logo-Farbe umstellen
+      if ((raw.ver || 0) < 3 && ["#2ecc71", "#ff4d2e"].includes(String(out.settings.accent).toLowerCase())) out.settings.accent = d.settings.accent;
+      out.ver = 3;
       return out;
     }
   } catch (e) { /* kaputte Daten ignorieren */ }
   return DEFAULTS();
 }
-function save() { try { localStorage.setItem(KEY, JSON.stringify(D)); } catch (e) { toast("Speichern fehlgeschlagen (Speicher voll?)"); } }
+function save() {
+  try { localStorage.setItem(KEY, JSON.stringify(D)); } catch (e) { toast("Speichern fehlgeschlagen (Speicher voll?)"); }
+  if (typeof queueBackup === "function") queueBackup();
+}
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -137,12 +141,12 @@ function viewToday() {
         : `<button class="empty" data-act="add" data-meal="${m.id}">${icon("plus", 18, 2.4)}${m.name} eintragen</button>`) + `</section>`;
   }).join("");
   const full = fromIso(ui.date).toLocaleDateString("de-DE", { day: "numeric", month: "short" });
-  return `<header class="top"><div class="brand"><span class="logo"></span>Fuelwise</div><button class="ghost" data-act="pickDate" aria-label="Datum wählen">${icon("cal", 20)}</button></header>
+  return `<header class="top"><div class="brand"><img class="logo" src="icons/logo.svg" alt="">FoodPro</div><button class="ghost" data-act="pickDate" aria-label="Datum wählen">${icon("cal", 20)}</button></header>
   ${weekStrip()}
-  <section class="hero"><div class="ht"><span>${niceDate(ui.date) === full ? full : niceDate(ui.date) + ", " + full}</span><span>Ziel ${fmt(g.kcal)}</span></div>
+  <section class="hero" data-act="dayChart" role="button" tabindex="0" aria-label="Tagesübersicht öffnen"><div class="ht"><span>${niceDate(ui.date) === full ? full : niceDate(ui.date) + ", " + full}</span><span class="hchev">Ziel ${fmt(g.kcal)} ${icon("right", 16, 2.4)}</span></div>
     <div class="hn"><b>${fmt(Math.abs(left))}</b><span>${left >= 0 ? "kcal übrig" : "kcal drüber"}</span></div>
     <div class="hbar"><i style="width:${pct}%"></i></div><div class="hf">${fmt(t.kcal)} kcal gegessen</div></section>
-  <section class="macros">${macroCol("Eiweiß", t.p, g.p, "p")}${macroCol("Kohlenhydrate", t.c, g.c, "c")}${macroCol("Fett", t.f, g.f, "f")}</section>
+  <section class="macros" data-act="dayChart" role="button" tabindex="0" aria-label="Tagesübersicht öffnen">${macroCol("Eiweiß", t.p, g.p, "p")}${macroCol("Kohlenhydrate", t.c, g.c, "c")}${macroCol("Fett", t.f, g.f, "f")}</section>
   ${meals}`;
 }
 
@@ -258,15 +262,20 @@ function viewSettings() {
     <button class="btn sec block" style="margin-top:16px" data-act="saveAI">Speichern</button></div>
   <h2>Rezepte</h2><div class="panel" style="padding-top:16px"><button class="btn sec block" data-act="recipes">Meine Rezepte (${D.recipes.length})</button></div>
   <h2>Meine Lebensmittel <span class="muted" style="font-weight:600">${D.foods.length}</span></h2><div class="panel" style="padding-top:16px">
-    <div class="grid2"><button class="btn sec" data-act="foodsManage">Verwalten</button><button class="btn sec" data-act="foodNew">Neu anlegen</button>
-    <button class="btn sec" data-act="csvImport">CSV importieren</button><button class="btn sec" data-act="csvExport">CSV exportieren</button></div>
-    <button class="btn sec block" style="margin-top:10px" data-act="csvTemplate">CSV-Vorlage laden</button>
-    <input type="file" id="csvFile" accept=".csv,text/csv,text/plain" hidden></div>
-  <h2>Daten</h2><div class="panel" style="padding-top:16px">
-    <div class="grid2"><button class="btn sec" data-act="backup">Backup speichern</button><button class="btn sec" data-act="restore">Backup laden</button></div>
-    <input type="file" id="jsonFile" accept=".json,application/json" hidden>
-    <button class="btn danger block" style="margin-top:10px" data-act="wipe">Alle Daten löschen</button></div>
-  <div class="muted tiny center" style="margin-top:22px">Fuelwise · Nährwertdaten von Open Food Facts (ODbL)</div>`;
+    <div class="grid2"><button class="btn sec" data-act="foodsManage">Verwalten</button><button class="btn sec" data-act="foodNew">Neu anlegen</button></div>
+    <button class="btn sec block" style="margin-top:10px" data-act="csvTemplate">CSV-Vorlage laden</button></div>
+  <h2>Export</h2><div class="panel" style="padding-top:16px">
+    <button class="btn block" data-act="backup">Alles sichern (Backup-Datei)</button>
+    <div class="muted small" style="margin:8px 2px 12px">Enthält Tagebuch, Gewicht, Rezepte, Lebensmittel und Einstellungen.</div>
+    <div class="grid2"><button class="btn sec" data-act="exDiary">Tagebuch (CSV)</button><button class="btn sec" data-act="exWeight">Gewicht (CSV)</button>
+    <button class="btn sec" data-act="exRecipes">Rezepte (CSV)</button><button class="btn sec" data-act="csvExport">Lebensmittel (CSV)</button></div></div>
+  <h2>Import</h2><div class="panel" style="padding-top:16px">
+    <button class="btn block" data-act="importPick">Datei importieren</button>
+    <div class="muted small" style="margin:8px 2px 0">Backup-Datei (ersetzt alle Daten) oder CSV für Tagebuch, Gewicht, Rezepte und Lebensmittel (ergänzt vorhandene Daten). Die Art erkennt FoodPro automatisch.</div>
+    <input type="file" id="dataFile" accept=".json,.csv,application/json,text/csv,text/plain" hidden></div>
+  <h2>Dropbox</h2>${dbxPanel()}
+  <h2>Gefahrenzone</h2><div class="panel" style="padding-top:16px"><button class="btn danger block" data-act="wipe">Alle Daten löschen</button></div>
+  <div class="muted tiny center" style="margin-top:22px">FoodPro · Nährwertdaten von Open Food Facts (ODbL)</div>`;
 }
 function macroInfoText(p, c, f, kcal) {
   const t = p + c + f;
@@ -774,6 +783,33 @@ function mealToRecipe(meal) {
   drawRecipeEditor();
 }
 
+/* ---------- Tages-Diagramm: Mahlzeiten und Makros ---------- */
+function dayChart() {
+  const g = goals(), list = dayEntries(ui.date), t = sum(list);
+  const kP = t.p * 4, kC = t.c * 4, kF = t.f * 9, kt = kP + kC + kF;
+  const pc = v => kt > 0 ? Math.round(v / kt * 100) : 0;
+  const R = 52, C = 2 * Math.PI * R;
+  let off = 0;
+  const seg = (v, col) => { const len = kt > 0 ? v / kt * C : 0; const el = `<circle cx="66" cy="66" r="${R}" fill="none" stroke="${col}" stroke-width="16" stroke-dasharray="${Math.max(len - 2, 0)} ${C}" stroke-dashoffset="${-off}"/>`; off += len; return el; };
+  const donut = `<svg width="132" height="132" viewBox="0 0 132 132" style="transform:rotate(-90deg)"><circle cx="66" cy="66" r="${R}" fill="none" stroke="var(--card2)" stroke-width="16"/>${kt > 0 ? seg(kP, "var(--p)") + seg(kC, "var(--c)") + seg(kF, "var(--f)") : ""}</svg>`;
+  const leg = (name, col, grams, goal, kc) => `<div class="li"><i style="background:${col}"></i><div><b>${r0(grams)} g</b><div class="muted tiny">${name}</div></div><span>${pc(kc)} %<br>Ziel ${r0(goal)} g</span></div>`;
+  const meals = MEALS.map(m => ({ m, es: list.filter(e => e.meal === m.id) })).filter(x => x.es.length).map(x => ({ ...x, s: sum(x.es) }));
+  const maxK = Math.max(...meals.map(x => x.s.kcal), 1);
+  const rows = meals.map(({ m, s }) => {
+    const mk = s.p * 4 + s.c * 4 + s.f * 9 || 1, scale = s.kcal / maxK * 100;
+    return `<div class="mrow"><div class="mt"><b>${m.name}</b><span>${fmt(s.kcal)} kcal${t.kcal > 0 ? ", " + Math.round(s.kcal / t.kcal * 100) + " % des Tages" : ""}</span></div>
+      <div class="stack"><div style="display:flex;width:${scale}%;height:100%"><i class="p" style="width:${s.p * 4 / mk * 100}%"></i><i class="c" style="width:${s.c * 4 / mk * 100}%"></i><i class="f" style="width:${s.f * 9 / mk * 100}%"></i></div></div>
+      <div class="mg"><span class="cp">Eiweiß ${r0(s.p)} g</span><span class="cc">Kohlenh. ${r0(s.c)} g</span><span class="cf">Fett ${r0(s.f)} g</span></div></div>`;
+  }).join("");
+  sheet(`<h3>${niceDate(ui.date)}</h3><div class="muted small" style="margin:-6px 0 14px">${fmt(t.kcal)} von ${fmt(g.kcal)} kcal</div>
+    ${list.length ? `<div class="donutwrap"><div class="donut">${donut}<div class="mid"><b>${fmt(t.kcal)}</b><span>kcal</span></div></div>
+      <div class="dleg">${leg("Eiweiß", "var(--p)", t.p, g.p, kP)}${leg("Kohlenhydrate", "var(--c)", t.c, g.c, kC)}${leg("Fett", "var(--f)", t.f, g.f, kF)}</div></div>
+      <h2 style="margin:6px 2px 4px">Nach Mahlzeit</h2><div class="list" style="padding:0 16px">${rows}</div>
+      <div class="muted tiny" style="margin:10px 4px 0">Die Balken zeigen, woher die Kalorien jeder Mahlzeit kommen. Prozentwerte beziehen sich auf die Kalorien aus Eiweiß, Kohlenhydraten und Fett.</div>`
+      : `<div class="muted center" style="padding:30px 10px">Heute ist noch nichts eingetragen. Sobald du etwas hinzufügst, siehst du hier die Verteilung.</div>`}
+    <button class="btn sec block" style="margin-top:16px" id="dcClose">Schließen</button>`, s => { $("#dcClose", s).onclick = closeSheet; });
+}
+
 /* Eintrag bearbeiten */
 function editEntry(id) {
   const e = D.entries.find(x => x.id === id); if (!e) return;
@@ -820,7 +856,7 @@ const CSV_COLS = ["name", "brand", "barcode", "kcal", "fat", "carbs", "sugar", "
 const CSV_HEAD = ["name", "marke", "barcode", "kcal", "fett", "kohlenhydrate", "zucker", "eiweiss", "ballaststoffe", "portion_g"];
 const csvCell = v => { const s = String(v ?? ""); return /[";\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
 function foodsToCsv(foods) {
-  return "﻿" + [CSV_HEAD.join(";")].concat(foods.map(f => CSV_COLS.map(c => csvCell(f[c])).join(";"))).join("\r\n") + "\r\n";
+  return "﻿" + [CSV_HEAD.join(";")].concat(foods.map(f => CSV_COLS.map(c => csvCell(typeof f[c] === "number" ? String(f[c]).replace(".", ",") : f[c])).join(";"))).join("\r\n") + "\r\n";
 }
 function parseCsv(text) {
   text = text.replace(/^﻿/, "");
@@ -875,6 +911,219 @@ async function exportFile(name, blob) {
 }
 const readText = f => new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result)); r.onerror = rej; r.readAsText(f); });
 
+/* ---------- Export, Import und Dropbox ---------- */
+/* Den Anthropic-Schlüssel nehmen wir nie in Sicherungen auf. */
+const exportData = () => ({ ...D, settings: { ...D.settings, apiKey: "" } });
+const csvNum = n => String(Math.round(n * 100) / 100).replace(".", ",");
+const csvOf = (head, rows) => "﻿" + [head.join(";")].concat(rows.map(r => r.map(csvCell).join(";"))).join("\r\n") + "\r\n";
+const mealName = id => (MEALS.find(m => m.id === id) || MEALS[3]).name;
+function diaryCsv() {
+  const order = MEALS.map(m => m.id);
+  const es = D.entries.slice().sort((a, b) => a.date.localeCompare(b.date) || order.indexOf(a.meal) - order.indexOf(b.meal));
+  return csvOf(["datum", "mahlzeit", "name", "menge_g", "kcal", "eiweiss", "kohlenhydrate", "fett"], es.map(e => [e.date, mealName(e.meal), e.name, csvNum(e.grams), csvNum(e.kcal), csvNum(e.p), csvNum(e.c), csvNum(e.f)]));
+}
+function weightCsv() { return csvOf(["datum", "gewicht_kg"], weightList().map(w => [w.d, csvNum(w.w)])); }
+function recipesCsv() {
+  const rows = [];
+  D.recipes.forEach(r => r.items.forEach(i => rows.push([r.name, csvNum(r.servings), i.name, csvNum(i.grams), csvNum(i.kcal), csvNum(i.protein), csvNum(i.carbs), csvNum(i.fat)])));
+  return csvOf(["rezept", "portionen", "zutat", "menge_g", "kcal_100g", "eiweiss_100g", "kohlenhydrate_100g", "fett_100g"], rows);
+}
+const csvBlob = t => new Blob([t], { type: "text/csv" });
+
+function applyBackup(j) {
+  if (!j || !Array.isArray(j.entries) || !Array.isArray(j.foods)) throw new Error("Das ist kein gültiges Backup");
+  const d = DEFAULTS(), key = D.settings.apiKey;
+  D = { ...d, ...j, recipes: Array.isArray(j.recipes) ? j.recipes : [], settings: { ...d.settings, ...(j.settings || {}), apiKey: (j.settings && j.settings.apiKey) || key } };
+  save(); applyTheme(); render();
+}
+const isoDate = s => {
+  s = String(s || "").trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+  const m = s.match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})$/);
+  return m ? `${m[3]}-${m[2].padStart(2, "0")}-${m[1].padStart(2, "0")}` : "";
+};
+function importAnyCsv(text) {
+  const rows = parseCsv(text);
+  if (rows.length < 2) throw new Error("Die Datei enthält keine Daten");
+  const head = rows[0].map(h => h.trim().toLowerCase().replace(/^﻿/, ""));
+  const col = (...names) => { for (const n of names) { const i = head.indexOf(n); if (i >= 0) return i; } return -1; };
+  const get = (r, i) => i < 0 ? "" : (r[i] ?? "").trim();
+  const iRec = col("rezept"), iIng = col("zutat"), iDate = col("datum"), iMeal = col("mahlzeit"), iKg = col("gewicht_kg", "gewicht", "kg");
+  if (iRec >= 0 && iIng >= 0) {
+    const iS = col("portionen"), iG = col("menge_g"), iK = col("kcal_100g"), iP = col("eiweiss_100g"), iC = col("kohlenhydrate_100g"), iF = col("fett_100g");
+    const byName = new Map();
+    rows.slice(1).forEach(r => {
+      const n = get(r, iRec); if (!n || !get(r, iIng)) return;
+      if (!byName.has(n)) byName.set(n, { id: uid(), name: n, servings: num(get(r, iS)) || 1, items: [], used: 0 });
+      byName.get(n).items.push({ name: get(r, iIng), grams: num(get(r, iG)) || 100, kcal: num(get(r, iK)), protein: num(get(r, iP)), carbs: num(get(r, iC)), fat: num(get(r, iF)) });
+    });
+    let added = 0, updated = 0;
+    byName.forEach(rec => { const ex = D.recipes.find(x => x.name.toLowerCase() === rec.name.toLowerCase()); if (ex) { rec.id = ex.id; rec.used = ex.used || 0; Object.assign(ex, rec); updated++; } else { D.recipes.push(rec); added++; } });
+    return `${added} Rezepte neu, ${updated} aktualisiert`;
+  }
+  if (iDate >= 0 && iMeal >= 0) {
+    const iN = col("name", "lebensmittel"), iG = col("menge_g"), iK = col("kcal"), iP = col("eiweiss"), iC = col("kohlenhydrate"), iF = col("fett");
+    const key = e => [e.date, e.meal, e.name.toLowerCase(), Math.round(e.grams), Math.round(e.kcal)].join("|");
+    const have = new Set(D.entries.map(key));
+    let added = 0, skipped = 0;
+    rows.slice(1).forEach(r => {
+      const date = isoDate(get(r, iDate)), name = get(r, iN); if (!date || !name) return;
+      const m = MEALS.find(x => x.name.toLowerCase() === get(r, iMeal).toLowerCase() || x.id === get(r, iMeal).toLowerCase());
+      const e = { id: uid(), date, meal: m ? m.id : "s", name, grams: num(get(r, iG)), kcal: num(get(r, iK)), p: num(get(r, iP)), c: num(get(r, iC)), f: num(get(r, iF)) };
+      if (have.has(key(e))) { skipped++; return; }
+      have.add(key(e)); D.entries.push(e); added++;
+    });
+    return `${added} Einträge hinzugefügt${skipped ? `, ${skipped} schon vorhanden` : ""}`;
+  }
+  if (iDate >= 0 && iKg >= 0) {
+    let n = 0;
+    rows.slice(1).forEach(r => { const d = isoDate(get(r, iDate)), w = num(get(r, iKg)); if (d && w >= 20 && w <= 400) { D.weights[d] = r1(w); n++; } });
+    return `${n} Gewichtswerte übernommen`;
+  }
+  const r = importCsv(text);
+  return `${r.added} Lebensmittel neu, ${r.updated} aktualisiert`;
+}
+async function importFile(file) {
+  const text = await readText(file);
+  if (/\.json$/i.test(file.name) || text.trim().startsWith("{")) {
+    const j = JSON.parse(text);
+    if (!confirm("Alle aktuellen Daten durch dieses Backup ersetzen?")) return null;
+    applyBackup(j); return "Backup geladen";
+  }
+  const msg = importAnyCsv(text); save(); render(); return msg;
+}
+
+/* Dropbox: eigener App-Key, Zugangsdaten bleiben nur auf diesem Gerät */
+const DBX_LS = "foodpro.dropbox", BK_PATH = "/foodpro-backup.json";
+let DB = (() => { try { return JSON.parse(localStorage.getItem(DBX_LS)) || {}; } catch (e) { return {}; } })();
+const dbSave = () => { try { localStorage.setItem(DBX_LS, JSON.stringify(DB)); } catch (e) { /* egal */ } };
+const dbConnected = () => !!(DB.key && DB.refresh) || !!(DB.access && DB.exp > Date.now());
+const b64u = buf => btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+const asciiJson = o => JSON.stringify(o).replace(/[\u007f-￿]/g, c => "\\u" + ("0000" + c.charCodeAt(0).toString(16)).slice(-4));
+const hashStr = s => { let h = 5381; for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0; return h + ":" + s.length; };
+const fmtWhen = t => new Date(t).toLocaleString("de-DE", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+async function dbStartAuth(key) {
+  const verifier = b64u(crypto.getRandomValues(new Uint8Array(48)));
+  const challenge = b64u(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(verifier)));
+  const url = "https://www.dropbox.com/oauth2/authorize?client_id=" + encodeURIComponent(key) + "&response_type=code&code_challenge=" + challenge + "&code_challenge_method=S256&token_access_type=offline";
+  DB.pending = { key, verifier, url }; dbSave();
+  return url;
+}
+async function dbTokenCall(params) {
+  let r;
+  try { r = await fetch("https://api.dropboxapi.com/oauth2/token", { method: "POST", body: new URLSearchParams(params) }); }
+  catch (e) { throw new Error("Keine Verbindung zu Dropbox. Prüfe dein Internet."); }
+  let j = {}; try { j = await r.json(); } catch (e) { /* leer */ }
+  if (!r.ok) throw new Error(j.error === "invalid_grant" ? "Der Code ist ungültig oder abgelaufen. Hole dir einen neuen." : "Dropbox hat die Anmeldung abgelehnt" + (j.error_description ? ": " + j.error_description : "."));
+  return j;
+}
+async function dbFinishAuth(code) {
+  const p = DB.pending; if (!p) throw new Error("Starte zuerst die Anmeldung bei Dropbox.");
+  const j = await dbTokenCall({ code: code.trim(), grant_type: "authorization_code", code_verifier: p.verifier, client_id: p.key });
+  if (!j.refresh_token) throw new Error("Dropbox hat keinen dauerhaften Zugang geliefert. Prüfe, ob die App „Scoped access“ nutzt.");
+  DB.key = p.key; DB.refresh = j.refresh_token; DB.access = j.access_token; DB.exp = Date.now() + Math.max(60, (j.expires_in || 14400) - 120) * 1000;
+  delete DB.pending; DB.err = ""; dbSave();
+}
+async function dbToken() {
+  if (DB.access && DB.exp > Date.now()) return DB.access;
+  if (!(DB.key && DB.refresh)) { DB.err = "Die Dropbox-Verbindung ist abgelaufen. Verbinde neu."; dbSave(); throw new Error(DB.err); }
+  const j = await dbTokenCall({ grant_type: "refresh_token", refresh_token: DB.refresh, client_id: DB.key });
+  DB.access = j.access_token; DB.exp = Date.now() + Math.max(60, (j.expires_in || 14400) - 120) * 1000; dbSave();
+  return DB.access;
+}
+async function dbErr(r) {
+  let t = ""; try { t = await r.text(); } catch (e) { /* leer */ }
+  if (r.status === 401) return new Error("Dropbox hat den Zugang abgelehnt. Verbinde neu.");
+  if (r.status === 429) return new Error("Dropbox bittet um eine Pause. Versuche es gleich noch einmal.");
+  if (/insufficient_scope|missing_scope/.test(t)) return new Error("In deiner Dropbox-App fehlt eine Berechtigung. Aktiviere files.content.write und files.content.read, dann verbinde neu.");
+  if (/insufficient_space/.test(t)) return new Error("Dein Dropbox-Speicher ist voll.");
+  return new Error("Dropbox-Fehler " + r.status + ".");
+}
+async function dbFetch(url, opts) {
+  try { return await fetch(url, opts); } catch (e) { throw new Error("Keine Verbindung zu Dropbox. Prüfe dein Internet."); }
+}
+async function dbUpload(path, body) {
+  const tok = await dbToken();
+  const r = await dbFetch("https://content.dropboxapi.com/2/files/upload", { method: "POST", headers: { Authorization: "Bearer " + tok, "Content-Type": "application/octet-stream", "Dropbox-API-Arg": asciiJson({ path, mode: "overwrite", mute: true, autorename: false }) }, body });
+  if (!r.ok) throw await dbErr(r);
+}
+async function dbDownload(path) {
+  const tok = await dbToken();
+  const r = await dbFetch("https://content.dropboxapi.com/2/files/download", { method: "POST", headers: { Authorization: "Bearer " + tok, "Dropbox-API-Arg": asciiJson({ path }) } });
+  if (r.status === 409) throw new Error("In deiner Dropbox liegt noch keine Sicherung.");
+  if (!r.ok) throw await dbErr(r);
+  return r.text();
+}
+async function dbBackupNow() {
+  const body = JSON.stringify(exportData());
+  await dbUpload(BK_PATH, body);
+  DB.hash = hashStr(body); DB.last = Date.now(); DB.err = ""; dbSave();
+}
+let dbTimer = null;
+function queueBackup() {
+  if (!DB.auto || !dbConnected()) return;
+  clearTimeout(dbTimer);
+  dbTimer = setTimeout(async () => {
+    const body = JSON.stringify(exportData());
+    if (hashStr(body) === DB.hash) return;
+    try { await dbUpload(BK_PATH, body); DB.hash = hashStr(body); DB.last = Date.now(); DB.err = ""; }
+    catch (e) { DB.err = e.message; }
+    dbSave();
+  }, 45000);
+}
+function dbxPanel() {
+  const msg = ui.dbxMsg ? `<div class="status ${ui.dbxMsg.err ? "err" : "ok"}">${esc(ui.dbxMsg.text)}</div>` : "";
+  if (dbConnected()) {
+    const perm = DB.key && DB.refresh;
+    return `<div class="panel"><div class="dbx-state"><i></i>Mit Dropbox verbunden</div>
+      ${perm ? "" : `<div class="muted small" style="margin-top:6px">Zugriffstoken: läuft nach etwa 4 Stunden ab. Mit App-Key bleibt die Verbindung dauerhaft.</div>`}
+      <div class="muted small" style="margin-top:6px">${DB.last ? "Letzte Sicherung: " + fmtWhen(DB.last) : "Noch keine Sicherung gemacht."}</div>
+      ${DB.err ? `<div class="status err">${esc(DB.err)}</div>` : ""}${msg}
+      <div class="grid2" style="margin-top:14px"><button class="btn" data-act="dbxBackup">Jetzt sichern</button><button class="btn sec" data-act="dbxRestore">Wiederherstellen</button></div>
+      <label class="toggle"><span>Bei Änderungen automatisch sichern</span><input type="checkbox" id="dbxAuto" ${DB.auto ? "checked" : ""}></label>
+      <button class="btn danger block" style="margin-top:14px" data-act="dbxOff">Verbindung trennen</button></div>`;
+  }
+  const p = DB.pending;
+  return `<div class="panel"><div class="muted small" style="margin-top:14px">Sichere alles in deiner Dropbox: Tagebuch, Gewicht, Rezepte und Lebensmittel. Dafür brauchst du einen eigenen App-Key von Dropbox. Er bleibt nur auf diesem Gerät.</div>
+    <details class="help"><summary>So bekommst du den App-Key</summary><ol>
+      <li>Öffne dropbox.com/developers/apps und tippe auf „Create app“.</li>
+      <li>Wähle „Scoped access“ und „App folder“ und vergib einen Namen.</li>
+      <li>Aktiviere unter „Permissions“ die Rechte files.content.write und files.content.read, dann „Submit“.</li>
+      <li>Kopiere unter „Settings“ den „App key“ und füge ihn hier ein.</li></ol></details>
+    <label>App-Key (oder Zugriffstoken)</label><input type="text" id="dbxKey" value="${esc(p ? p.key : "")}" placeholder="App-Key" autocomplete="off" autocapitalize="off" spellcheck="false">
+    <button class="btn block" style="margin-top:12px" data-act="dbxStart">1. Bei Dropbox anmelden</button>
+    ${p ? `<a class="linkbtn" href="${esc(p.url)}" target="_blank" rel="noopener">Dropbox-Anmeldung erneut öffnen</a>
+      <label>Code aus Dropbox</label><input type="text" id="dbxCode" placeholder="Code einfügen" autocomplete="off" spellcheck="false">
+      <button class="btn block" style="margin-top:12px" data-act="dbxFinish">2. Verbinden</button>` : ""}${msg}</div>`;
+}
+async function dbxAction(a) {
+  const say = (text, err) => { ui.dbxMsg = text ? { text, err: !!err } : null; render(); };
+  try {
+    if (a === "dbxStart") {
+      const k = ($("#dbxKey").value || "").trim();
+      if (!k) return say("Füge zuerst deinen App-Key ein.", true);
+      if (/^sl\./.test(k)) { DB.access = k; DB.exp = Date.now() + 3.5 * 3600 * 1000; DB.key = ""; DB.refresh = ""; DB.err = ""; delete DB.pending; dbSave(); return say("Mit Zugriffstoken verbunden. Er läuft nach etwa 4 Stunden ab."); }
+      const url = await dbStartAuth(k);
+      try { window.open(url, "_blank", "noopener"); } catch (e) { /* Link unten */ }
+      say("Melde dich bei Dropbox an, erlaube den Zugriff und kopiere den angezeigten Code hierher.");
+    } else if (a === "dbxFinish") {
+      const code = ($("#dbxCode").value || "").trim();
+      if (!code) return say("Füge den Code aus Dropbox ein.", true);
+      await dbFinishAuth(code); DB.auto = true; dbSave(); ui.dbxMsg = null; render(); toast("Dropbox verbunden");
+      try { await dbBackupNow(); render(); toast("Erste Sicherung gemacht"); } catch (e) { say(e.message, true); }
+    } else if (a === "dbxBackup") {
+      toast("Sichere …"); await dbBackupNow(); say("Sicherung in Dropbox gespeichert."); toast("Gesichert");
+    } else if (a === "dbxRestore") {
+      const text = await dbDownload(BK_PATH);
+      if (!confirm("Alle aktuellen Daten durch die Sicherung aus Dropbox ersetzen?")) return;
+      applyBackup(JSON.parse(text)); say("Sicherung aus Dropbox geladen."); toast("Wiederhergestellt");
+    } else if (a === "dbxOff") {
+      if (!confirm("Dropbox-Verbindung auf diesem Gerät trennen? Die Sicherung in Dropbox bleibt erhalten.")) return;
+      DB = {}; dbSave(); say("");
+    }
+  } catch (e) { say(e.message || "Das hat nicht geklappt.", true); }
+}
+
 /* ---------- Ereignisse ---------- */
 document.addEventListener("click", async ev => {
   const t = ev.target.closest("[data-act]"); if (!t) return;
@@ -913,28 +1162,26 @@ document.addEventListener("click", async ev => {
   else if (a === "recipes") recipeManage();
   else if (a === "foodsManage") foodsManage();
   else if (a === "foodNew") foodEdit(null);
-  else if (a === "csvImport") $("#csvFile").click();
   else if (a === "csvExport") { if (!D.foods.length) return toast("Noch keine Lebensmittel"); exportFile("meine-lebensmittel.csv", new Blob([foodsToCsv(D.foods)], { type: "text/csv" })); }
   else if (a === "csvTemplate") exportFile("lebensmittel-vorlage.csv", new Blob([foodsToCsv([
     { name: "Haferflocken", brand: "", barcode: "", kcal: 372, fat: 7, carbs: 59, sugar: 1, protein: 13.5, fiber: 10, serving: 40 },
     { name: "Hähnchenbrust roh", brand: "", barcode: "", kcal: 106, fat: 1.2, carbs: 0, sugar: 0, protein: 23.5, fiber: 0, serving: 150 }])], { type: "text/csv" }));
-  else if (a === "backup") exportFile("fuelwise-backup-" + iso(new Date()) + ".json", new Blob([JSON.stringify(D)], { type: "application/json" }));
-  else if (a === "restore") $("#jsonFile").click();
+  else if (a === "backup") exportFile("foodpro-backup-" + iso(new Date()) + ".json", new Blob([JSON.stringify(exportData())], { type: "application/json" }));
+  else if (a === "importPick") $("#dataFile").click();
+  else if (a === "exDiary") { if (!D.entries.length) return toast("Noch keine Einträge"); exportFile("foodpro-tagebuch.csv", csvBlob(diaryCsv())); }
+  else if (a === "exWeight") { if (!Object.keys(D.weights).length) return toast("Noch kein Gewicht eingetragen"); exportFile("foodpro-gewicht.csv", csvBlob(weightCsv())); }
+  else if (a === "exRecipes") { if (!D.recipes.length) return toast("Noch keine Rezepte"); exportFile("foodpro-rezepte.csv", csvBlob(recipesCsv())); }
+  else if (a === "dayChart") dayChart();
+  else if (a.startsWith("dbx")) dbxAction(a);
   else if (a === "wipe") { if (confirm("Wirklich ALLE Daten (Tagebuch, Gewicht, Lebensmittel, Einstellungen) löschen?")) { D = DEFAULTS(); save(); applyTheme(); render(); toast("Alles gelöscht"); } }
 });
+document.addEventListener("keydown", ev => { if ((ev.key === "Enter" || ev.key === " ") && ev.target.matches && ev.target.matches("[role=button][data-act]")) { ev.preventDefault(); ev.target.click(); } });
 document.addEventListener("change", async ev => {
   const t = ev.target;
-  if (t.id === "csvFile" && t.files[0]) {
-    try { const r = importCsv(await readText(t.files[0])); save(); render(); toast(`${r.added} neu, ${r.updated} aktualisiert`); } catch (e) { toast(e.message); }
+  if (t.id === "dataFile" && t.files[0]) {
+    try { const m = await importFile(t.files[0]); if (m) toast(m); } catch (e) { toast(e.message || "Datei nicht lesbar"); }
     t.value = "";
-  } else if (t.id === "jsonFile" && t.files[0]) {
-    try {
-      const j = JSON.parse(await readText(t.files[0]));
-      if (!j || !Array.isArray(j.entries) || !Array.isArray(j.foods)) throw new Error("Das ist kein gültiges Backup");
-      if (!confirm("Aktuelle Daten durch das Backup ersetzen?")) return;
-      const d = DEFAULTS(); D = { ...d, ...j, settings: { ...d.settings, ...(j.settings || {}) } }; save(); applyTheme(); render(); toast("Backup geladen");
-    } catch (e) { toast(e.message || "Backup nicht lesbar"); }
-    t.value = "";
+  } else if (t.id === "dbxAuto") { DB.auto = t.checked; dbSave(); if (t.checked) queueBackup(); toast(t.checked ? "Automatische Sicherung an" : "Automatische Sicherung aus");
   } else if (t.id === "sAccent") { D.settings.accent = t.value; save(); applyTheme(); render(); }
 });
 document.addEventListener("input", ev => {
@@ -953,4 +1200,4 @@ applyTheme();
 if (window.matchMedia) matchMedia("(prefers-color-scheme: light)").addEventListener?.("change", () => { if (D.settings.mode === "auto") applyTheme(); });
 render();
 if ("serviceWorker" in navigator && location.protocol.startsWith("http")) navigator.serviceWorker.register("sw.js").catch(() => { });
-window.__ern = { get D() { return D; }, importCsv, parseCsv, foodsToCsv, mapOff };
+window.__ern = { get D() { return D; }, importCsv, importAny: importAnyCsv, parseCsv, foodsToCsv, mapOff };
