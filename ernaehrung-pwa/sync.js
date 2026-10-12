@@ -181,7 +181,7 @@ function syPanel() {
         <li><b>Datenbank:</b> Build → Firestore Database → „Datenbank erstellen“ → Standort z. B. europe-west3 → „Im Produktionsmodus starten“. Danach oben auf „Regeln“, alles ersetzen durch den Text unten (Kopieren-Knopf) und „Veröffentlichen“.</li>
         <li><b>App-Daten:</b> Zahnrad → Projekteinstellungen → „Allgemein“ → ganz unten „App hinzufügen“ → Web-Symbol &lt;/&gt; → Namen eingeben → „App registrieren“. Den Block <code>const firebaseConfig = {…}</code> kopieren und unten einfügen.</li>
       </ol><button class="btn sec block" style="margin-top:6px" data-act="syCopyRules">Regeln kopieren</button></div>
-      <label>firebaseConfig einfügen</label><textarea id="syCfg" rows="5" placeholder='const firebaseConfig = { apiKey: "…", authDomain: "…", projectId: "…", … };'></textarea>
+      <label>firebaseConfig einfügen</label><textarea id="syCfg" rows="9" style="min-height:190px;font-size:12px" placeholder='const firebaseConfig = { apiKey: "…", authDomain: "…", projectId: "…", … };'></textarea>
       <button class="btn block" style="margin-top:12px" data-act="syCfgSave">Weiter</button>${SY.err ? `<div class="status err">${esc(SY.err)}</div>` : ""}</div>`;
   }
   if (!SY.user) {
@@ -203,7 +203,7 @@ function syPanel() {
 function syCfgFromText(txt) {
   const o = {};
   ["apiKey", "authDomain", "projectId", "storageBucket", "messagingSenderId", "appId"].forEach(k => {
-    const m = String(txt || "").match(new RegExp(k + "[\"']?\\s*:\\s*[\"']([^\"']+)[\"']"));
+    const m = String(txt || "").match(new RegExp(k + "[\"'`]?\\s*[:=]\\s*[\"'`“”‘’]([^\"'`“”‘’]+)[\"'`“”‘’]"));
     if (m) o[k] = m[1];
   });
   return o.apiKey && o.projectId ? o : null;
@@ -213,7 +213,9 @@ document.addEventListener("click", async ev => {
   const a = t.dataset.act, val = id => ($("#" + id) ? $("#" + id).value.trim() : "");
   if (a === "syCopyRules") toast((await copyText(SY_RULES)) ? "Regeln kopiert" : "Kopieren nicht möglich");
   else if (a === "syCfgSave") {
-    const c = syCfgFromText(val("syCfg")); if (!c) return toast("Die Daten sind unvollständig – kopiere den ganzen firebaseConfig-Block");
+    const raw = val("syCfg"), c = syCfgFromText(raw);
+    if (!raw) return toast("Das Feld ist leer – füge zuerst den firebaseConfig-Block ein");
+    if (!c) return toast("Nicht erkannt: es fehlen apiKey und/oder projectId. Kopiere den ganzen Block von „const firebaseConfig“ bis „};“");
     SY.cfg = c; SY.err = ""; sySave(); syInit(); render();
   } else if (a === "syCfgReset") { syStop(); try { if (SY.fb) await SY.fb.auth.signOut(SY.fb.au); } catch (e) { /* egal */ } SY.cfg = null; SY.fb = null; SY.user = null; SY.state = "off"; sySave(); render(); }
   else if (a === "syLogin" || a === "syRegister") {
