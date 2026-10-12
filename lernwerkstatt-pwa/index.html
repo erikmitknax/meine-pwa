@@ -101,11 +101,12 @@ label{display:grid;gap:5px;font-size:.85rem;font-weight:600;color:var(--muted)}
 /* Lernen */
 .stage{display:grid;gap:16px;justify-items:center}
 .card3d{width:100%;max-width:620px;min-height:260px;perspective:1200px;cursor:pointer;border:0;background:none;padding:0;text-align:left}
-.card3d .inner{position:relative;min-height:260px;transition:transform .45s;transform-style:preserve-3d}
+.card3d .inner{position:relative;display:grid;min-height:260px;transition:transform .45s;transform-style:preserve-3d}
 .card3d.flip .inner{transform:rotateY(180deg)}
-.face{position:absolute;inset:0;backface-visibility:hidden;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:24px;display:flex;flex-direction:column;justify-content:space-between;box-shadow:0 8px 24px -14px rgba(0,0,0,.35)}
+.face{position:relative;grid-area:1/1;min-width:0;backface-visibility:hidden;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:24px;display:flex;flex-direction:column;justify-content:space-between;box-shadow:0 8px 24px -14px rgba(0,0,0,.35)}
 .face.back{transform:rotateY(180deg);border-color:var(--accent)}
 .face .txt{font-family:var(--f-display);font-size:1.5rem;font-weight:500;line-height:1.3;overflow-wrap:anywhere;margin-block:auto;padding-block:12px}
+.face .txt.l1{font-size:1.2rem}.face .txt.l2{font-size:1.05rem;line-height:1.35}.face .txt.l3{font-size:.95rem;line-height:1.4}
 .face .hint{font-size:.8rem;color:var(--muted)}
 .rate{display:flex;gap:10px;flex-wrap:wrap;justify-content:center}
 .progress{height:6px;background:var(--surface2);border-radius:9px;overflow:hidden;width:100%;max-width:620px}
@@ -1085,6 +1086,7 @@ function showCard(){
   const x=Q.map[Q.queue[0]];if(!x)return finishStudy();
   Q.flipped=false;$("#card").classList.remove("flip");$("#rate").hidden=true;
   $("#cardQ").textContent=x.c.f;$("#cardA").textContent=x.c.b;
+  [["#cardQ",x.c.f],["#cardA",x.c.b]].forEach(([s,t])=>{const e=$(s),n=t.length;e.classList.remove("l1","l2","l3");if(n>500)e.classList.add("l3");else if(n>250)e.classList.add("l2");else if(n>110)e.classList.add("l1")});
   const src=[topicPath(x.d.topic),x.d.title].filter(Boolean).join(" · ");
   $("#srcF").textContent=src;$("#srcB").textContent=src;
   const docs=pdfsFor(x.d.topic),dbox=$("#studyDocs");dbox.replaceChildren();
