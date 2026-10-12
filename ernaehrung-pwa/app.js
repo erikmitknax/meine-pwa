@@ -561,13 +561,83 @@ let manualPrefill = null;
 function foodForm(f) {
   f = f || {};
   const v = k => esc(f[k] ?? "");
-  return `<label style="margin-top:0">Name</label><input type="text" id="fName" value="${v("name")}">
+  return `<div class="pastebox"><label style="margin-top:0">Aus Text einfügen</label>
+    <textarea id="fPaste" rows="3" spellcheck="false" autocapitalize="off" autocomplete="off" placeholder="Hier einfügen, z. B.&#10;name;marke;barcode;kcal;fett;kohlenhydrate;zucker;eiweiss;ballaststoffe;portion_g&#10;Banane medium;;;89;0,3;23;12;1,1;2,6;118"></textarea>
+    <div class="grid2" style="margin-top:8px"><button class="btn sec small" type="button" id="fPasteGo">Felder füllen</button><button class="btn sec small" type="button" id="fPasteCopy">Auftrag für KI kopieren</button></div>
+    <div class="muted tiny" style="margin-top:8px">CSV mit Semikolon, Tab oder JSON. Beim Einfügen füllt sich das Formular automatisch. Mehrere Zeilen speichern mehrere Lebensmittel auf einmal.</div></div>
+    <label>Name</label><input type="text" id="fName" value="${v("name")}">
     <div class="grid2"><div><label>Marke</label><input type="text" id="fBrand" value="${v("brand")}"></div><div><label>Barcode</label><input type="text" inputmode="numeric" id="fBar" value="${v("barcode")}"></div></div>
     <div class="muted small" style="margin-top:12px">Nährwerte pro 100 g / 100 ml</div>
     <div class="grid2"><div><label>Kalorien (kcal)</label><input type="text" inputmode="decimal" id="fKcal" value="${v("kcal")}"></div><div><label>Eiweiß (g)</label><input type="text" inputmode="decimal" id="fP" value="${v("protein")}"></div>
     <div><label>Kohlenhydrate (g)</label><input type="text" inputmode="decimal" id="fC" value="${v("carbs")}"></div><div><label>Fett (g)</label><input type="text" inputmode="decimal" id="fF" value="${v("fat")}"></div>
     <div><label>davon Zucker (g)</label><input type="text" inputmode="decimal" id="fS" value="${v("sugar")}"></div><div><label>Ballaststoffe (g)</label><input type="text" inputmode="decimal" id="fFi" value="${v("fiber")}"></div></div>
     <label>Portionsgröße (g)</label><input type="text" inputmode="decimal" id="fServ" value="${v("serving") || 100}">`;
+}
+/* Lebensmittel aus eingefügtem Text (CSV, Tab, JSON) */
+const FOOD_KEYS = { name: "name", bezeichnung: "name", lebensmittel: "name", produkt: "name", marke: "brand", brand: "brand", barcode: "barcode", ean: "barcode",
+  kcal: "kcal", kalorien: "kcal", calories: "kcal", energie: "kcal", fett: "fat", fat: "fat", kohlenhydrate: "carbs", carbs: "carbs", kh: "carbs",
+  zucker: "sugar", sugar: "sugar", eiweiss: "protein", "eiweiß": "protein", protein: "protein", ballaststoffe: "fiber", fiber: "fiber",
+  portion_g: "serving", portion: "serving", portionsgroesse: "serving", serving: "serving" };
+const foodKey = h => FOOD_KEYS[String(h).trim().toLowerCase().replace(/[\s-]+/g, "_").replace(/_100g$/, "")];
+function normFood(o) {
+  const out = { name: "", brand: "", barcode: "", kcal: 0, protein: 0, carbs: 0, fat: 0, sugar: 0, fiber: 0, serving: 100 };
+  Object.entries(o).forEach(([k, v]) => {
+    const key = foodKey(k); if (!key) return;
+    out[key] = ["name", "brand", "barcode"].includes(key) ? String(v ?? "").trim() : num(String(v ?? ""));
+  });
+  out.barcode = out.barcode.replace(/\D/g, ""); out.serving = out.serving || 100;
+  return out.name ? out : null;
+}
+function parseFoodsText(raw) {
+  const t0 = String(raw || "").trim().replace(/^```[a-z]*\s*/i, "").replace(/```\s*$/, "").trim();
+  if (!t0) return [];
+  if (t0[0] === "{" || t0[0] === "[") {
+    let j = JSON.parse(t0);
+    if (!Array.isArray(j)) j = Array.isArray(j.foods) ? j.foods : Array.isArray(j.lebensmittel) ? j.lebensmittel : [j];
+    return j.map(o => o && typeof o === "object" ? normFood(o) : null).filter(Boolean);
+  }
+  const first = t0.split(/\r?\n/)[0];
+  const best = [";", "\t", "|", ","].map(d => [d, first.split(d).length - 1]).sort((a, b) => b[1] - a[1])[0];
+  if (!best[1]) throw new Error("kein Trennzeichen");
+  const t = best[0] === ";" || best[0] === "," ? t0 : t0.split(best[0]).join(";");
+  const rows = parseCsv(t);
+  if (!rows.length) return [];
+  const hasHead = rows[0].filter(foodKey).length >= 2;
+  const order = ["name", "brand", "barcode", "kcal", "fat", "carbs", "sugar", "protein", "fiber", "serving"];
+  const head = hasHead ? rows[0].map(foodKey) : order;
+  return rows.slice(hasHead ? 1 : 0).map(r => { const o = {}; head.forEach((k, i) => { if (k && r[i] != null) o[k] = r[i]; }); return normFood(o); }).filter(Boolean);
+}
+function upsertFood(f) {
+  const ex = D.foods.find(x => (f.barcode && x.barcode === f.barcode) || (!f.barcode && !x.barcode && x.name.toLowerCase() === f.name.toLowerCase() && (x.brand || "") === (f.brand || "")));
+  if (ex) { Object.assign(ex, f, { id: ex.id, used: ex.used || 0 }); return "updated"; }
+  D.foods.push({ ...f, id: uid(), used: 0 }); return "added";
+}
+const FOOD_PROMPT = "Gib mir die Nährwerte pro 100 g für:\n(HIER LEBENSMITTEL EINTRAGEN, z. B. Banane medium)\n\nAntworte nur mit CSV, ohne weiteren Text: erste Zeile die Kopfzeile, danach eine Zeile pro Lebensmittel, Trennzeichen Semikolon.\nname;marke;barcode;kcal;fett;kohlenhydrate;zucker;eiweiss;ballaststoffe;portion_g\nBei portion_g bitte das übliche Gewicht einer Portion in Gramm angeben (z. B. mittlere Banane ohne Schale: 118).";
+async function copyText(text) {
+  try { await navigator.clipboard.writeText(text); return true; } catch (e) { /* weiter */ }
+  try { const ta = document.createElement("textarea"); ta.value = text; ta.style.cssText = "position:fixed;opacity:0;top:0"; document.body.append(ta); ta.select(); const ok = document.execCommand("copy"); ta.remove(); return ok; } catch (e) { return false; }
+}
+function bindPaste(root, onMulti) {
+  const ta = $("#fPaste", root); if (!ta) return;
+  const go = () => {
+    if (!ta.value.trim()) return toast("Füge zuerst Text ein");
+    let list;
+    try { list = parseFoodsText(ta.value); } catch (e) { return toast("Format nicht erkannt. Nutze CSV mit Semikolon oder JSON."); }
+    if (!list.length) return toast("Es wurde kein Lebensmittel gefunden");
+    if (list.length === 1) {
+      const f = list[0], set = (id, v) => { const el = $(id, root); if (el) el.value = v; };
+      const n = (v, keep) => v || keep ? String(v).replace(".", ",") : "";
+      set("#fName", f.name); set("#fBrand", f.brand); if (f.barcode) set("#fBar", f.barcode);
+      set("#fKcal", n(f.kcal, true)); set("#fP", n(f.protein, true)); set("#fC", n(f.carbs, true)); set("#fF", n(f.fat, true));
+      set("#fS", n(f.sugar)); set("#fFi", n(f.fiber)); set("#fServ", n(f.serving, true));
+      ta.value = ""; toast("Felder ausgefüllt. Bitte kurz prüfen und speichern.");
+    } else {
+      list.forEach(upsertFood); save(); toast(list.length + " Lebensmittel gespeichert"); onMulti();
+    }
+  };
+  $("#fPasteGo", root).onclick = go;
+  ta.onpaste = () => setTimeout(go, 60);
+  $("#fPasteCopy", root).onclick = async () => toast(await copyText(FOOD_PROMPT) ? "Auftrag kopiert. Schicke ihn an Claude oder eine andere KI und füge die Antwort hier ein." : "Kopieren nicht möglich");
 }
 function readFoodForm(root, base) {
   const name = $("#fName", root).value.trim();
@@ -579,6 +649,7 @@ function readFoodForm(root, base) {
 function bodyManual(b) {
   b.innerHTML = foodForm(manualPrefill) + `<button class="btn block" style="margin-top:14px" id="fSave">Speichern & Menge wählen</button>`;
   manualPrefill = null;
+  bindPaste(b, () => { addTab = "search"; openAdd(); });
   $("#fSave", b).onclick = () => {
     const f = readFoodForm(b); if (!f) return;
     D.foods.push(f); save(); pickFood(f);
@@ -733,6 +804,7 @@ function foodPicker(onPick, onBack) {
 function newFoodSheet(onPick, again, barcode) {
   const f = sheet(`<h3>Neues Lebensmittel</h3>${foodForm({ barcode })}<button class="btn block" style="margin-top:14px" id="nSave">Speichern & Menge wählen</button><button class="btn sec block" style="margin-top:8px" id="nBack">Zurück</button>`);
   $("#nBack", f).onclick = again;
+  bindPaste(f, again);
   $("#nSave", f).onclick = () => { const n = readFoodForm(f); if (!n) return; D.foods.push(n); save(); pickAmount(n, onPick, again); };
 }
 /* Zutat per Barcode: Kamera oder Nummer eintippen */
@@ -842,6 +914,7 @@ function foodEdit(f) {
     <button class="btn block" style="margin-top:14px" id="fs">Speichern</button>
     ${f ? `<button class="btn danger block" style="margin-top:8px" id="fd">Löschen</button>` : ""}
     <button class="btn sec block" style="margin-top:8px" id="fb">Abbrechen</button>`);
+  bindPaste(s, () => { closeSheet(); render(); });
   $("#fs", s).onclick = () => {
     const n = readFoodForm(s, f); if (!n) return;
     if (f) Object.assign(f, n); else D.foods.push(n);
@@ -1200,4 +1273,4 @@ applyTheme();
 if (window.matchMedia) matchMedia("(prefers-color-scheme: light)").addEventListener?.("change", () => { if (D.settings.mode === "auto") applyTheme(); });
 render();
 if ("serviceWorker" in navigator && location.protocol.startsWith("http")) navigator.serviceWorker.register("sw.js").catch(() => { });
-window.__ern = { get D() { return D; }, importCsv, importAny: importAnyCsv, parseCsv, foodsToCsv, mapOff };
+window.__ern = { parseFoodsText, get D() { return D; }, importCsv, importAny: importAnyCsv, parseCsv, foodsToCsv, mapOff };
