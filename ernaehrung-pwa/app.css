@@ -164,3 +164,11 @@ svg text{fill:var(--muted);font:600 11px "Bricolage Grotesque",system-ui}
 @keyframes sp{to{transform:rotate(360deg)}}
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+.seg.five button{font-size:12.5px;padding:9px 0}
+.linkbtn{display:block;margin:8px 4px 0;background:none;border:0;color:var(--muted);font:600 13.5px "Bricolage Grotesque",system-ui;padding:6px 0;text-decoration:underline;text-underline-offset:3px}
+.ing{display:flex;align-items:center;gap:8px;padding:9px 0}
+.ing + .ing{border-top:1px solid var(--line)}
+.ing .t{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ing input{width:84px;text-align:right;padding:10px 12px}
+.ing .iconbtn{width:36px;height:36px;font-size:22px;border-radius:12px}

@@ -15,7 +15,7 @@ const WD_ORDER = [1, 2, 3, 4, 5, 6, 0];
 const NATIVE = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
 
 const DEFAULTS = () => ({
-  ver: 2, foods: [], entries: [], weights: {},
+  ver: 2, foods: [], recipes: [], entries: [], weights: {},
   settings: { kcal: 2200, pP: 30, pC: 40, pF: 30, mode: "auto", accent: "#ff4d2e", apiKey: "", model: "claude-sonnet-5-5", goalWeight: "" },
 });
 let D = load();
@@ -132,7 +132,7 @@ function viewToday() {
     return `<section class="meal"><div class="mh"><h3>${m.name}</h3>${es.length ? `<span class="kc">${fmt(s.kcal)} kcal</span>` : ""}<button class="addbtn" data-act="add" data-meal="${m.id}" aria-label="${m.name} hinzufügen">${icon("plus", 18, 2.6)}</button></div>` +
       (es.length ? `<div class="list">${es.map(e => `<div class="entry" data-act="editEntry" data-id="${e.id}"><div class="nm"><div class="t">${esc(e.name)}</div>
         <div class="s"><span class="g">${r0(e.grams)} g</span><span class="cp">E ${r0(e.p)}</span><span class="cc">KH ${r0(e.c)}</span><span class="cf">F ${r0(e.f)}</span></div></div>
-        <div class="kcal">${fmt(e.kcal)}<small>kcal</small></div></div>`).join("")}</div>`
+        <div class="kcal">${fmt(e.kcal)}<small>kcal</small></div></div>`).join("")}</div>${es.length > 1 ? `<button class="linkbtn" data-act="mealToRecipe" data-meal="${m.id}">Als Rezept speichern</button>` : ""}`
         : `<button class="empty" data-act="add" data-meal="${m.id}">${icon("plus", 18, 2.4)}${m.name} eintragen</button>`) + `</section>`;
   }).join("");
   const full = fromIso(ui.date).toLocaleDateString("de-DE", { day: "numeric", month: "short" });
@@ -255,6 +255,7 @@ function viewSettings() {
     <label>API-Schlüssel</label><input type="password" id="sKey" value="${esc(s.apiKey)}" placeholder="sk-ant-…" autocomplete="off">
     <label>Modell</label><input type="text" id="sModel" value="${esc(s.model)}">
     <button class="btn sec block" style="margin-top:16px" data-act="saveAI">Speichern</button></div>
+  <h2>Rezepte</h2><div class="panel" style="padding-top:16px"><button class="btn sec block" data-act="recipes">Meine Rezepte (${D.recipes.length})</button></div>
   <h2>Meine Lebensmittel <span class="muted" style="font-weight:600">${D.foods.length}</span></h2><div class="panel" style="padding-top:16px">
     <div class="grid2"><button class="btn sec" data-act="foodsManage">Verwalten</button><button class="btn sec" data-act="foodNew">Neu anlegen</button>
     <button class="btn sec" data-act="csvImport">CSV importieren</button><button class="btn sec" data-act="csvExport">CSV exportieren</button></div>
@@ -290,9 +291,9 @@ let addTab = "search";
 function openAdd(meal) {
   if (meal) ui.meal = meal;
   const mealSel = `<select id="aMeal" style="margin-bottom:12px">${MEALS.map(m => `<option value="${m.id}" ${m.id === ui.meal ? "selected" : ""}>${m.name} – ${niceDate(ui.date)}</option>`).join("")}</select>`;
-  const tabs = [["search", "Suchen"], ["scan", "Scannen"], ["photo", "Foto-KI"], ["manual", "Manuell"]];
+  const tabs = [["search", "Suchen"], ["scan", "Scannen"], ["photo", "Foto-KI"], ["recipes", "Rezepte"], ["manual", "Manuell"]];
   const s = sheet(`<h3>Lebensmittel hinzufügen</h3>${mealSel}
-    <div class="seg">${tabs.map(([v, l]) => `<button data-at="${v}" class="${addTab === v ? "on" : ""}">${l}</button>`).join("")}</div><div id="addBody"></div>`);
+    <div class="seg five">${tabs.map(([v, l]) => `<button data-at="${v}" class="${addTab === v ? "on" : ""}">${l}</button>`).join("")}</div><div id="addBody"></div>`);
   $("#aMeal", s).onchange = e => ui.meal = e.target.value;
   $$("[data-at]", s).forEach(b => b.onclick = () => { addTab = b.dataset.at; stopScan(); $$("[data-at]", s).forEach(x => x.classList.toggle("on", x === b)); addBody(); });
   addBody();
@@ -304,6 +305,7 @@ function addBody() {
   if (addTab === "search") bodySearch(b);
   else if (addTab === "scan") bodyScan(b);
   else if (addTab === "photo") bodyPhoto(b);
+  else if (addTab === "recipes") bodyRecipes(b);
   else bodyManual(b);
 }
 
@@ -573,6 +575,183 @@ function bodyManual(b) {
   };
 }
 
+/* ---------- Rezepte ---------- */
+let rdraft = null;
+const per100 = f => ({ kcal: f.kcal, protein: f.protein, carbs: f.carbs, fat: f.fat });
+function recipeTotals(r) {
+  const t = { kcal: 0, p: 0, c: 0, f: 0, grams: 0 };
+  r.items.forEach(i => { const c = calc(i, i.grams); t.kcal += c.kcal; t.p += c.p; t.c += c.c; t.f += c.f; t.grams += i.grams; });
+  return t;
+}
+function recipePortion(r) {
+  const t = recipeTotals(r), n = Math.max(r.servings || 1, 0.01);
+  return { kcal: t.kcal / n, p: t.p / n, c: t.c / n, f: t.f / n, grams: t.grams / n };
+}
+function recipeLine(r) {
+  const p = recipePortion(r);
+  return `<div class="grow"><div style="font-weight:600">${esc(r.name)}</div><div class="muted tiny">${r.items.length} ${r.items.length === 1 ? "Zutat" : "Zutaten"}, pro Portion ${r0(p.kcal)} kcal (E ${r0(p.p)} / KH ${r0(p.c)} / F ${r0(p.f)})</div></div>`;
+}
+function storeFood(f) {
+  let st = D.foods.find(x => x.id === f.id) || (f.barcode && D.foods.find(x => x.barcode === f.barcode));
+  if (!st) { D.foods.push(f); st = f; }
+  st.used = (st.used || 0) + 1;
+  return st;
+}
+
+function bodyRecipes(b) {
+  const list = D.recipes.slice().sort((a, c) => (c.used || 0) - (a.used || 0));
+  b.innerHTML = (list.length ? list.map(r => `<div class="res" data-rid="${r.id}">${recipeLine(r)}</div>`).join("")
+    : `<div class="muted small center" style="padding:16px 8px">Noch keine Rezepte. Lege ein Gericht aus mehreren Zutaten an, danach trägst du es mit einem Tipp ein.</div>`) +
+    `<button class="btn block" style="margin-top:14px" id="rNew">Neues Rezept</button>`;
+  $$("[data-rid]", b).forEach(el => el.onclick = () => pickRecipe(D.recipes.find(r => r.id === el.dataset.rid)));
+  $("#rNew", b).onclick = () => recipeEditor(null, "add");
+}
+
+function pickRecipe(r) {
+  if (!r) return;
+  const p = recipePortion(r);
+  const s = sheet(`<h3>${esc(r.name)}</h3><div class="muted small">Pro Portion: ${r0(p.kcal)} kcal, Eiweiß ${r1(p.p)} g, Kohlenhydrate ${r1(p.c)} g, Fett ${r1(p.f)} g</div>
+    <label>Portionen</label><div class="row"><input type="text" inputmode="decimal" id="rp" value="1"><button class="chip" data-m="0.5">½</button><button class="chip" data-m="1">1</button><button class="chip" data-m="2">2</button></div>
+    <div class="card" style="margin-top:14px" id="rv"></div>
+    <label>Mahlzeit</label><select id="rm">${MEALS.map(m => `<option value="${m.id}" ${m.id === ui.meal ? "selected" : ""}>${m.name}</option>`).join("")}</select>
+    <button class="btn block" style="margin-top:14px" id="rgo">Zum Tagebuch hinzufügen</button>
+    <button class="btn sec block" style="margin-top:8px" id="red">Rezept bearbeiten</button>
+    <button class="btn sec block" style="margin-top:8px" id="rback">Zurück</button>`);
+  const rp = $("#rp", s);
+  const upd = () => { const n = num(rp.value); $("#rv", s).innerHTML = `<div class="row between"><b style="font-size:22px">${r0(p.kcal * n)} kcal</b><span class="small"><span class="cp">E ${r1(p.p * n)}</span> &nbsp;<span class="cc">KH ${r1(p.c * n)}</span> &nbsp;<span class="cf">F ${r1(p.f * n)}</span></span></div>`; };
+  rp.oninput = upd; upd();
+  $$("[data-m]", s).forEach(b => b.onclick = () => { rp.value = b.dataset.m; upd(); });
+  $("#rback", s).onclick = () => { addTab = "recipes"; openAdd(); };
+  $("#red", s).onclick = () => recipeEditor(r, "add");
+  $("#rgo", s).onclick = () => {
+    const n = num(rp.value); if (n <= 0) return toast("Bitte Portionen eingeben");
+    ui.meal = $("#rm", s).value;
+    D.entries.push({ id: uid(), date: ui.date, meal: ui.meal, name: r.name, grams: p.grams * n, kcal: p.kcal * n, p: p.p * n, c: p.c * n, f: p.f * n });
+    r.used = (r.used || 0) + 1;
+    closeSheet(); save(); render(); toast("Hinzugefügt");
+  };
+}
+
+function recipeEditor(r, back) {
+  rdraft = r ? JSON.parse(JSON.stringify(r)) : { id: null, name: "", servings: 1, items: [] };
+  rdraft.back = back || "add";
+  drawRecipeEditor();
+}
+function recipeExit() {
+  const b = rdraft.back;
+  if (b === "add") { addTab = "recipes"; openAdd(); }
+  else if (b === "manage") recipeManage();
+  else { closeSheet(); render(); }
+}
+function drawRecipeEditor() {
+  const d = rdraft;
+  const s = sheet(`<h3>${d.id ? "Rezept bearbeiten" : "Neues Rezept"}</h3>
+    <label style="margin-top:0">Name</label><input type="text" id="rn" value="${esc(d.name)}" placeholder="z. B. Overnight Oats">
+    <label>Ergibt Portionen</label><input type="text" inputmode="decimal" id="rs" value="${d.servings}">
+    <h2 style="margin:20px 2px 6px">Zutaten</h2>
+    <div id="ri">${d.items.length ? d.items.map((i, k) => `<div class="ing" data-k="${k}"><div class="grow"><div class="t">${esc(i.name)}</div><div class="muted tiny" data-kc></div></div>
+      <input type="text" inputmode="decimal" value="${r0(i.grams)}" aria-label="Menge in Gramm"><span class="muted small">g</span><button class="iconbtn" data-del aria-label="Zutat entfernen">×</button></div>`).join("")
+      : `<div class="muted small" style="padding:4px 2px 12px">Noch keine Zutaten. Füge unten die erste hinzu.</div>`}</div>
+    <button class="btn sec block" id="rAdd">Zutat hinzufügen</button>
+    <div class="card" style="margin-top:16px" id="rsum"></div>
+    <button class="btn block" id="rSave">Rezept speichern</button>
+    ${d.id ? `<button class="btn danger block" style="margin-top:8px" id="rDel">Rezept löschen</button>` : ""}
+    <button class="btn sec block" style="margin-top:8px" id="rCancel">Abbrechen</button>`);
+  const capture = () => { d.name = $("#rn", s).value.trim(); d.servings = num($("#rs", s).value) || 1; };
+  const sumUpd = () => {
+    const t = recipeTotals(d), n = Math.max(num($("#rs", s).value) || 1, 0.01);
+    $$(".ing", s).forEach(row => { const i = d.items[+row.dataset.k]; $("[data-kc]", row).textContent = r0(calc(i, i.grams).kcal) + " kcal"; });
+    $("#rsum", s).innerHTML = `<div class="row between"><span class="muted small">Gesamt</span><b>${r0(t.kcal)} kcal</b></div>
+      <div class="row between" style="margin-top:6px"><span class="muted small">Pro Portion</span><b style="font-size:22px">${r0(t.kcal / n)} kcal</b></div>
+      <div class="small" style="margin-top:6px"><span class="cp">E ${r1(t.p / n)} g</span> &nbsp;<span class="cc">KH ${r1(t.c / n)} g</span> &nbsp;<span class="cf">F ${r1(t.f / n)} g</span></div>`;
+  };
+  sumUpd();
+  $("#rs", s).oninput = sumUpd;
+  $$(".ing", s).forEach(row => {
+    const k = +row.dataset.k;
+    $("input", row).oninput = e => { d.items[k].grams = num(e.target.value); sumUpd(); };
+    $("[data-del]", row).onclick = () => { capture(); d.items.splice(k, 1); drawRecipeEditor(); };
+  });
+  $("#rAdd", s).onclick = () => {
+    capture();
+    foodPicker((food, grams) => { d.items.push({ name: food.name, grams, ...per100(food) }); drawRecipeEditor(); }, drawRecipeEditor);
+  };
+  $("#rCancel", s).onclick = recipeExit;
+  if (d.id) $("#rDel", s).onclick = () => { D.recipes = D.recipes.filter(x => x.id !== d.id); save(); toast("Rezept gelöscht"); recipeExit(); };
+  $("#rSave", s).onclick = () => {
+    capture();
+    if (!d.name) return toast("Bitte einen Namen eingeben");
+    if (!d.items.length) return toast("Füge mindestens eine Zutat hinzu");
+    if (d.items.some(i => i.grams <= 0)) return toast("Jede Zutat braucht eine Menge");
+    const rec = { id: d.id || uid(), name: d.name, servings: d.servings, items: d.items.map(i => ({ name: i.name, grams: i.grams, kcal: i.kcal, protein: i.protein, carbs: i.carbs, fat: i.fat })), used: 0 };
+    const ex = D.recipes.find(x => x.id === rec.id);
+    if (ex) { rec.used = ex.used || 0; Object.assign(ex, rec); } else D.recipes.push(rec);
+    save(); toast("Rezept gespeichert"); recipeExit();
+  };
+}
+
+/* Zutat wählen: Suche in eigener Datenbank und Open Food Facts */
+function foodPicker(onPick, onBack) {
+  const s = sheet(`<h3>Zutat hinzufügen</h3><div class="row"><input type="search" id="zq" placeholder="Name oder Marke …" autocomplete="off"><button class="btn" id="zGo" aria-label="Online suchen">${icon("search", 22)}</button></div>
+    <div id="zl"></div><div id="zo"></div>
+    <button class="btn sec block" style="margin-top:14px" id="zNew">Neues Lebensmittel anlegen</button>
+    <button class="btn sec block" style="margin-top:8px" id="zBack">Zurück zum Rezept</button>`);
+  const q = $("#zq", s), again = () => foodPicker(onPick, onBack);
+  const showLocal = () => {
+    const t = q.value.trim().toLowerCase();
+    const list = (t ? D.foods.filter(f => (f.name + " " + f.brand).toLowerCase().includes(t)) : D.foods.slice().sort((a, c) => (c.used || 0) - (a.used || 0))).slice(0, 20);
+    $("#zl", s).innerHTML = (list.length ? `<h2>${t ? "In meiner Datenbank" : "Zuletzt genutzt"}</h2>` : "") + list.map(f => `<div class="res" data-fid="${f.id}">${foodLine(f)}</div>`).join("");
+    $$("[data-fid]", s).forEach(el => el.onclick = () => pickAmount(D.foods.find(f => f.id === el.dataset.fid), onPick, again));
+  };
+  showLocal(); q.oninput = showLocal;
+  const online = async () => {
+    const t = q.value.trim(); if (t.length < 2) return;
+    const o = $("#zo", s);
+    o.innerHTML = `<h2>Open Food Facts</h2><div class="muted"><span class="spin"></span>Suche …</div>`;
+    try {
+      const list = await offSearch(t);
+      o.innerHTML = `<h2>Open Food Facts</h2>` + (list.length ? list.map((f, i) => `<div class="res" data-oi="${i}">${foodLine(f)}</div>`).join("") : `<div class="muted small">Nichts gefunden.</div>`);
+      $$("[data-oi]", o).forEach(el => el.onclick = () => pickAmount(list[+el.dataset.oi], onPick, again));
+    } catch (e) { o.innerHTML = `<h2>Open Food Facts</h2><div class="warn small">Online-Suche nicht möglich (${esc(e.message)}).</div>`; }
+  };
+  $("#zGo", s).onclick = online;
+  q.onkeydown = e => { if (e.key === "Enter") { e.preventDefault(); online(); } };
+  $("#zBack", s).onclick = onBack;
+  $("#zNew", s).onclick = () => {
+    const f = sheet(`<h3>Neues Lebensmittel</h3>${foodForm({})}<button class="btn block" style="margin-top:14px" id="nSave">Speichern & Menge wählen</button><button class="btn sec block" style="margin-top:8px" id="nBack">Zurück</button>`);
+    $("#nBack", f).onclick = again;
+    $("#nSave", f).onclick = () => { const n = readFoodForm(f); if (!n) return; D.foods.push(n); save(); pickAmount(n, onPick, again); };
+  };
+}
+function pickAmount(food, onPick, onBack) {
+  if (!food) return;
+  const serving = food.serving || 100;
+  const s = sheet(`<h3>${esc(food.name)}</h3><div class="muted small">Pro 100 g: ${r0(food.kcal)} kcal, E ${r1(food.protein)} / KH ${r1(food.carbs)} / F ${r1(food.fat)}</div>
+    <label>Menge in g oder ml</label><input type="text" inputmode="decimal" id="za" value="${r0(serving)}">
+    <div class="card" style="margin-top:12px" id="zv"></div>
+    <button class="btn block" id="zOk">Zur Zutatenliste</button><button class="btn sec block" style="margin-top:8px" id="zBk">Zurück</button>`);
+  const za = $("#za", s);
+  const upd = () => { const c = calc(food, num(za.value)); $("#zv", s).innerHTML = `<b style="font-size:20px">${r0(c.kcal)} kcal</b> <span class="small muted">E ${r1(c.p)} / KH ${r1(c.c)} / F ${r1(c.f)}</span>`; };
+  za.oninput = upd; upd();
+  $("#zBk", s).onclick = onBack;
+  $("#zOk", s).onclick = () => { const g = num(za.value); if (g <= 0) return toast("Bitte eine Menge eingeben"); onPick(storeFood(food), g); };
+}
+
+function recipeManage() {
+  const s = sheet(`<h3>Meine Rezepte</h3><div id="rl"></div><button class="btn block" style="margin-top:14px" id="rNew">Neues Rezept</button>`);
+  const list = D.recipes.slice().sort((a, b) => a.name.localeCompare(b.name, "de"));
+  $("#rl", s).innerHTML = list.length ? list.map(r => `<div class="res" data-rid="${r.id}">${recipeLine(r)}</div>`).join("") : `<div class="muted small center" style="padding:16px 8px">Noch keine Rezepte.</div>`;
+  $$("[data-rid]", s).forEach(el => el.onclick = () => recipeEditor(D.recipes.find(r => r.id === el.dataset.rid), "manage"));
+  $("#rNew", s).onclick = () => recipeEditor(null, "manage");
+}
+function mealToRecipe(meal) {
+  const es = dayEntries(ui.date).filter(e => e.meal === meal && e.grams > 0);
+  if (!es.length) return;
+  recipeEditor(null, "close");
+  rdraft.items = es.map(e => ({ name: e.name, grams: e.grams, kcal: e.kcal / e.grams * 100, protein: e.p / e.grams * 100, carbs: e.c / e.grams * 100, fat: e.f / e.grams * 100 }));
+  drawRecipeEditor();
+}
+
 /* Eintrag bearbeiten */
 function editEntry(id) {
   const e = D.entries.find(x => x.id === id); if (!e) return;
@@ -708,6 +887,8 @@ document.addEventListener("click", async ev => {
   else if (a === "mode") { D.settings.mode = t.dataset.v; save(); applyTheme(); render(); }
   else if (a === "accent") { D.settings.accent = t.dataset.v; save(); applyTheme(); render(); }
   else if (a === "saveAI") { D.settings.apiKey = $("#sKey").value.trim(); D.settings.model = $("#sModel").value.trim() || "claude-sonnet-5-5"; save(); toast("Gespeichert"); }
+  else if (a === "mealToRecipe") mealToRecipe(t.dataset.meal);
+  else if (a === "recipes") recipeManage();
   else if (a === "foodsManage") foodsManage();
   else if (a === "foodNew") foodEdit(null);
   else if (a === "csvImport") $("#csvFile").click();
