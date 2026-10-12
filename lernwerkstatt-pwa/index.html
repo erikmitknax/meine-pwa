@@ -247,6 +247,13 @@ html.pv-lock,html.pv-lock body{overflow:hidden}
 .acc-b{padding:0 14px 14px;display:grid;gap:10px}
 .pdfrow.done .pdflink,.pdflink.done{color:var(--muted)}
 .pdfrow.done .pdflink{text-decoration:line-through}
+.cardmeta{display:flex;align-items:center;justify-content:space-between;gap:10px;width:100%;max-width:620px}
+.cm-deck{display:grid;min-width:0}
+.cm-deck small{color:var(--muted);font-size:.72rem;text-transform:uppercase;letter-spacing:.06em}
+.cm-deck b{font-weight:600;overflow-wrap:anywhere}
+.cm-edit{flex:none;font-size:1.15rem;line-height:1;width:44px;height:44px;padding:0}
+.cm-editor{width:100%;max-width:620px}
+.cm-editor textarea{min-height:90px}
 </style>
 </head>
 <body>
@@ -342,6 +349,11 @@ html.pv-lock,html.pv-lock body{overflow:hidden}
         <div class="face back"><div class="tophead"><span class="label">Antwort</span><span class="src" id="srcB"></span></div><div class="txt" id="cardA"></div><span class="hint">Wie gut wusstest du es?</span></div>
       </div>
     </button>
+    <div class="cardmeta" id="cardMeta">
+      <span class="cm-deck"><small>Stapel</small><b id="cardDeck"></b></span>
+      <button class="btn small cm-edit" id="cardEdit" type="button" aria-label="Karte bearbeiten" title="Karte bearbeiten">✎</button>
+    </div>
+    <div class="panel grid cm-editor" id="cardEditor" hidden></div>
     <div class="rate" id="rate" hidden>
       <button class="r0" id="r0" type="button">Nochmal<small id="i0"></small></button>
       <button class="r1" id="r1" type="button">Schwer<small id="i1"></small></button>
@@ -1114,6 +1126,7 @@ function showCard(){
   $("#cardQ").textContent=x.c.f;$("#cardA").textContent=x.c.b;
   [["#cardQ",x.c.f],["#cardA",x.c.b]].forEach(([s,t])=>{const e=$(s),n=t.length;e.classList.remove("l1","l2","l3");if(n>500)e.classList.add("l3");else if(n>250)e.classList.add("l2");else if(n>110)e.classList.add("l1")});
   const src=[topicPath(x.d.topic),x.d.title].filter(Boolean).join(" · ");
+  $("#cardDeck").textContent=src;closeCardEditor();
   $("#srcF").textContent=src;$("#srcB").textContent=src;
   const docs=pdfsFor(x.d.topic),dbox=$("#studyDocs");dbox.replaceChildren();
   if(docs.length){dbox.hidden=false;dbox.append(el("span",{text:"Unterlagen:"}));docs.forEach(e=>dbox.append(linkFor(e)))}else dbox.hidden=true;
@@ -1121,6 +1134,36 @@ function showCard(){
   $("#studyProg").style.width=(Q.done/Q.total*100)+"%";
   [0,1,2].forEach(r=>{$("#i"+r).textContent=intervalLabel(x.c,r)});
 }
+/* Karte während des Lernens bearbeiten oder löschen */
+function closeCardEditor(){const b=$("#cardEditor");b.hidden=true;b.replaceChildren()}
+function openCardEditor(){
+  if(!Q.active)return;
+  const x=Q.map[Q.queue[0]];if(!x)return;
+  const b=$("#cardEditor");if(!b.hidden){closeCardEditor();return}
+  const f=el("textarea",{id:"ce-f","aria-label":"Vorderseite"}),bk=el("textarea",{id:"ce-b","aria-label":"Rückseite"});
+  f.value=x.c.f;bk.value=x.c.b;
+  const save=el("button",{class:"btn primary",type:"button"},"Speichern"),cancel=el("button",{class:"btn",type:"button"},"Abbrechen");
+  const del=el("button",{class:"btn danger",type:"button"},"Karte löschen");
+  save.addEventListener("click",()=>{
+    const nf=f.value.trim(),nb=bk.value.trim();if(!nf||!nb){toast("Beide Seiten brauchen Text");return}
+    x.c.f=nf;x.c.b=nb;x.d.updated=Date.now();saveDeck(x.d);
+    $("#cardQ").textContent=nf;$("#cardA").textContent=nb;
+    [["#cardQ",nf],["#cardA",nb]].forEach(([s,t])=>{const e=$(s);e.classList.remove("l1","l2","l3");if(t.length>500)e.classList.add("l3");else if(t.length>250)e.classList.add("l2");else if(t.length>110)e.classList.add("l1")});
+    closeCardEditor();refreshAll();toast("Karte gespeichert");
+  });
+  cancel.addEventListener("click",closeCardEditor);
+  del.addEventListener("click",()=>armConfirm(del,"Wirklich löschen?",()=>{
+    const id=Q.queue.shift();x.d.cards=x.d.cards.filter(c=>c.id!==id);x.d.updated=Date.now();saveDeck(x.d);
+    delete Q.map[id];Q.queue=Q.queue.filter(i=>i!==id);Q.total=Math.max(0,Q.total-1);
+    toast("Karte gelöscht");closeCardEditor();refreshAll();
+    if(!Q.queue.length){if(Q.total>0||Q.done>0)finishStudy();else leaveStudy()}else showCard();
+  }));
+  b.append(el("div",{class:"label",text:"Karte bearbeiten"}),
+    el("label",{for:"ce-f"},"Vorderseite",f),el("label",{for:"ce-b"},"Rückseite",bk),
+    el("div",{class:"row"},save,cancel,del));
+  b.hidden=false;b.scrollIntoView({block:"nearest"});setTimeout(()=>f.focus(),30);
+}
+$("#cardEdit").addEventListener("click",openCardEditor);
 function flip(){
   if(!Q.active)return;
   Q.flipped=!Q.flipped;$("#card").classList.toggle("flip",Q.flipped);$("#rate").hidden=!Q.flipped;
