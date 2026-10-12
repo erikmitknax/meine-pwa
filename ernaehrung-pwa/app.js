@@ -574,17 +574,30 @@ function shrink(file, max = 1280) {
 async function analyzePhoto(file) {
   const data = await shrink(file);
   const prompt = `Analysiere dieses Foto (Mahlzeit, Lebensmittel oder Nährwert-Etikett). Erkenne jedes einzelne Lebensmittel, schätze die Menge in Gramm und nenne die Nährwerte pro 100 g. Wenn ein Nährwert-Etikett zu sehen ist, nutze dessen Werte. Antworte ausschließlich mit JSON ohne weiteren Text im Format: {"items":[{"name":"deutscher Name","grams":150,"kcal":120,"protein":5,"carbs":20,"fat":2,"sugar":1,"fiber":3}]}. Alle Nährwerte beziehen sich auf 100 g.`;
-  let r;
-  const model = (D.settings.geminiModel || "gemini-2.5-flash").trim();
-  try {
-    r = await fetchT("https://generativelanguage.googleapis.com/v1beta/models/" + encodeURIComponent(model) + ":generateContent", {
-      method: "POST",
-      headers: { "content-type": "application/json", "x-goog-api-key": D.settings.geminiKey.trim() },
-      body: JSON.stringify({ contents: [{ parts: [{ inline_data: { mime_type: "image/jpeg", data } }, { text: prompt }] }], generationConfig: { responseMimeType: "application/json", maxOutputTokens: 2000 } }),
-    }, 60000);
-  } catch (e) { throw new Error("Keine Verbindung zur KI. Bist du online?"); }
-  const j = await r.json().catch(() => ({}));
-  if (!r.ok) throw new Error(r.status === 429 ? "Das kostenlose Limit ist gerade erreicht. Warte kurz und versuche es erneut." : (j.error && j.error.message) || "KI-Fehler " + r.status);
+  const body = JSON.stringify({ contents: [{ parts: [{ inline_data: { mime_type: "image/jpeg", data } }, { text: prompt }] }], generationConfig: { responseMimeType: "application/json", maxOutputTokens: 2000 } });
+  // Bei Überlastung (503), unbekanntem Modell (404) oder Limit (429) automatisch erneut bzw. mit anderem Modell versuchen
+  const models = [...new Set([(D.settings.geminiModel || "gemini-2.5-flash").trim(), "gemini-2.5-flash", "gemini-flash-latest", "gemini-2.5-flash-lite"])];
+  let r, j, lastErr = "", net = false;
+  for (const model of models) {
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        r = await fetchT("https://generativelanguage.googleapis.com/v1beta/models/" + encodeURIComponent(model) + ":generateContent", {
+          method: "POST", headers: { "content-type": "application/json", "x-goog-api-key": D.settings.geminiKey.trim() }, body,
+        }, 60000);
+      } catch (e) { net = true; r = null; break; }
+      j = await r.json().catch(() => ({}));
+      if (r.ok) break;
+      lastErr = r.status + ((j.error && j.error.message) ? ": " + j.error.message : "");
+      if (r.status === 401 || r.status === 403 || (r.status === 400 && /API key/i.test(lastErr))) throw new Error("Der Gemini-Schlüssel wird nicht akzeptiert. Prüfe ihn in den Einstellungen.");
+      if (r.status === 400) throw new Error("KI-Fehler " + lastErr);
+      if (r.status === 503 || r.status === 500 || r.status === 502 || r.status === 504) { if (attempt === 0) { $("#pres") && ($("#pres").innerHTML = `<div class="muted" style="margin-top:14px"><span class="spin"></span>Gemini ist ausgelastet – neuer Versuch …</div>`); await new Promise(res => setTimeout(res, 1800)); continue; } }
+      break; // 404/429/anderes: nächstes Modell
+    }
+    if (r && r.ok) break;
+    if (net) break;
+  }
+  if (net && !(r && r.ok)) throw new Error("Keine Verbindung zur KI. Bist du online?");
+  if (!r || !r.ok) throw new Error(r && (r.status === 503 || r.status === 500) ? "Gemini ist gerade überlastet (Google-Seite). Bitte in ein bis zwei Minuten nochmal versuchen." : r && r.status === 429 ? "Das kostenlose Limit ist gerade erreicht. Warte kurz und versuche es erneut." : "KI-Fehler " + lastErr);
   const txt = ((((j.candidates || [])[0] || {}).content || {}).parts || []).map(c => c.text || "").join("");
   const m = txt.match(/\{[\s\S]*\}/);
   if (!m) throw new Error("Antwort der KI war nicht lesbar");
