@@ -1040,7 +1040,9 @@ async function exportFile(name, blob) {
   let why = "";
   if (NATIVE) {
     try {
-      const p = window.Capacitor.registerPlugin("ErnDownload");
+      const C = window.Capacitor;
+      const p = (C.Plugins && C.Plugins.ErnDownload) || (typeof C.registerPlugin === "function" ? C.registerPlugin("ErnDownload") : null);
+      if (!p || typeof p.save !== "function") throw new Error("Download-Funktion der App nicht gefunden");
       await p.save({ filename: name, data: await blobToBase64(blob), mime: blob.type || "application/octet-stream" });
       toast("In „Download“ gespeichert: " + name); return true;
     } catch (e) { why = (e && (e.message || e.errorMessage)) || String(e); }
