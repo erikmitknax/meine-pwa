@@ -301,8 +301,23 @@ function macroInfoText(p, c, f, kcal) {
 }
 
 /* ---------- Sheets ---------- */
+/* Zurück-Taste/-Geste: schließt zuerst Fenster, dann geht es zur Startseite, erst dann verlässt man die App */
+const hist = { sheet: false, tab: false, skip: 0 };
+function histBack() { hist.skip++; history.back(); }
+function setTab(t) {
+  ui.tab = t;
+  if (t !== "today" && !hist.tab) { try { history.pushState({ ern: "tab" }, ""); hist.tab = true; } catch (e) { } }
+  else if (t === "today" && hist.tab) { hist.tab = false; histBack(); }
+}
+window.addEventListener("popstate", () => {
+  if (hist.skip > 0) { hist.skip--; return; }
+  if (hist.sheet) { hist.sheet = false; clearSheet(); return; }
+  if (hist.tab) { hist.tab = false; ui.tab = "today"; render(); $("#view").scrollTop = 0; }
+});
+function clearSheet() { stopScan(); $("#sheetRoot").innerHTML = ""; }
 function sheet(html, mount) {
-  closeSheet();
+  clearSheet();
+  if (!hist.sheet) { try { history.pushState({ ern: "sheet" }, ""); hist.sheet = true; } catch (e) { } }
   const bg = document.createElement("div");
   bg.className = "sheetbg";
   bg.innerHTML = `<div class="sheet">${html}</div>`;
@@ -311,7 +326,10 @@ function sheet(html, mount) {
   if (mount) mount(bg.firstElementChild);
   return bg.firstElementChild;
 }
-function closeSheet() { stopScan(); $("#sheetRoot").innerHTML = ""; }
+function closeSheet() {
+  clearSheet();
+  if (hist.sheet && !hist.timer) hist.timer = setTimeout(() => { hist.timer = 0; if (hist.sheet && !$("#sheetRoot").firstChild) { hist.sheet = false; histBack(); } }, 0);
+}
 
 /* ---- Hinzufügen ---- */
 let addTab = "search";
@@ -490,7 +508,7 @@ function bodyPhoto(b) {
   if (!D.settings.geminiKey) {
     b.innerHTML = `<div class="card muted small">Für die Foto-Erkennung trägst du in den Einstellungen deinen kostenlosen Gemini-Schlüssel ein. Die Werte sind Schätzungen – prüfe sie vor dem Speichern.</div>
       <button class="btn block" id="toSet">Zu den Einstellungen</button>`;
-    $("#toSet", b).onclick = () => { closeSheet(); ui.tab = "settings"; render(); };
+    $("#toSet", b).onclick = () => { closeSheet(); setTab("settings"); render(); };
     return;
   }
   b.innerHTML = `<div class="muted small">Fotografiere dein Essen oder ein Nährwert-Etikett. Die KI schätzt Lebensmittel, Menge und Nährwerte.</div>
@@ -1228,7 +1246,7 @@ document.addEventListener("click", async ev => {
   else if (a === "add") openAdd(t.dataset.meal);
   else if (a === "editEntry") editEntry(t.dataset.id);
   else if (a === "wk") { ui.weekOffset = Math.min(0, ui.weekOffset + +t.dataset.d); render(); }
-  else if (a === "goDay") { ui.date = t.dataset.d; ui.tab = "today"; render(); }
+  else if (a === "goDay") { ui.date = t.dataset.d; setTab("today"); render(); }
   else if (a === "wRange") { ui.wRange = +t.dataset.v; render(); }
   else if (a === "saveWeight") {
     const w = num($("#wVal").value), d = $("#wDate").value || iso(new Date());
@@ -1284,7 +1302,7 @@ document.addEventListener("input", ev => {
     const el = $("#macroInfo"); el.textContent = macroInfoText(p, c, f, k); el.className = "small " + (p + c + f === 100 ? "muted" : "warn");
   }
 });
-$("#tabs").addEventListener("click", e => { const b = e.target.closest("[data-tab]"); if (b) { ui.tab = b.dataset.tab; render(); $("#view").scrollTop = 0; } });
+$("#tabs").addEventListener("click", e => { const b = e.target.closest("[data-tab]"); if (b) { setTab(b.dataset.tab); render(); $("#view").scrollTop = 0; } });
 
 /* ---------- Start ---------- */
 const h = new Date().getHours();
