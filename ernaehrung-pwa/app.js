@@ -38,6 +38,7 @@ function load() {
 function save() {
   try { localStorage.setItem(KEY, JSON.stringify(D)); } catch (e) { toast("Speichern fehlgeschlagen (Speicher voll?)"); }
   if (typeof queueBackup === "function") queueBackup();
+  if (typeof syOnSave === "function") syOnSave();
 }
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
@@ -285,6 +286,7 @@ function viewSettings() {
     <div class="grid2"><button class="btn sec" data-act="foodsManage">Verwalten</button><button class="btn sec" data-act="foodNew">Neu anlegen</button></div>
     <button class="btn sec block" style="margin-top:10px" data-act="csvTemplate">CSV-Vorlage laden</button></div>
   `)}
+  ${acc("sync", `Echtzeit-Abgleich (mehrere Geräte)`, typeof syPanel === "function" ? syPanel() : "")}
   ${acc("exp", `Export`, `<div class="panel" style="padding-top:16px">
     <button class="btn block" data-act="backup">Alles sichern (Backup-Datei)</button>
     <div class="muted small" style="margin:8px 2px 12px">Enthält Tagebuch, Gewicht, Rezepte, Lebensmittel und Einstellungen.</div>
@@ -1458,7 +1460,7 @@ document.addEventListener("click", async ev => {
   else if (a.startsWith("dbx")) dbxAction(a);
   else if (a === "wipe") {
     const sh = sheet(`<h3>Alle Daten löschen</h3>
-      <div class="muted small" style="margin-bottom:14px">Tagebuch, Gewicht, Rezepte, Lebensmittel und Einstellungen werden unwiderruflich entfernt. Damit nichts versehentlich verloren geht, wird zuerst ein Backup gespeichert.</div>
+      <div class="muted small" style="margin-bottom:14px">Tagebuch, Gewicht, Rezepte, Lebensmittel und Einstellungen werden unwiderruflich entfernt. Damit nichts versehentlich verloren geht, wird zuerst ein Backup gespeichert.${typeof SY !== "undefined" && SY.user ? " <b>Achtung:</b> Der Echtzeit-Abgleich ist aktiv – die Daten werden dann auch auf deinen anderen Geräten gelöscht." : ""}</div>
       <div class="steps" style="margin:0 0 14px"><b>Schritt 1:</b> Backup erstellen<div style="margin-top:10px"><button class="btn block" id="wBk">Backup jetzt speichern</button></div><div id="wBkState" class="small muted" style="margin-top:8px">Noch kein Backup erstellt.</div></div>
       <div class="steps" style="margin:0 0 14px"><b>Schritt 2:</b> Löschen bestätigen<label style="margin-top:8px">Tippe LÖSCHEN zur Bestätigung</label><input type="text" id="wTxt" autocomplete="off" autocapitalize="characters" placeholder="LÖSCHEN" disabled></div>
       <button class="btn danger block" id="wGo" disabled>Alles endgültig löschen</button>
