@@ -524,18 +524,31 @@ function bodyPhoto(b) {
     return;
   }
   b.innerHTML = `<div class="muted small">Fotografiere dein Essen oder ein Nährwert-Etikett. Die KI schätzt Lebensmittel, Menge und Nährwerte.</div>
-    <label style="margin-top:12px">Notiz für die KI (optional)</label>
-    <textarea id="pNote" rows="2" placeholder="z. B. 250 g Hähnchenbrust gebraten, Reis ca. 180 g gekocht, Soße ist Joghurtdressing">${esc(ui.photoNote || "")}</textarea>
     <input type="file" id="img" accept="image/*" capture="environment" hidden>
     <div class="grid2" style="margin-top:10px"><button class="btn" id="cam">Foto aufnehmen</button><button class="btn sec" id="gal">Aus Galerie</button></div>
     <input type="file" id="img2" accept="image/*" hidden><div id="pres"></div>`;
-  $("#pNote", b).oninput = e => { ui.photoNote = e.target.value; };
-  const run = async f => {
-    if (!f) return;
+  // Schritt 1: Foto wählen/aufnehmen -> Vorschau + Notiz. Schritt 2: erst mit „Analysieren“ geht es an die KI.
+  let thumb = null;
+  const analyze = async f => {
+    const note = ($("#pNote", b) ? $("#pNote", b).value : "").trim();
+    ui.photoNote = note;
     $("#pres", b).innerHTML = `<div class="muted" style="margin-top:14px"><span class="spin"></span>Analysiere Foto …</div>`;
-    try { photoItems = await analyzePhoto(f, ($("#pNote", b).value || "").trim()); renderPhotoItems(); }
-    catch (e) { $("#pres", b).innerHTML = `<div class="warn small" style="margin-top:14px">${esc(e.message)}</div>`; }
+    try { photoItems = await analyzePhoto(f, note); renderPhotoItems(); }
+    catch (e) { $("#pres", b).innerHTML = `<div class="warn small" style="margin-top:14px">${esc(e.message)}</div><button class="btn sec block" style="margin-top:10px" id="pRetry">Nochmal versuchen</button>`; $("#pRetry", b).onclick = () => preview(f); }
   };
+  const preview = f => {
+    if (!f) return;
+    if (thumb) URL.revokeObjectURL(thumb);
+    thumb = URL.createObjectURL(f);
+    $("#pres", b).innerHTML = `<img class="pthumb" src="${thumb}" alt="Vorschau">
+      <label style="margin-top:12px">Notiz für die KI (optional)</label>
+      <textarea id="pNote" rows="2" placeholder="z. B. 250 g Hähnchenbrust gebraten, Reis ca. 180 g gekocht, Soße ist Joghurtdressing">${esc(ui.photoNote || "")}</textarea>
+      <div class="grid2" style="margin-top:12px"><button class="btn" id="pGo">Analysieren</button><button class="btn sec" id="pDrop">Anderes Foto</button></div>`;
+    $("#pGo", b).onclick = () => analyze(f);
+    $("#pDrop", b).onclick = () => { $("#pres", b).innerHTML = ""; };
+    $("#pNote", b).focus({ preventScroll: true });
+  };
+  const run = preview;
   $("#cam", b).onclick = () => liveCamera(b, run, () => $("#img", b).click());
   $("#gal", b).onclick = () => $("#img2", b).click();
   $("#img", b).onchange = e => run(e.target.files[0]);
