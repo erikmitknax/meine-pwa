@@ -19,7 +19,7 @@ const DEFAULTS = () => ({
   settings: { kcal: 2200, pP: 30, pC: 40, pF: 30, mode: "auto", accent: "#12935f", geminiKey: "", geminiModel: "gemini-2.5-flash", goalWeight: "" },
 });
 let D = load();
-let ui = { setOpen: {}, tab: "today", date: iso(new Date()), weekOffset: 0, wRange: 90, meal: "b", open: {} };
+let ui = { setOpen: {}, tab: "today", date: iso(new Date()), weekOffset: 0, period: 7, wRange: 90, meal: "b", open: {} };
 
 function load() {
   try {
@@ -110,7 +110,7 @@ const IC = {
 };
 const icon = (n, s = 22, w = 2) => `<svg class="ic" width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round">${IC[n]}</svg>`;
 const fmt = n => Math.round(n).toLocaleString("de-DE");
-const TABS = [["today", "Heute"], ["week", "Woche"], null, ["weight", "Gewicht"], ["settings", "Einstellungen"]];
+const TABS = [["today", "Heute"], ["week", "Zeitraum"], null, ["weight", "Gewicht"], ["settings", "Einstellungen"]];
 function buildNav() {
   $("#tabs").innerHTML = TABS.map(t => t ? `<button class="tab" data-tab="${t[0]}">${icon(t[0])}<span>${t[1]}</span></button>` : `<button class="fab" data-act="add" aria-label="Lebensmittel hinzufügen">${icon("plus", 28, 2.4)}</button>`).join("");
 }
@@ -150,48 +150,58 @@ function viewToday() {
     <div class="hn"><b>${fmt(Math.abs(left))}</b><span>${left >= 0 ? "kcal übrig" : "kcal drüber"}</span></div>
     <div class="hbar"><i style="width:${pct}%"></i></div><div class="hf">${fmt(t.kcal)} kcal gegessen</div></section>
   <section class="macros" data-act="dayChart" role="button" tabindex="0" aria-label="Tagesübersicht öffnen">${macroCol("Eiweiß", t.p, g.p, "p")}${macroCol("Kohlenhydrate", t.c, g.c, "c")}${macroCol("Fett", t.f, g.f, "f")}</section>
-  ${meals}`;
+  ${meals}
+  <section class="exportcard"><b>Tag exportieren</b><div class="muted small">Alles, was du an diesem Tag gegessen hast, inkl. Rezept-Zutaten, als Textdatei – z. B. für eine KI-Analyse.</div>
+    <div class="grid2"><button class="btn" data-act="exportDay">Als Datei</button><button class="btn sec" data-act="copyDay">Kopieren</button></div></section>`;
 }
 
 /* ---- Woche ---- */
-function weekDays(offset) {
+function periodDays(offset, n) {
   const today = iso(new Date());
-  const end = addDays(today, offset * 7);
-  return Array.from({ length: 7 }, (_, i) => addDays(end, i - 6));
+  const end = addDays(today, offset * n);
+  return Array.from({ length: n }, (_, i) => addDays(end, i - (n - 1)));
 }
 function viewWeek() {
-  const g = goals(), days = weekDays(ui.weekOffset);
+  const g = goals(), N = ui.period, days = periodDays(ui.weekOffset, N);
   const rows = days.map(d => ({ d, ...sum(dayEntries(d)), n: dayEntries(d).length }));
   const logged = rows.filter(r => r.n), L = logged.length || 1;
   const avg = logged.reduce((a, r) => ({ kcal: a.kcal + r.kcal, p: a.p + r.p, c: a.c + r.c, f: a.f + r.f }), { kcal: 0, p: 0, c: 0, f: 0 });
   const hit = logged.filter(r => Math.abs(r.kcal - g.kcal) <= g.kcal * 0.1).length;
   const avgK = avg.kcal / L, diff = avgK - g.kcal;
-  const W = 340, H = 190, pad = 24, bw = 30;
+  const W = 340, H = 190, pad = 24;
   const max = Math.max(g.kcal * 1.25, ...rows.map(r => r.kcal), 1);
   const y = v => H - pad - (v / max) * (H - pad - 16);
-  const step = (W - 12) / 7;
+  const step = (W - 12) / N, bw = N <= 7 ? 30 : Math.max(2, step * 0.62), rx = Math.min(10, bw / 2.4);
+  const todayIso = iso(new Date());
   const bars = rows.map((r, i) => {
     const x = 6 + i * step + (step - bw) / 2, h = Math.max(H - pad - y(r.kcal), r.n ? 4 : 0);
-    const over = r.kcal > g.kcal * 1.1;
-    return `<g data-act="goDay" data-d="${r.d}" style="cursor:pointer"><rect x="${x}" y="${H - pad - (r.n ? h : 4)}" width="${bw}" height="${r.n ? h : 4}" rx="10" fill="${r.n ? (over ? "var(--danger)" : "var(--accent)") : "var(--card2)"}"/>
-    <text x="${x + bw / 2}" y="${H - 6}" text-anchor="middle" ${r.d === iso(new Date()) ? 'style="fill:var(--text)"' : ""}>${WD[fromIso(r.d).getDay()]}</text>
-    ${r.n ? (h > 44 ? `<text x="${x + bw / 2}" y="${H - pad - h + 15}" text-anchor="middle" style="fill:#fff;font-weight:700;font-size:10px">${fmt(r.kcal)}</text>` : `<text x="${x + bw / 2}" y="${H - pad - h - 6}" text-anchor="middle" style="fill:var(--text)">${fmt(r.kcal)}</text>`) : ""}</g>`;
+    const over = r.kcal > g.kcal * 1.1, dd = fromIso(r.d);
+    let lab = "";
+    if (N <= 7) lab = WD[dd.getDay()];
+    else if (N <= 31) lab = (i % 5 === 0 || i === N - 1) ? String(dd.getDate()) : "";
+    else lab = (dd.getDate() === 1) ? dd.toLocaleDateString("de-DE", { month: "short" }) : "";
+    const val = N <= 7 && r.n ? (h > 44 ? `<text x="${x + bw / 2}" y="${H - pad - h + 15}" text-anchor="middle" style="fill:#fff;font-weight:700;font-size:10px">${fmt(r.kcal)}</text>` : `<text x="${x + bw / 2}" y="${H - pad - h - 6}" text-anchor="middle" style="fill:var(--text)">${fmt(r.kcal)}</text>`) : "";
+    return `<g data-act="goDay" data-d="${r.d}" style="cursor:pointer"><rect x="${x}" y="${H - pad - (r.n ? h : (N <= 7 ? 4 : 2))}" width="${bw}" height="${r.n ? h : (N <= 7 ? 4 : 2)}" rx="${rx}" fill="${r.n ? (over ? "var(--danger)" : "var(--accent)") : "var(--card2)"}"/>
+    ${lab ? `<text x="${x + bw / 2}" y="${H - 6}" text-anchor="middle" ${r.d === todayIso ? 'style="fill:var(--text)"' : ""}>${lab}</text>` : ""}${val}</g>`;
   }).join("");
-  const chart = `<svg viewBox="0 0 ${W} ${H}" width="100%"><line x1="0" x2="${W}" y1="${y(g.kcal)}" y2="${y(g.kcal)}" stroke="var(--muted)" stroke-dasharray="3 5" opacity=".6"/>
-${bars}</svg><div class="goalkey"><i></i>Ziel ${fmt(g.kcal)} kcal</div>`;
+  const chart = `<svg viewBox="0 0 ${W} ${H}" width="100%"><line x1="0" x2="${W}" y1="${y(g.kcal)}" y2="${y(g.kcal)}" stroke="var(--muted)" stroke-dasharray="3 5" opacity=".6"/>${bars}</svg><div class="goalkey"><i></i>Ziel ${fmt(g.kcal)} kcal</div>`;
   // Typische Wochentage (letzte 8 Wochen)
   const today = iso(new Date()), byWd = {};
   for (let i = 0; i < 56; i++) { const d = addDays(today, -i), es = dayEntries(d); if (es.length) (byWd[fromIso(d).getDay()] = byWd[fromIso(d).getDay()] || []).push(sum(es).kcal); }
   const avgWd = w => byWd[w] ? byWd[w].reduce((a, b) => a + b, 0) / byWd[w].length : 0;
   const wdMax = Math.max(g.kcal * 1.2, ...WD_ORDER.map(avgWd), 1);
   const wdBars = WD_ORDER.map(w => { const v = avgWd(w); return `<div class="col ${v ? "" : "none"}">${v ? `<b>${fmt(v)}</b>` : ""}<i style="height:${v ? v / wdMax * 70 : 4}px;${v > g.kcal * 1.1 ? "background:var(--danger)" : ""}"></i>${WD[w]}</div>`; }).join("");
-  const label = ui.weekOffset === 0 ? "Letzte 7 Tage" : fromIso(days[0]).toLocaleDateString("de-DE", { day: "numeric", month: "short" }) + " – " + fromIso(days[6]).toLocaleDateString("de-DE", { day: "numeric", month: "short" });
-  return `<h1>Woche</h1>
-  <div class="row between" style="margin-bottom:14px"><button class="iconbtn" data-act="wk" data-d="-1" aria-label="Vorherige Woche">${icon("left", 20)}</button><b>${label}</b><button class="iconbtn" data-act="wk" data-d="1" aria-label="Nächste Woche" ${ui.weekOffset >= 0 ? "disabled" : ""}>${icon("right", 20)}</button></div>
+  const dl = x => fromIso(x).toLocaleDateString("de-DE", { day: "numeric", month: "short" });
+  const label = ui.weekOffset === 0 ? "Letzte " + N + " Tage" : dl(days[0]) + " – " + dl(days[N - 1]);
+  return `<h1>Zeitraum</h1>
+  <div class="seg">${[[7, "7 Tage"], [30, "30 Tage"], [90, "90 Tage"]].map(([v, l]) => `<button data-act="period" data-v="${v}" class="${N === v ? "on" : ""}">${l}</button>`).join("")}</div>
+  <div class="row between" style="margin-bottom:14px"><button class="iconbtn" data-act="wk" data-d="-1" aria-label="Vorheriger Zeitraum">${icon("left", 20)}</button><b>${label}</b><button class="iconbtn" data-act="wk" data-d="1" aria-label="Nächster Zeitraum" ${ui.weekOffset >= 0 ? "disabled" : ""}>${icon("right", 20)}</button></div>
   ${logged.length ? `<div class="bignum"><b>${fmt(avgK)}</b><span>kcal pro Tag</span><span class="pill ${Math.abs(diff) <= g.kcal * .1 ? "good" : diff > 0 ? "bad" : ""}">${diff >= 0 ? "+" : "−"}${fmt(Math.abs(diff))} zum Ziel</span></div>` : `<div class="muted" style="margin:0 4px 14px">In diesem Zeitraum gibt es noch keine Einträge.</div>`}
   <div class="surface">${chart}</div>
   ${logged.length ? `<div class="muted small" style="margin:12px 4px 0">${hit} von ${logged.length} ${logged.length === 1 ? "Tag" : "Tagen"} im Zielbereich (±10 %)</div>
   <section class="macros" style="margin-top:20px">${macroCol("Ø Eiweiß", avg.p / L, g.p, "p")}${macroCol("Ø Kohlenh.", avg.c / L, g.c, "c")}${macroCol("Ø Fett", avg.f / L, g.f, "f")}</section>` : ""}
+  <section class="exportcard"><b>Zeitraum exportieren</b><div class="muted small">${label}: alle Tage mit Mahlzeiten, Nährwerten und Rezept-Zutaten als Textdatei, z. B. für eine KI-Analyse.</div>
+    <div class="grid2"><button class="btn" data-act="exportRange">Als Datei</button><button class="btn sec" data-act="copyRange">Kopieren</button></div></section>
   <h2>Typische Wochentage</h2><div class="muted small" style="margin:-6px 4px 12px">Durchschnitt der letzten 8 Wochen</div>
   <div class="surface"><div class="wdbars">${wdBars}</div></div>`;
 }
@@ -792,7 +802,7 @@ function pickRecipe(r) {
   $("#rgo", s).onclick = () => {
     const n = num(rp.value); if (n <= 0) return toast("Bitte Portionen eingeben");
     ui.meal = $("#rm", s).value;
-    D.entries.push({ id: uid(), date: ui.date, meal: ui.meal, name: r.name, grams: p.grams * n, kcal: p.kcal * n, p: p.p * n, c: p.c * n, f: p.f * n });
+    D.entries.push({ id: uid(), date: ui.date, meal: ui.meal, rid: r.id, name: r.name, grams: p.grams * n, kcal: p.kcal * n, p: p.p * n, c: p.c * n, f: p.f * n });
     r.used = (r.used || 0) + 1;
     closeSheet(); save(); render(); toast("Hinzugefügt");
   };
@@ -1086,6 +1096,64 @@ const readText = f => new Promise((res, rej) => { const r = new FileReader(); r.
 const exportData = () => ({ ...D, settings: { ...D.settings, geminiKey: "", apiKey: undefined, model: undefined } });
 const csvNum = n => String(Math.round(n * 100) / 100).replace(".", ",");
 const csvOf = (head, rows) => "﻿" + [head.join(";")].concat(rows.map(r => r.map(csvCell).join(";"))).join("\r\n") + "\r\n";
+/* ---- Protokoll für KI-Analyse (Tag/Zeitraum) ---- */
+const nde = (v, d = 1) => (Math.round(v * Math.pow(10, d)) / Math.pow(10, d)).toLocaleString("de-DE", { maximumFractionDigits: d });
+const dLong = x => fromIso(x).toLocaleDateString("de-DE", { weekday: "long", day: "2-digit", month: "2-digit", year: "numeric" });
+function recipeFor(e) { return (e.rid && D.recipes.find(r => r.id === e.rid)) || D.recipes.find(r => r.name === e.name) || null; }
+function buildReport(from, to) {
+  const g = goals(), s = D.settings, days = [];
+  for (let d = from; d <= to; d = addDays(d, 1)) days.push(d);
+  const rows = days.map(d => { const es = dayEntries(d); return { d, es, t: sum(es) }; });
+  const logged = rows.filter(r => r.es.length);
+  const out = [];
+  out.push("# FoodPro – Ernährungsprotokoll");
+  out.push(from === to ? `Tag: ${dLong(from)}` : `Zeitraum: ${dLong(from)} bis ${dLong(to)} (${days.length} Tage)`);
+  out.push("Nährwerte stammen aus Datenbank, Rezepten oder KI-Schätzung und sind Näherungswerte.");
+  out.push("", "## Tagesziele");
+  out.push(`- Kalorien: ${nde(g.kcal, 0)} kcal`);
+  out.push(`- Eiweiß: ${nde(g.p, 0)} g (${s.pP} %) · Kohlenhydrate: ${nde(g.c, 0)} g (${s.pC} %) · Fett: ${nde(g.f, 0)} g (${s.pF} %)`);
+  if (s.goalWeight) out.push(`- Zielgewicht: ${s.goalWeight} kg`);
+  if (days.length > 1) {
+    const a = sum(logged.flatMap(r => r.es)), L = logged.length || 1;
+    out.push("", "## Zusammenfassung");
+    out.push(`- Erfasste Tage: ${logged.length} von ${days.length}`);
+    if (logged.length) {
+      out.push(`- Durchschnitt pro erfasstem Tag: ${nde(a.kcal / L, 0)} kcal · Eiweiß ${nde(a.p / L, 0)} g · Kohlenhydrate ${nde(a.c / L, 0)} g · Fett ${nde(a.f / L, 0)} g`);
+      out.push(`- Tage im Zielbereich (±10 % vom Kalorienziel): ${logged.filter(r => Math.abs(r.t.kcal - g.kcal) <= g.kcal * 0.1).length}`);
+    }
+    const ws = days.filter(d => D.weights[d] != null);
+    if (ws.length) out.push(`- Gewicht: ${nde(D.weights[ws[0]])} kg (${fromIso(ws[0]).toLocaleDateString("de-DE")}) → ${nde(D.weights[ws[ws.length - 1]])} kg (${fromIso(ws[ws.length - 1]).toLocaleDateString("de-DE")})`);
+    out.push("", "| Datum | kcal | Eiweiß g | Kohlenh. g | Fett g | Gewicht kg |", "|---|---|---|---|---|---|");
+    rows.forEach(r => out.push(`| ${fromIso(r.d).toLocaleDateString("de-DE", { weekday: "short", day: "2-digit", month: "2-digit" })} | ${r.es.length ? nde(r.t.kcal, 0) : "–"} | ${r.es.length ? nde(r.t.p, 0) : "–"} | ${r.es.length ? nde(r.t.c, 0) : "–"} | ${r.es.length ? nde(r.t.f, 0) : "–"} | ${D.weights[r.d] != null ? nde(D.weights[r.d]) : ""} |`));
+  }
+  const order = MEALS.map(m => m.id);
+  rows.forEach(r => {
+    out.push("", `## ${dLong(r.d)}`);
+    if (!r.es.length) { out.push("Keine Einträge."); if (D.weights[r.d] != null) out.push(`Gewicht: ${nde(D.weights[r.d])} kg`); return; }
+    out.push(`Summe: ${nde(r.t.kcal, 0)} kcal (Ziel ${nde(g.kcal, 0)}) · Eiweiß ${nde(r.t.p, 0)} g (Ziel ${nde(g.p, 0)}) · Kohlenhydrate ${nde(r.t.c, 0)} g (Ziel ${nde(g.c, 0)}) · Fett ${nde(r.t.f, 0)} g (Ziel ${nde(g.f, 0)})`);
+    if (D.weights[r.d] != null) out.push(`Gewicht: ${nde(D.weights[r.d])} kg`);
+    order.forEach(mid => {
+      const es = r.es.filter(e => e.meal === mid || (!order.includes(e.meal) && mid === "s")); if (!es.length) return;
+      const ms = sum(es);
+      out.push("", `### ${mealName(mid)} – ${nde(ms.kcal, 0)} kcal (Eiweiß ${nde(ms.p, 0)} g · KH ${nde(ms.c, 0)} g · Fett ${nde(ms.f, 0)} g)`);
+      es.forEach(e => {
+        const rec = recipeFor(e);
+        out.push(`- ${rec ? "Rezept: " : ""}${e.name}, ${nde(e.grams, 0)} g – ${nde(e.kcal, 0)} kcal · E ${nde(e.p)} · KH ${nde(e.c)} · F ${nde(e.f)}`);
+        if (rec && rec.items && rec.items.length) {
+          const tot = rec.items.reduce((a, i) => a + i.grams, 0) || 1, k = e.grams / tot;
+          rec.items.forEach(i => { const c = calc(i, i.grams * k); out.push(`  - Zutat: ${i.name}, ${nde(i.grams * k, 0)} g – ${nde(c.kcal, 0)} kcal · E ${nde(c.p)} · KH ${nde(c.c)} · F ${nde(c.f)}`); });
+        }
+      });
+    });
+  });
+  return out.join("\n") + "\n";
+}
+async function exportReport(from, to, mode, name) {
+  const txt = buildReport(from, to);
+  if (!D.entries.some(e => e.date >= from && e.date <= to)) return toast("In diesem Zeitraum gibt es keine Einträge");
+  if (mode === "copy") return toast((await copyText(txt)) ? "Kopiert – jetzt in die KI einfügen" : "Kopieren nicht möglich – nutze „Als Datei“");
+  exportFile(name, new Blob([txt], { type: "text/plain" }));
+}
 const mealName = id => (MEALS.find(m => m.id === id) || MEALS[3]).name;
 function diaryCsv() {
   const order = MEALS.map(m => m.id);
@@ -1313,6 +1381,9 @@ document.addEventListener("click", async ev => {
   else if (a === "toggleMeal") { ui.open[t.dataset.meal] = !ui.open[t.dataset.meal]; render(); }
   else if (a === "add") openAdd(t.dataset.meal);
   else if (a === "editEntry") editEntry(t.dataset.id);
+  else if (a === "period") { ui.period = +t.dataset.v; ui.weekOffset = 0; render(); }
+  else if (a === "exportDay" || a === "copyDay") exportReport(ui.date, ui.date, a === "copyDay" ? "copy" : "file", "foodpro-tag-" + ui.date + ".txt");
+  else if (a === "exportRange" || a === "copyRange") { const dd = periodDays(ui.weekOffset, ui.period); exportReport(dd[0], dd[dd.length - 1], a === "copyRange" ? "copy" : "file", "foodpro-zeitraum-" + dd[0] + "_bis_" + dd[dd.length - 1] + ".txt"); }
   else if (a === "wk") { ui.weekOffset = Math.min(0, ui.weekOffset + +t.dataset.d); render(); }
   else if (a === "goDay") { ui.date = t.dataset.d; setTab("today"); render(); }
   else if (a === "wRange") { ui.wRange = +t.dataset.v; render(); }
@@ -1404,4 +1475,4 @@ if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
   navigator.serviceWorker.addEventListener("controllerchange", () => { if (had && !rl) { rl = true; location.reload(); } });
   navigator.serviceWorker.register("sw.js").then(r => r.update()).catch(() => { });
 }
-window.__ern = { parseFoodsText, get D() { return D; }, importCsv, importAny: importAnyCsv, parseCsv, foodsToCsv, mapOff, analyzePhoto, exportData };
+window.__ern = { parseFoodsText, get D() { return D; }, importCsv, importAny: importAnyCsv, parseCsv, foodsToCsv, mapOff, analyzePhoto, exportData, buildReport };
