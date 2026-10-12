@@ -218,3 +218,16 @@ textarea::placeholder{color:var(--muted);opacity:.8}
 
 .goalkey{display:flex;align-items:center;gap:8px;margin-top:6px;font-size:12.5px;font-weight:600;color:var(--muted)}
 .goalkey i{width:22px;border-top:2px dashed var(--muted);opacity:.7}
+
+/* Einstellungen: ausklappbare Reiter */
+.acc{margin-top:10px;background:var(--card);border-radius:22px;box-shadow:var(--shadow);overflow:hidden}
+.acc>summary{list-style:none;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:17px 18px;font-size:17px;font-weight:650;letter-spacing:-.01em;cursor:pointer;-webkit-tap-highlight-color:transparent}
+.acc>summary::-webkit-details-marker{display:none}
+.acc .chev{display:inline-flex;color:var(--muted);transition:transform .2s}
+.acc[open]>summary .chev{transform:rotate(90deg)}
+.acc .accb{padding:0 0 4px}
+.acc .accb .panel{box-shadow:none;background:transparent;border-radius:0;padding-left:18px;padding-right:18px}
+.acc .accb>div:not(.panel){padding:0 18px 14px}
+.steps{margin:14px 0 0;padding:12px 14px;border-radius:16px;background:var(--card2);font-size:13.5px;line-height:1.45}
+.steps ol{margin:6px 0 0;padding-left:20px}.steps li{margin:5px 0}
+.steps a{color:var(--accent);font-weight:600}

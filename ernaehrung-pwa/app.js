@@ -16,10 +16,10 @@ const NATIVE = !!(window.Capacitor && window.Capacitor.isNativePlatform && windo
 
 const DEFAULTS = () => ({
   ver: 3, foods: [], recipes: [], entries: [], weights: {},
-  settings: { kcal: 2200, pP: 30, pC: 40, pF: 30, mode: "auto", accent: "#12935f", apiKey: "", model: "claude-sonnet-5-5", goalWeight: "" },
+  settings: { kcal: 2200, pP: 30, pC: 40, pF: 30, mode: "auto", accent: "#12935f", geminiKey: "", geminiModel: "gemini-2.5-flash", goalWeight: "" },
 });
 let D = load();
-let ui = { tab: "today", date: iso(new Date()), weekOffset: 0, wRange: 90, meal: "b", open: {} };
+let ui = { setOpen: {}, tab: "today", date: iso(new Date()), weekOffset: 0, wRange: 90, meal: "b", open: {} };
 
 function load() {
   try {
@@ -28,6 +28,7 @@ function load() {
       const d = DEFAULTS(), out = { ...d, ...raw, settings: { ...d.settings, ...(raw.settings || {}) } };
       // frühere Standardfarben (Grün, Orange-Rot) auf die neue Logo-Farbe umstellen
       if ((raw.ver || 0) < 3 && ["#2ecc71", "#ff4d2e"].includes(String(out.settings.accent).toLowerCase())) out.settings.accent = d.settings.accent;
+      delete out.settings.apiKey; delete out.settings.model; // alter Claude-Schlüssel wird entfernt
       out.ver = 3;
       return out;
     }
@@ -245,7 +246,7 @@ function viewWeight() {
 function viewSettings() {
   const s = D.settings, tot = s.pP + s.pC + s.pF;
   return `<h1>Einstellungen</h1>
-  <h2 style="margin-top:6px">Tagesziele</h2><div class="panel">
+  ${acc("goals", `Tagesziele`, `<div class="panel">
     <label>Kalorien pro Tag</label><input type="text" inputmode="numeric" id="sKcal" value="${s.kcal}">
     <div class="grid3"><div><label>Eiweiß in %</label><input type="text" inputmode="numeric" id="sP" value="${s.pP}"></div>
     <div><label>Kohlenh. in %</label><input type="text" inputmode="numeric" id="sC" value="${s.pC}"></div>
@@ -253,30 +254,45 @@ function viewSettings() {
     <div id="macroInfo" class="small ${tot === 100 ? "muted" : "warn"}" style="margin:10px 2px 0">${macroInfoText(s.pP, s.pC, s.pF, s.kcal)}</div>
     <label>Zielgewicht in kg (optional)</label><input type="text" inputmode="decimal" id="sGoalW" value="${esc(s.goalWeight)}">
     <button class="btn block" style="margin-top:16px" data-act="saveGoals">Ziele speichern</button></div>
-  <h2>Design</h2><div class="panel">
+  `)}
+  ${acc("design", `Design`, `<div class="panel">
     <label>Darstellung</label><div class="chips">${[["auto", "Automatisch"], ["dark", "Dunkel"], ["light", "Hell"]].map(([v, l]) => `<button class="chip ${s.mode === v ? "on" : ""}" data-act="mode" data-v="${v}">${l}</button>`).join("")}</div>
     <label>Akzentfarbe</label><div class="swatches">${ACCENTS.map(c => `<button class="sw ${s.accent.toLowerCase() === c ? "on" : ""}" style="background:${c}" data-act="accent" data-v="${c}" aria-label="Farbe ${c}"></button>`).join("")}<input type="color" id="sAccent" value="${s.accent}" aria-label="Eigene Farbe"></div></div>
-  <h2>Foto-KI</h2><div class="panel">
-    <div class="muted small" style="margin-top:14px">Für die Foto-Erkennung brauchst du einen eigenen Anthropic-API-Schlüssel. Er bleibt auf diesem Gerät und geht direkt an Anthropic.</div>
-    <label>API-Schlüssel</label><input type="password" id="sKey" value="${esc(s.apiKey)}" placeholder="sk-ant-…" autocomplete="off">
-    <label>Modell</label><input type="text" id="sModel" value="${esc(s.model)}">
-    <button class="btn sec block" style="margin-top:16px" data-act="saveAI">Speichern</button></div>
-  <h2>Rezepte</h2><div class="panel" style="padding-top:16px"><button class="btn sec block" data-act="recipes">Meine Rezepte (${D.recipes.length})</button></div>
-  <h2>Meine Lebensmittel <span class="muted" style="font-weight:600">${D.foods.length}</span></h2><div class="panel" style="padding-top:16px">
+  `)}
+  ${acc("ai", `Foto-KI (Gemini)`, `<div class="panel">
+    <div class="muted small" style="margin-top:14px">Die Foto-Erkennung nutzt Google Gemini. Das Gratis-Kontingent reicht für den Alltag, der Schlüssel bleibt nur auf diesem Gerät und geht direkt an Google. Bei kostenloser Nutzung kann Google Eingaben zur Verbesserung seiner Dienste verwenden.</div>
+    <div class="steps"><b>So verknüpfst du Gemini:</b>
+      <ol><li>Öffne <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a> und melde dich mit deinem Google-Konto an.</li>
+      <li>Tippe auf „API-Schlüssel erstellen“ und kopiere den Schlüssel (beginnt mit „AIza…“).</li>
+      <li>Füge ihn unten ein und tippe auf „Speichern“. Fertig – im Reiter „Foto-KI“ beim Hinzufügen kannst du jetzt Fotos analysieren.</li></ol></div>
+    <label>Gemini-API-Schlüssel</label><input type="password" id="sKey" value="${esc(s.geminiKey)}" placeholder="AIza…" autocomplete="off">
+    <label>Modell</label><input type="text" id="sModel" value="${esc(s.geminiModel)}">
+    <button class="btn sec block" style="margin-top:16px" data-act="saveAI">Speichern</button></div>`)}
+  ${acc("rec", `Rezepte`, `<div class="panel" style="padding-top:16px"><button class="btn sec block" data-act="recipes">Meine Rezepte (${D.recipes.length})</button></div>
+  `)}
+  ${acc("foods", `Meine Lebensmittel <span class="muted" style="font-weight:600">${D.foods.length}</span>`, `<div class="panel" style="padding-top:16px">
     <div class="grid2"><button class="btn sec" data-act="foodsManage">Verwalten</button><button class="btn sec" data-act="foodNew">Neu anlegen</button></div>
     <button class="btn sec block" style="margin-top:10px" data-act="csvTemplate">CSV-Vorlage laden</button></div>
-  <h2>Export</h2><div class="panel" style="padding-top:16px">
+  `)}
+  ${acc("exp", `Export`, `<div class="panel" style="padding-top:16px">
     <button class="btn block" data-act="backup">Alles sichern (Backup-Datei)</button>
     <div class="muted small" style="margin:8px 2px 12px">Enthält Tagebuch, Gewicht, Rezepte, Lebensmittel und Einstellungen.</div>
     <div class="grid2"><button class="btn sec" data-act="exDiary">Tagebuch (CSV)</button><button class="btn sec" data-act="exWeight">Gewicht (CSV)</button>
     <button class="btn sec" data-act="exRecipes">Rezepte (CSV)</button><button class="btn sec" data-act="csvExport">Lebensmittel (CSV)</button></div></div>
-  <h2>Import</h2><div class="panel" style="padding-top:16px">
+  `)}
+  ${acc("imp", `Import`, `<div class="panel" style="padding-top:16px">
     <button class="btn block" data-act="importPick">Datei importieren</button>
     <div class="muted small" style="margin:8px 2px 0">Backup-Datei (ersetzt alle Daten) oder CSV für Tagebuch, Gewicht, Rezepte und Lebensmittel (ergänzt vorhandene Daten). Die Art erkennt FoodPro automatisch.</div>
     <input type="file" id="dataFile" accept=".json,.csv,application/json,text/csv,text/plain" hidden></div>
-  <h2>Dropbox</h2>${dbxPanel()}
-  <h2>Gefahrenzone</h2><div class="panel" style="padding-top:16px"><button class="btn danger block" data-act="wipe">Alle Daten löschen</button></div>
+  `)}
+  ${acc("dbx", `Dropbox`, `${dbxPanel()}
+  `)}
+  ${acc("danger", `Gefahrenzone`, `<div class="panel" style="padding-top:16px"><button class="btn danger block" data-act="wipe">Alle Daten löschen</button></div>
+  `)}
   <div class="muted tiny center" style="margin-top:22px">FoodPro · Nährwertdaten von Open Food Facts (ODbL)</div>`;
+}
+function acc(id, title, inner) {
+  return `<details class="acc" data-acc="${id}" ${ui.setOpen[id] ? "open" : ""}><summary><span>${title}</span><i class="chev">${icon("right", 18, 2.4)}</i></summary><div class="accb">${inner}</div></details>`;
 }
 function macroInfoText(p, c, f, kcal) {
   const t = p + c + f;
@@ -471,8 +487,8 @@ async function startScan(video, onCode, setMsg) {
 /* Foto-KI */
 let photoItems = [];
 function bodyPhoto(b) {
-  if (!D.settings.apiKey) {
-    b.innerHTML = `<div class="card muted small">Für die Foto-Erkennung trägst du in den Einstellungen deinen Anthropic-API-Schlüssel ein. Die Werte sind Schätzungen – prüfe sie vor dem Speichern.</div>
+  if (!D.settings.geminiKey) {
+    b.innerHTML = `<div class="card muted small">Für die Foto-Erkennung trägst du in den Einstellungen deinen kostenlosen Gemini-Schlüssel ein. Die Werte sind Schätzungen – prüfe sie vor dem Speichern.</div>
       <button class="btn block" id="toSet">Zu den Einstellungen</button>`;
     $("#toSet", b).onclick = () => { closeSheet(); ui.tab = "settings"; render(); };
     return;
@@ -510,16 +526,17 @@ async function analyzePhoto(file) {
   const data = await shrink(file);
   const prompt = `Analysiere dieses Foto (Mahlzeit, Lebensmittel oder Nährwert-Etikett). Erkenne jedes einzelne Lebensmittel, schätze die Menge in Gramm und nenne die Nährwerte pro 100 g. Wenn ein Nährwert-Etikett zu sehen ist, nutze dessen Werte. Antworte ausschließlich mit JSON ohne weiteren Text im Format: {"items":[{"name":"deutscher Name","grams":150,"kcal":120,"protein":5,"carbs":20,"fat":2,"sugar":1,"fiber":3}]}. Alle Nährwerte beziehen sich auf 100 g.`;
   let r;
+  const model = (D.settings.geminiModel || "gemini-2.5-flash").trim();
   try {
-    r = await fetchT("https://api.anthropic.com/v1/messages", {
+    r = await fetchT("https://generativelanguage.googleapis.com/v1beta/models/" + encodeURIComponent(model) + ":generateContent", {
       method: "POST",
-      headers: { "content-type": "application/json", "x-api-key": D.settings.apiKey.trim(), "anthropic-version": "2023-06-01", "anthropic-dangerous-direct-browser-access": "true" },
-      body: JSON.stringify({ model: D.settings.model || "claude-sonnet-5-5", max_tokens: 1200, messages: [{ role: "user", content: [{ type: "image", source: { type: "base64", media_type: "image/jpeg", data } }, { type: "text", text: prompt }] }] }),
+      headers: { "content-type": "application/json", "x-goog-api-key": D.settings.geminiKey.trim() },
+      body: JSON.stringify({ contents: [{ parts: [{ inline_data: { mime_type: "image/jpeg", data } }, { text: prompt }] }], generationConfig: { responseMimeType: "application/json", maxOutputTokens: 2000 } }),
     }, 60000);
   } catch (e) { throw new Error("Keine Verbindung zur KI. Bist du online?"); }
   const j = await r.json().catch(() => ({}));
-  if (!r.ok) throw new Error((j.error && j.error.message) || "KI-Fehler " + r.status);
-  const txt = (j.content || []).map(c => c.text || "").join("");
+  if (!r.ok) throw new Error(r.status === 429 ? "Das kostenlose Limit ist gerade erreicht. Warte kurz und versuche es erneut." : (j.error && j.error.message) || "KI-Fehler " + r.status);
+  const txt = ((((j.candidates || [])[0] || {}).content || {}).parts || []).map(c => c.text || "").join("");
   const m = txt.match(/\{[\s\S]*\}/);
   if (!m) throw new Error("Antwort der KI war nicht lesbar");
   const items = (JSON.parse(m[0]).items || []).filter(i => i && i.name);
@@ -986,8 +1003,8 @@ async function exportFile(name, blob) {
 const readText = f => new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result)); r.onerror = rej; r.readAsText(f); });
 
 /* ---------- Export, Import und Dropbox ---------- */
-/* Den Anthropic-Schlüssel nehmen wir nie in Sicherungen auf. */
-const exportData = () => ({ ...D, settings: { ...D.settings, apiKey: "" } });
+/* Den Gemini-Schlüssel nehmen wir nie in Sicherungen auf. */
+const exportData = () => ({ ...D, settings: { ...D.settings, geminiKey: "", apiKey: undefined, model: undefined } });
 const csvNum = n => String(Math.round(n * 100) / 100).replace(".", ",");
 const csvOf = (head, rows) => "﻿" + [head.join(";")].concat(rows.map(r => r.map(csvCell).join(";"))).join("\r\n") + "\r\n";
 const mealName = id => (MEALS.find(m => m.id === id) || MEALS[3]).name;
@@ -1006,8 +1023,9 @@ const csvBlob = t => new Blob([t], { type: "text/csv" });
 
 function applyBackup(j) {
   if (!j || !Array.isArray(j.entries) || !Array.isArray(j.foods)) throw new Error("Das ist kein gültiges Backup");
-  const d = DEFAULTS(), key = D.settings.apiKey;
-  D = { ...d, ...j, recipes: Array.isArray(j.recipes) ? j.recipes : [], settings: { ...d.settings, ...(j.settings || {}), apiKey: (j.settings && j.settings.apiKey) || key } };
+  const d = DEFAULTS(), key = D.settings.geminiKey;
+  D = { ...d, ...j, recipes: Array.isArray(j.recipes) ? j.recipes : [], settings: { ...d.settings, ...(j.settings || {}), geminiKey: key || "" } };
+  delete D.settings.apiKey; delete D.settings.model;
   save(); applyTheme(); render();
 }
 const isoDate = s => {
@@ -1199,6 +1217,7 @@ async function dbxAction(a) {
 }
 
 /* ---------- Ereignisse ---------- */
+document.addEventListener("toggle", ev => { const d = ev.target; if (d && d.matches && d.matches("details.acc")) ui.setOpen[d.dataset.acc] = d.open; }, true);
 document.addEventListener("click", async ev => {
   const t = ev.target.closest("[data-act]"); if (!t) return;
   const a = t.dataset.act;
@@ -1232,7 +1251,7 @@ document.addEventListener("click", async ev => {
   }
   else if (a === "mode") { D.settings.mode = t.dataset.v; save(); applyTheme(); render(); }
   else if (a === "accent") { D.settings.accent = t.dataset.v; save(); applyTheme(); render(); }
-  else if (a === "saveAI") { D.settings.apiKey = $("#sKey").value.trim(); D.settings.model = $("#sModel").value.trim() || "claude-sonnet-5-5"; save(); toast("Gespeichert"); }
+  else if (a === "saveAI") { D.settings.geminiKey = $("#sKey").value.trim(); D.settings.geminiModel = $("#sModel").value.trim() || "gemini-2.5-flash"; save(); toast("Gespeichert"); }
   else if (a === "mealToRecipe") mealToRecipe(t.dataset.meal);
   else if (a === "recipes") recipeManage();
   else if (a === "foodsManage") foodsManage();
@@ -1279,4 +1298,4 @@ if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
   navigator.serviceWorker.addEventListener("controllerchange", () => { if (had && !rl) { rl = true; location.reload(); } });
   navigator.serviceWorker.register("sw.js").then(r => r.update()).catch(() => { });
 }
-window.__ern = { parseFoodsText, get D() { return D; }, importCsv, importAny: importAnyCsv, parseCsv, foodsToCsv, mapOff };
+window.__ern = { parseFoodsText, get D() { return D; }, importCsv, importAny: importAnyCsv, parseCsv, foodsToCsv, mapOff, analyzePhoto, exportData };
