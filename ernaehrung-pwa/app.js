@@ -101,6 +101,7 @@ const IC = {
   weight: '<path d="M4.5 18a8 8 0 1 1 15 0"/><path d="m12 17 3.5-5"/>',
   settings: '<path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/>',
   plus: '<path d="M12 5v14M5 12h14"/>',
+  x: '<path d="M6 6l12 12M18 6L6 18"/>',
   left: '<path d="m15 6-6 6 6 6"/>',
   right: '<path d="m9 6 6 6-6 6"/>',
   search: '<circle cx="11" cy="11" r="6.5"/><path d="m16 16 4 4"/>',
@@ -320,7 +321,8 @@ function sheet(html, mount) {
   if (!hist.sheet) { try { history.pushState({ ern: "sheet" }, ""); hist.sheet = true; } catch (e) { } }
   const bg = document.createElement("div");
   bg.className = "sheetbg";
-  bg.innerHTML = `<div class="sheet">${html}</div>`;
+  bg.innerHTML = `<div class="sheet"><button class="sclose" type="button" aria-label="Schließen">${icon("x", 18, 2.6)}</button>${html}</div>`;
+  bg.querySelector(".sclose").onclick = () => closeSheet();
   bg.addEventListener("click", e => { if (e.target === bg) closeSheet(); });
   $("#sheetRoot").append(bg);
   if (mount) mount(bg.firstElementChild);
