@@ -521,10 +521,41 @@ function bodyPhoto(b) {
     try { photoItems = await analyzePhoto(f); renderPhotoItems(); }
     catch (e) { $("#pres", b).innerHTML = `<div class="warn small" style="margin-top:14px">${esc(e.message)}</div>`; }
   };
-  $("#cam", b).onclick = () => $("#img", b).click();
+  $("#cam", b).onclick = () => liveCamera(b, run, () => $("#img", b).click());
   $("#gal", b).onclick = () => $("#img2", b).click();
   $("#img", b).onchange = e => run(e.target.files[0]);
   $("#img2", b).onchange = e => run(e.target.files[0]);
+}
+/* Eigene Kamera-Ansicht (öffnet direkt die Kamera, unabhängig vom Datei-Dialog des Handys) */
+async function liveCamera(b, onPhoto, fallback) {
+  stopScan();
+  const box = $("#pres", b);
+  box.innerHTML = `<video id="pvid" playsinline muted style="margin-top:12px"></video>
+    <div class="grid2" style="margin-top:10px"><button class="btn" id="pShot">Foto aufnehmen</button><button class="btn sec" id="pClose">Abbrechen</button></div>
+    <div class="muted small center" id="pMsg" style="margin-top:8px">Kamera wird gestartet …</div>`;
+  const video = $("#pvid", b);
+  let stream;
+  scanStop = () => { if (stream) stream.getTracks().forEach(t => t.stop()); stream = null; };
+  try {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) throw new Error("Kamera nicht verfügbar");
+    stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" }, width: { ideal: 1920 } }, audio: false });
+    if (!$("#pvid", b)) return scanStop();
+    video.srcObject = stream; await video.play();
+    $("#pMsg", b).textContent = "Essen oder Etikett im Bild halten";
+  } catch (e) {
+    scanStop(); scanStop = null; box.innerHTML = "";
+    toast("Kamera nicht erlaubt – nutze die Foto-App des Handys");
+    return fallback();
+  }
+  $("#pClose", b).onclick = () => { stopScan(); box.innerHTML = ""; };
+  $("#pShot", b).onclick = () => {
+    const w = video.videoWidth, h = video.videoHeight;
+    if (!w) return toast("Kamera noch nicht bereit");
+    const c = document.createElement("canvas"); c.width = w; c.height = h;
+    c.getContext("2d").drawImage(video, 0, 0, w, h);
+    stopScan();
+    c.toBlob(bl => bl ? onPhoto(bl) : toast("Foto konnte nicht erstellt werden"), "image/jpeg", 0.9);
+  };
 }
 function shrink(file, max = 1280) {
   return new Promise((res, rej) => {
