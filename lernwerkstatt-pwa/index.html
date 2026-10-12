@@ -1064,7 +1064,11 @@ function renderHome(){
   const cnt=Array(MAXBOX+1).fill(0);S.decks.forEach(d=>d.cards.forEach(c=>{cnt[Math.min(MAXBOX,c.box||0)]++}));
   $("#fach").innerHTML=cnt.map((n,i)=>`<div><b class="mono">${n}</b><small>${i?i:"Neu"}</small></div>`).join("");
 }
-$("#startDue").addEventListener("click",()=>{setTab("lernen");startStudy({kind:"all"},"due",0)});
+/* Wer das Lernen aus einem anderen Reiter startet, landet nach „Beenden“ wieder dort. */
+let studyFrom="";
+function startFrom(tab,src,md,limit){studyFrom=tab;setTab("lernen");startStudy(src,md,limit)}
+const tabNameOf=id=>{const t=tabsList().find(x=>x.id===id);return t?tabName(t):id};
+$("#startDue").addEventListener("click",()=>startFrom("heute",{kind:"all"},"due",0));
 
 /* ---------- Karten einer Quelle ---------- */
 function coverOf(topicIds){const c=new Set();topicIds.forEach(id=>descIds(id).forEach(x=>c.add(x)));return c}
@@ -1134,12 +1138,15 @@ function rate(r){
 }
 function finishStudy(){
   Q.active=false;$("#studyArea").hidden=true;$("#studyDone").hidden=false;
+  $("#studyBack").textContent=studyFrom&&tabsList().some(t=>t.id===studyFrom&&t.on)?"Zurück zu „"+tabNameOf(studyFrom)+"“":"Zurück zur Auswahl";
   $("#studyDoneText").textContent=`${Q.stats[2]}× gewusst, ${Q.stats[1]}× schwer, ${Q.stats[0]}× nochmal. Die Karten sind jetzt auf ihre nächsten Termine verteilt.`;
   renderHome();renderSets();srcInfo();
 }
 function leaveStudy(){
   Q.active=false;$("#studyArea").hidden=true;$("#studyDone").hidden=true;$("#studySetup").hidden=false;
   renderHome();renderSets();srcInfo();
+  const back=studyFrom;studyFrom="";
+  if(back&&tabsList().some(t=>t.id===back&&t.on))setTab(back);
 }
 $("#card").addEventListener("click",flip);
 $("#r0").addEventListener("click",()=>rate(0));
@@ -1148,7 +1155,7 @@ $("#r2").addEventListener("click",()=>rate(2));
 $("#studyEnd").addEventListener("click",leaveStudy);
 $("#studyBack").addEventListener("click",leaveStudy);
 $("#studyAgain").addEventListener("click",()=>{const p=Q.params;$("#studyDone").hidden=true;startStudy(p[0],p[1],p[2])});
-$("#studyGo").addEventListener("click",()=>startStudy(parseSrc($("#srcSel").value),$("#modeSel").value,+$("#limSel").value));
+$("#studyGo").addEventListener("click",()=>{studyFrom="";startStudy(parseSrc($("#srcSel").value),$("#modeSel").value,+$("#limSel").value)});
 document.addEventListener("keydown",e=>{
   if(!Q.active||$("#tab-lernen").hidden)return;
   if(/INPUT|TEXTAREA|SELECT/.test((e.target||{}).tagName||""))return;
@@ -1164,7 +1171,7 @@ function renderSets(){
     const ds=decksOfSet(s),n=ds.reduce((a,d)=>a+d.cards.length,0),due=ds.reduce((a,d)=>a+dueCount(d),0);
     const names=s.topics.map(topicPath).filter(Boolean);
     const sub=names.length?"Themen: "+names.join(", "):"";
-    const go=el("button",{class:"btn small primary",type:"button",onclick:()=>startStudy({kind:"set",id:s.id},"due",+$("#limSel").value)},"Fällige lernen");
+    const go=el("button",{class:"btn small primary",type:"button",onclick:()=>{studyFrom="";startStudy({kind:"set",id:s.id},"due",+$("#limSel").value)}},"Fällige lernen");
     if(!due)go.setAttribute("disabled","");
     const del=el("button",{class:"btn small danger",type:"button"},"Löschen");
     del.addEventListener("click",()=>armConfirm(del,"Wirklich löschen?",()=>{S.sets=S.sets.filter(x=>x.id!==s.id);saveMeta();renderSets();fillSrc();toast("Lernstapel gelöscht")}));
@@ -1493,7 +1500,7 @@ function deckCard(parent,d){
   const boxes=el("div",{class:"boxes",title:"Fortschritt: Neu bis Fach 6"});
   counts.forEach(n=>{const i=el("i"),bb=el("b");bb.style.width=(d.cards.length?n/d.cards.length*100:0)+"%";i.append(bb);boxes.append(i)});
   const good=d.cards.filter(c=>(c.box||0)>=3).length;
-  const go=el("button",{class:"btn small primary",type:"button",onclick:()=>{setTab("lernen");startStudy({kind:"deck",id:d.id},"due",0)}},"Lernen");
+  const go=el("button",{class:"btn small primary",type:"button",onclick:()=>{startFrom("bib",{kind:"deck",id:d.id},"due",0)}},"Lernen");
   if(!due)go.setAttribute("disabled","");
   parent.append(el("article",{class:"deckc"},
     el("div",{class:"top"},
@@ -1501,7 +1508,7 @@ function deckCard(parent,d){
       el("span",{class:"pill "+(due?"on":"off"),text:due?due+" fällig":"erledigt"})),
     boxes,
     el("div",{class:"row"},go,
-      el("button",{class:"btn small",type:"button",onclick:()=>{setTab("lernen");startStudy({kind:"deck",id:d.id},"all",0)}},"Alle üben"),
+      el("button",{class:"btn small",type:"button",onclick:()=>{startFrom("bib",{kind:"deck",id:d.id},"all",0)}},"Alle üben"),
       el("button",{class:"btn small",type:"button",onclick:()=>goLib("deck",d.id)},"Karten & Optionen"))));
 }
 
@@ -1526,7 +1533,7 @@ function renderLibList(){
     const ids=descIds(t.id),all=S.decks.filter(d=>ids.has(d.topic));
     const due=all.reduce((a,d)=>a+dueCount(d),0),cards=all.reduce((a,d)=>a+d.cards.length,0);
     const own=sorted.filter(d=>d.topic===t.id),ch=kids(t.id);
-    const learn=el("button",{class:"btn small",type:"button",onclick:()=>{setTab("lernen");startStudy({kind:"topic",id:t.id},"due",0)}},"Thema lernen");
+    const learn=el("button",{class:"btn small",type:"button",onclick:()=>{startFrom("bib",{kind:"topic",id:t.id},"due",0)}},"Thema lernen");
     if(!due)learn.setAttribute("disabled","");
     const isOpen=openTopics.has(t.id);
     const chev=el("span",{class:"chev","aria-hidden":"true",text:isOpen?"^":">"});
