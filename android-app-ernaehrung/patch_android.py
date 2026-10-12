@@ -138,6 +138,9 @@ public class ErnDownloadPlugin extends Plugin {
 open(os.path.join(jdir, 'MainActivity.java'), 'w', encoding='utf-8').write("""package %s;
 
 import android.os.Bundle;
+import android.webkit.WebView;
+
+import androidx.activity.OnBackPressedCallback;
 
 import com.getcapacitor.BridgeActivity;
 
@@ -146,6 +149,20 @@ public class MainActivity extends BridgeActivity {
     public void onCreate(Bundle savedInstanceState) {
         registerPlugin(ErnDownloadPlugin.class);
         super.onCreate(savedInstanceState);
+        // Zurueck-Taste/-Geste: erst in der Seite zurueck (Fenster schliessen, zur Startseite), erst dann App beenden
+        getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
+            @Override
+            public void handleOnBackPressed() {
+                WebView wv = getBridge() != null ? getBridge().getWebView() : null;
+                if (wv != null && wv.canGoBack()) {
+                    wv.goBack();
+                } else {
+                    setEnabled(false);
+                    getOnBackPressedDispatcher().onBackPressed();
+                    setEnabled(true);
+                }
+            }
+        });
     }
 }
 """ % pkg)
