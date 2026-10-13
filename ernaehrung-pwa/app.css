@@ -242,3 +242,8 @@ textarea::placeholder{color:var(--muted);opacity:.8}
 .exportcard b{font-size:17px;font-weight:650}
 .exportcard .muted{margin:6px 0 14px}
 .pthumb{display:block;width:100%;max-height:34vh;object-fit:cover;border-radius:18px;margin-top:12px;background:#000}
+
+.gapbtn{margin-top:18px}
+.gaprow{margin-top:12px}.gaprow .gl{display:flex;justify-content:space-between;gap:8px;font-size:14px}.gaprow .gl span{color:var(--muted)}
+.gaprow .gs{font-size:13px;color:var(--muted);margin-top:4px}.gaprow .gs.ok{color:var(--accent)}
+.gaprow .track i:not(.p):not(.c):not(.f){background:var(--accent,#12935f)}

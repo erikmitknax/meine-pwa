@@ -152,6 +152,7 @@ function viewToday() {
     <div class="hbar"><i style="width:${pct}%"></i></div><div class="hf">${fmt(t.kcal)} kcal gegessen</div></section>
   <section class="macros" data-act="dayChart" role="button" tabindex="0" aria-label="Tagesübersicht öffnen">${macroCol("Eiweiß", t.p, g.p, "p")}${macroCol("Kohlenhydrate", t.c, g.c, "c")}${macroCol("Fett", t.f, g.f, "f")}</section>
   ${meals}
+  <button class="btn block gapbtn" data-act="gaps">${icon("plus", 18, 2.4)}Was fehlt mir heute?</button>
   <section class="exportcard"><b>Tag exportieren</b><div class="muted small">Alles, was du an diesem Tag gegessen hast, inkl. Rezept-Zutaten, als Textdatei – z. B. für eine KI-Analyse.</div>
     <div class="grid2"><button class="btn" data-act="exportDay">Als Datei</button><button class="btn sec" data-act="copyDay">Kopieren</button></div></section>`;
 }
@@ -1397,6 +1398,102 @@ async function dbxAction(a) {
   } catch (e) { say(e.message || "Das hat nicht geklappt.", true); }
 }
 
+/* ---------- „Was fehlt mir?“ : sofortige Rechnung + optionale KI-Ideen ---------- */
+function gapAnalysis(date) {
+  const g = goals(), list = dayEntries(date), t = sum(list);
+  const left = { kcal: g.kcal - t.kcal, p: g.p - t.p, c: g.c - t.c, f: g.f - t.f };
+  // Ballaststoffe nur dort, wo der Eintrag einem Lebensmittel aus der Liste zugeordnet werden kann
+  let fiber = 0, matched = 0;
+  list.forEach(e => { const f = D.foods.find(x => x.name === e.name); if (f && num(f.fiber) > 0) { fiber += f.fiber * e.grams / 100; matched++; } });
+  return { g, t, left, n: list.length, fiber, matched };
+}
+const GAP_KEYS = [["p", "Eiweiß", "protein"], ["c", "Kohlenhydrate", "carbs"], ["f", "Fett", "fat"]];
+function gapSuggestions(a) {
+  if (a.left.kcal < 60) return [];
+  // größte relative Lücke bestimmen
+  const gaps = GAP_KEYS.map(([k, n, fk]) => ({ k, n, fk, miss: a.left[k], rel: a.g[k] > 0 ? a.left[k] / a.g[k] : 0 })).filter(x => x.miss > 3).sort((x, y) => y.rel - x.rel);
+  if (!gaps.length) return [];
+  const m = gaps[0];
+  const cand = D.foods.filter(f => f.kcal > 0 && num(f[m.fk]) > 0).map(f => {
+    const dens = f[m.fk] / f.kcal;                       // g Nährstoff je kcal
+    // Menge: Lücke füllen, aber höchstens das Kalorienbudget und höchstens 2 Portionen
+    let gr = Math.min(m.miss / f[m.fk] * 100, a.left.kcal / f.kcal * 100, (f.serving || 100) * 2);
+    gr = Math.max(20, Math.round(gr / 5) * 5);
+    const c = calc(f, gr);
+    return { f, gr, c, score: dens * 100 + Math.min(f.used || 0, 10) * 0.4 };
+  }).filter(x => x.c.kcal <= a.left.kcal + 40).sort((x, y) => y.score - x.score).slice(0, 4);
+  return cand.map(x => ({ ...x, m }));
+}
+function gapSheetHtml(a) {
+  const rows = [["kcal", "Kalorien", "kcal"], ...GAP_KEYS.map(([k, n]) => [k, n, "g"])].map(([k, n, u]) => {
+    const goal = k === "kcal" ? a.g.kcal : a.g[k], have = k === "kcal" ? a.t.kcal : a.t[k], miss = goal - have;
+    const pct = goal > 0 ? Math.min(have / goal * 100, 100) : 0;
+    return `<div class="gaprow"><div class="gl"><b>${n}</b><span>${r0(have)} / ${r0(goal)} ${u}</span></div><div class="track"><i class="${k === "kcal" ? "" : k}" style="width:${pct}%"></i></div>
+      <div class="gs ${miss > 0 ? "" : "ok"}">${miss > 0 ? "noch " + r0(miss) + " " + u : "erreicht"}</div></div>`;
+  }).join("");
+  const fiberRow = a.matched ? `<div class="muted small" style="margin-top:8px">Ballaststoffe: ca. ${r0(a.fiber)} g von etwa 30 g empfohlen (nur Einträge mit bekanntem Wert gezählt).</div>` : "";
+  const sug = gapSuggestions(a);
+  let sugHtml = "";
+  if (a.n === 0) sugHtml = `<div class="muted small" style="margin-top:12px">Du hast an diesem Tag noch nichts eingetragen. Trage zuerst etwas ein, dann zeige ich dir, was fehlt.</div>`;
+  else if (a.left.kcal < 60) sugHtml = `<div class="status ok" style="margin-top:12px">Dein Kalorienziel ist für heute erreicht.</div>`;
+  else if (!sug.length) sugHtml = `<div class="muted small" style="margin-top:12px">Keine große Lücke bei den Makros. Alles im Rahmen.</div>`;
+  else sugHtml = `<h3 style="margin:16px 0 4px">Passt zu deiner Lücke: ${sug[0].m.n}</h3><div class="muted small">Aus deiner eigenen Lebensmittelliste, Menge so gewählt, dass sie ins Kalorienbudget passt.</div>
+    <div class="list" style="margin-top:8px">${sug.map(x => `<div class="entry"><div class="nm"><div class="t">${esc(x.f.name)}</div><div class="s"><span class="g">${r0(x.gr)} g</span><span class="cp">E ${r0(x.c.p)}</span><span class="cc">KH ${r0(x.c.c)}</span><span class="cf">F ${r0(x.c.f)}</span></div></div><div class="kcal">${fmt(x.c.kcal)}<small>kcal</small></div></div>`).join("")}</div>`;
+  const ai = D.settings.geminiKey
+    ? `<button class="btn sec block" id="gapAi" style="margin-top:16px">Ideen von der KI</button><div id="gapAiOut"></div>`
+    : `<div class="muted small" style="margin-top:14px">Mit einem Gemini-Schlüssel (Einstellungen) bekommst du hier zusätzlich Ideen für Mahlzeiten und Hinweise zu Vitaminen und Mineralstoffen.</div>`;
+  return `<h3>Was fehlt mir?</h3>${rows}${fiberRow}${sugHtml}${ai}<div class="muted tiny" style="margin-top:14px">Orientierung, keine Ernährungsberatung. Grundlage sind deine Tagesziele und die eingetragenen Werte.</div>`;
+}
+const GAP_SCHEMA = { type: "OBJECT", properties: { tips: { type: "ARRAY", items: { type: "OBJECT", properties: { title: { type: "STRING" }, why: { type: "STRING" } }, required: ["title", "why"] } }, note: { type: "STRING" } }, required: ["tips"] };
+async function askGapAi(a, date) {
+  const eaten = dayEntries(date).map(e => `${e.name} ${r0(e.grams)} g`).join(", ");
+  const prompt = `Du bist eine kurze, sachliche Ernährungs-Hilfe. Gegessen wurde heute: ${eaten}. Bisher ${r0(a.t.kcal)} kcal, Eiweiß ${r0(a.t.p)} g, Kohlenhydrate ${r0(a.t.c)} g, Fett ${r0(a.t.f)} g. Tagesziel ${r0(a.g.kcal)} kcal, Eiweiß ${r0(a.g.p)} g, Kohlenhydrate ${r0(a.g.c)} g, Fett ${r0(a.g.f)} g. Es ist ${new Date().getHours()} Uhr. Nenne bis zu 4 konkrete Ideen für die nächste Mahlzeit oder einen Snack (deutsche Alltagslebensmittel mit Mengen), die in die restlichen Kalorien passen und Lücken bei Makros sowie wahrscheinlich knappen Vitaminen und Mineralstoffen schließen. Erkläre in "why" in einem Satz, was sie ergänzen. Mikronährstoffe sind nur grobe Einschätzungen, schreibe das im Feld "note" in einem kurzen Satz. Antworte nur mit JSON: {"tips":[{"title":"…","why":"…"}],"note":"…"}`;
+  const body = JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { responseMimeType: "application/json", responseSchema: GAP_SCHEMA, maxOutputTokens: 900, temperature: 0.5, thinkingConfig: { thinkingBudget: 0 } } });
+  const leanBody = JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { responseMimeType: "application/json", maxOutputTokens: 900 } });
+  const models = [...new Set([(D.settings.geminiModel || "gemini-2.5-flash").trim(), "gemini-2.5-flash", "gemini-flash-latest", "gemini-2.5-flash-lite"])];
+  let lastErr = "";
+  for (const model of models) {
+    for (const b of [body, leanBody]) {
+      let r;
+      try { r = await fetchT("https://generativelanguage.googleapis.com/v1beta/models/" + encodeURIComponent(model) + ":generateContent", { method: "POST", headers: { "content-type": "application/json", "x-goog-api-key": D.settings.geminiKey.trim() }, body: b }, 20000); }
+      catch (e) { if (e && e.name === "AbortError") { lastErr = "zu langsam"; break; } throw new Error("Keine Verbindung zur KI. Bist du online?"); }
+      const j = await r.json().catch(() => ({}));
+      if (r.ok) {
+        const txt = ((((j.candidates || [])[0] || {}).content || {}).parts || []).map(c => c.text || "").join("");
+        const o = parseGapJson(txt);
+        if (o) return o;
+        lastErr = "unlesbar"; break;
+      }
+      lastErr = r.status + "";
+      if (r.status === 401 || r.status === 403) throw new Error("Der Gemini-Schlüssel wird nicht akzeptiert. Prüfe ihn in den Einstellungen.");
+      if (r.status !== 400) break;      // 400: gleiche Anfrage ohne Schema nochmal; sonst nächstes Modell
+    }
+  }
+  throw new Error(lastErr === "429" ? "Das kostenlose KI-Limit ist gerade erreicht. Warte kurz." : "Die KI antwortet gerade nicht (" + lastErr + "). Die Rechnung oben bleibt gültig.");
+}
+function parseGapJson(txt) {
+  let t = String(txt || "").replace(/```(?:json)?/gi, ""); const i = t.indexOf("{"), k = t.lastIndexOf("}");
+  if (i < 0 || k < i) return null;
+  try { const o = JSON.parse(t.slice(i, k + 1)); return o && Array.isArray(o.tips) && o.tips.length ? o : null; } catch (e) { return null; }
+}
+function openGaps() {
+  const date = ui.date, a = gapAnalysis(date);
+  const sh = sheet(gapSheetHtml(a));
+  const btn = $("#gapAi", sh); if (!btn) return;
+  btn.onclick = async () => {
+    if (a.n === 0) return toast("Trage zuerst etwas ein");
+    const out = $("#gapAiOut", sh); btn.disabled = true;
+    out.innerHTML = `<div class="muted" style="margin-top:12px"><span class="spin"></span>Die KI überlegt … (meist 2 bis 6 Sekunden)</div>`;
+    try {
+      const o = await askGapAi(a, date);
+      out.innerHTML = `<div class="list" style="margin-top:10px">${o.tips.slice(0, 4).map(x => `<div class="entry"><div class="nm"><div class="t">${esc(String(x.title))}</div><div class="s">${esc(String(x.why))}</div></div></div>`).join("")}</div>` +
+        (o.note ? `<div class="muted tiny" style="margin-top:8px">${esc(String(o.note))}</div>` : "");
+      btn.textContent = "Neue Ideen";
+    } catch (e) { out.innerHTML = `<div class="status err" style="margin-top:12px">${esc(e.message || "Fehler")}</div>`; }
+    btn.disabled = false;
+  };
+}
+
 /* ---------- Ereignisse ---------- */
 document.addEventListener("toggle", ev => { const d = ev.target; if (d && d.matches && d.matches("details.acc")) ui.setOpen[d.dataset.acc] = d.open; }, true);
 document.addEventListener("click", async ev => {
@@ -1412,6 +1509,7 @@ document.addEventListener("click", async ev => {
     $("#pdToday", sh).onclick = () => go(iso(new Date()));
     $("#pdDate", sh).onchange = e => go(e.target.value);
   }
+  else if (a === "gaps") openGaps();
   else if (a === "toggleMeal") { ui.open[t.dataset.meal] = !ui.open[t.dataset.meal]; render(); }
   else if (a === "add") openAdd(t.dataset.meal);
   else if (a === "editEntry") editEntry(t.dataset.id);
