@@ -783,6 +783,8 @@ function bodyMulti(b) {
   b.innerHTML = `<div class="muted small">Füge eine CSV mit mehreren Gerichten ein (z. B. von Claude oder einer anderen KI). Jede Zeile wird ein eigener Tagebucheintrag mit der Menge <b>portion_g</b>. Die Gerichte werden <b>nicht</b> in „Meine Lebensmittel“ gespeichert, erscheinen aber einzeln im Export.</div>
     <textarea id="mPaste" rows="8" style="margin-top:10px;min-height:150px;font-size:12px" placeholder="name;marke;barcode;kcal;fett;kohlenhydrate;zucker;eiweiss;ballaststoffe;portion_g&#10;Hähnchenfleisch (angebraten);Restaurant/Buffet;;165;6.0;2.0;0.5;26.0;0.0;80"></textarea>
     <div id="mPrev"></div>
+    <label style="margin-top:14px">Alles zuordnen zu</label>
+    <div class="chips" id="mMeal">${MEALS.map(m => `<button class="chip ${m.id === ui.meal ? "on" : ""}" data-m="${m.id}">${m.name}</button>`).join("")}</div>
     <div class="grid2" style="margin-top:12px"><button class="btn" id="mGo" disabled>Ins Tagebuch</button><button class="btn sec" id="mCopy">Auftrag für KI kopieren</button></div>`;
   let rows = [];
   const ta = $("#mPaste", b), prev = $("#mPrev", b), go = $("#mGo", b);
@@ -794,14 +796,18 @@ function bodyMulti(b) {
     const tot = rows.reduce((a, f) => { const c = calc(f, f.serving); return { kcal: a.kcal + c.kcal, p: a.p + c.p, c: a.c + c.c, f: a.f + c.f }; }, { kcal: 0, p: 0, c: 0, f: 0 });
     prev.innerHTML = `<div class="list" style="margin-top:10px">${rows.map(f => { const c = calc(f, f.serving); return `<div class="entry"><div class="nm"><div class="t">${esc(f.name)}</div><div class="s"><span class="g">${r0(f.serving)} g</span><span class="cp">E ${r0(c.p)}</span><span class="cc">KH ${r0(c.c)}</span><span class="cf">F ${r0(c.f)}</span></div></div><div class="kcal">${fmt(c.kcal)}<small>kcal</small></div></div>`; }).join("")}</div>
       <div class="muted small" style="margin:8px 4px 0"><b>${rows.length}</b> Einträge · zusammen <b>${fmt(tot.kcal)} kcal</b> · E ${r0(tot.p)} · KH ${r0(tot.c)} · F ${r0(tot.f)}</div>`;
-    go.disabled = false; go.textContent = `${rows.length} Einträge ins Tagebuch`;
+    go.disabled = false; go.textContent = `${rows.length} Einträge → ${mealName(ui.meal)}`;
   };
+  $$("#mMeal .chip", b).forEach(c => c.onclick = () => {
+    ui.meal = c.dataset.m; $$("#mMeal .chip", b).forEach(x => x.classList.toggle("on", x === c));
+    const sel = $("#aMeal"); if (sel) sel.value = ui.meal; upd();
+  });
   ta.oninput = upd;
   go.onclick = () => {
     if (!rows.length) return;
     const meal = ui.meal;
     rows.forEach(f => { const c = calc(f, f.serving); D.entries.push({ id: uid(), date: ui.date, meal, name: f.name, brand: f.brand || undefined, grams: f.serving, kcal: c.kcal, p: c.p, c: c.c, f: c.f, s: f.sugar * f.serving / 100, fi: f.fiber * f.serving / 100 }); });
-    ui.open[meal] = true; closeSheet(); save(); render(); toast(rows.length + " Einträge hinzugefügt");
+    ui.open[meal] = true; closeSheet(); save(); render(); toast(rows.length + " Einträge zu " + mealName(meal) + " hinzugefügt");
   };
   $("#mCopy", b).onclick = async () => toast(await copyText(MULTI_PROMPT) ? "Auftrag kopiert. An die KI schicken (mit Fotos) und die Antwort hier einfügen." : "Kopieren nicht möglich");
 }
