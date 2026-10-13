@@ -249,3 +249,6 @@ textarea::placeholder{color:var(--muted);opacity:.8}
 .gaprow .track i:not(.p):not(.c):not(.f){background:var(--accent,#12935f)}
 .seg.six button{font-size:11.5px;padding:9px 0}
 .mealtools{display:flex;gap:18px;flex-wrap:wrap}.linkbtn.del{color:var(--danger)}
+.res.selrow{display:flex;align-items:center;gap:12px}
+.cbx{flex:none;width:24px;height:24px;border-radius:8px;border:2px solid var(--line);display:flex;align-items:center;justify-content:center;color:var(--on-accent,#fff)}
+.cbx.on{background:var(--accent);border-color:var(--accent)}

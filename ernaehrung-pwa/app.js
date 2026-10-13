@@ -103,6 +103,7 @@ const IC = {
   settings: '<path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/>',
   plus: '<path d="M12 5v14M5 12h14"/>',
   x: '<path d="M6 6l12 12M18 6L6 18"/>',
+  check: '<path d="m5 12.5 4.5 4.5L19 7.5"/>',
   left: '<path d="m15 6-6 6 6 6"/>',
   right: '<path d="m9 6 6 6-6 6"/>',
   search: '<circle cx="11" cy="11" r="6.5"/><path d="m16 16 4 4"/>',
@@ -1065,14 +1066,39 @@ function editEntry(id) {
 
 /* Lebensmittel verwalten */
 function foodsManage() {
-  const s = sheet(`<h3>Meine Lebensmittel</h3><input type="search" id="fq" placeholder="Filtern …"><div id="fl"></div>`);
-  const draw = () => {
+  const s = sheet(`<h3>Meine Lebensmittel</h3><input type="search" id="fq" placeholder="Filtern …">
+    <div class="row between" style="margin:10px 2px 4px"><button class="linkbtn" id="fMode" style="margin:0">Auswählen</button><button class="linkbtn" id="fAll" style="margin:0;display:none">Alle auswählen</button></div>
+    <div id="fl"></div><div id="fBar"></div>`);
+  let selMode = false;
+  const sel = new Set();
+  const filtered = () => {
     const t = $("#fq", s).value.trim().toLowerCase();
-    const list = D.foods.filter(f => !t || (f.name + " " + f.brand + " " + f.barcode).toLowerCase().includes(t)).sort((a, b) => a.name.localeCompare(b.name, "de")).slice(0, 100);
-    $("#fl", s).innerHTML = list.length ? list.map(f => `<div class="res" data-id="${f.id}">${foodLine(f)}</div>`).join("") : `<div class="muted center" style="padding:18px">Keine Lebensmittel.</div>`;
-    $$("[data-id]", s).forEach(el => el.onclick = () => foodEdit(D.foods.find(f => f.id === el.dataset.id)));
+    return D.foods.filter(f => !t || (f.name + " " + f.brand + " " + f.barcode).toLowerCase().includes(t)).sort((a, b) => a.name.localeCompare(b.name, "de"));
   };
-  $("#fq", s).oninput = draw; draw();
+  const draw = () => {
+    const all = filtered(), list = all.slice(0, 100);
+    $("#fl", s).innerHTML = list.length ? list.map(f => `<div class="res ${selMode ? "selrow" : ""}" data-id="${f.id}">${selMode ? `<span class="cbx ${sel.has(f.id) ? "on" : ""}">${sel.has(f.id) ? icon("check", 14, 3) : ""}</span>` : ""}${foodLine(f)}</div>`).join("") + (all.length > 100 ? `<div class="muted small center" style="padding:10px">${list.length} von ${all.length} angezeigt – Filter nutzen oder „Alle auswählen“</div>` : "") : `<div class="muted center" style="padding:18px">Keine Lebensmittel.</div>`;
+    $$("[data-id]", s).forEach(el => el.onclick = () => {
+      if (!selMode) return foodEdit(D.foods.find(f => f.id === el.dataset.id));
+      const id = el.dataset.id; sel.has(id) ? sel.delete(id) : sel.add(id); draw();
+    });
+    $("#fMode", s).textContent = selMode ? "Fertig" : "Auswählen";
+    $("#fAll", s).style.display = selMode ? "" : "none";
+    $("#fAll", s).textContent = all.length && all.every(f => sel.has(f.id)) ? "Auswahl aufheben" : "Alle auswählen (" + all.length + ")";
+    $("#fBar", s).innerHTML = selMode && sel.size ? `<button class="btn danger block" style="margin-top:12px" id="fDel">${sel.size} ${sel.size === 1 ? "Lebensmittel" : "Lebensmittel"} löschen</button>` : "";
+    const del = $("#fDel", s);
+    if (del) del.onclick = () => {
+      const n = sel.size, ids = new Set(sel);
+      const c = sheet(`<h3>${n} ${n === 1 ? "Lebensmittel" : "Lebensmittel"} löschen?</h3><div class="muted small" style="margin-bottom:14px">Sie werden aus „Meine Lebensmittel“ entfernt. Bereits ins Tagebuch eingetragene Mahlzeiten und Rezepte bleiben unverändert.</div>
+        <button class="btn danger block" id="fdGo">Endgültig löschen</button><button class="btn sec block" style="margin-top:8px" id="fdNo">Abbrechen</button>`);
+      $("#fdNo", c).onclick = () => foodsManage();
+      $("#fdGo", c).onclick = () => { D.foods = D.foods.filter(f => !ids.has(f.id)); save(); toast(n + " gelöscht"); render(); foodsManage(); };
+    };
+  };
+  $("#fq", s).oninput = draw;
+  $("#fMode", s).onclick = () => { selMode = !selMode; if (!selMode) sel.clear(); draw(); };
+  $("#fAll", s).onclick = () => { const all = filtered(), every = all.every(f => sel.has(f.id)); all.forEach(f => every ? sel.delete(f.id) : sel.add(f.id)); draw(); };
+  draw();
 }
 function foodEdit(f) {
   const s = sheet(`<h3>${f ? "Lebensmittel bearbeiten" : "Neues Lebensmittel"}</h3>${foodForm(f)}
