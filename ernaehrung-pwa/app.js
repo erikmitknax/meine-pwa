@@ -1445,6 +1445,27 @@ function parseGapJson(txt) {
   if (i < 0 || k < i) return null;
   try { const o = JSON.parse(t.slice(i, k + 1)); return o && Array.isArray(o.tips) && o.tips.length ? o : null; } catch (e) { return null; }
 }
+/* Wechselt man während der KI-Suche in eine andere App, bricht das Handy die Verbindung ab (sieht aus wie „offline“).
+   Dann wartet die App, bis du zurück bist, und startet die Suche automatisch neu. */
+let bgMark = 0;
+document.addEventListener("visibilitychange", () => { if (document.hidden) bgMark++; });
+const whenVisible = () => new Promise(res => {
+  const go = () => setTimeout(res, 600);   // kurz warten, bis das Netz wieder da ist
+  if (!document.hidden) return go();
+  const h = () => { if (!document.hidden) { document.removeEventListener("visibilitychange", h); go(); } };
+  document.addEventListener("visibilitychange", h);
+});
+async function resumable(fn, onWait) {
+  for (let i = 0; ; i++) {
+    const mark = bgMark;
+    try { return await fn(); }
+    catch (e) {
+      if (bgMark === mark || i >= 3 || /Schlüssel/.test(e && e.message || "")) throw e;
+      if (onWait) onWait();
+      await whenVisible();
+    }
+  }
+}
 function openGaps() {
   const date = ui.date, sh = sheet(gapSheetHtml());
   if ($("#toSet", sh)) { $("#toSet", sh).onclick = () => { closeSheet(); setTab("settings"); render(); }; return; }
@@ -1456,7 +1477,7 @@ function openGaps() {
     busy = true;
     out.innerHTML = `<div class="muted" style="margin-top:14px"><span class="spin"></span>Die KI überlegt … (meist 2 bis 6 Sekunden)</div>`;
     try {
-      const o = await askGapAi(gapAnalysis(date), date, meal);
+      const o = await resumable(() => askGapAi(gapAnalysis(date), date, meal), () => { out.innerHTML = `<div class="muted" style="margin-top:14px"><span class="spin"></span>Suche wird fortgesetzt …</div>`; });
       out.innerHTML = `<div class="list" style="margin-top:14px">${o.tips.slice(0, 4).map(x => `<div class="entry"><div class="nm"><div class="t">${esc(String(x.title))}</div><div class="s">${esc(String(x.why))}</div></div></div>`).join("")}</div>` +
         (o.note ? `<div class="muted tiny" style="margin-top:8px">${esc(String(o.note))}</div>` : "");
     } catch (e) { out.innerHTML = `<div class="status err" style="margin-top:14px">${esc(e.message || "Fehler")}</div>`; }
