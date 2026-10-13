@@ -351,9 +351,9 @@ let addTab = "search";
 function openAdd(meal) {
   if (meal) ui.meal = meal;
   const mealSel = `<select id="aMeal" style="margin-bottom:12px">${MEALS.map(m => `<option value="${m.id}" ${m.id === ui.meal ? "selected" : ""}>${m.name} – ${niceDate(ui.date)}</option>`).join("")}</select>`;
-  const tabs = [["search", "Suchen"], ["scan", "Scannen"], ["photo", "Foto-KI"], ["recipes", "Rezepte"], ["manual", "Manuell"]];
+  const tabs = [["search", "Suchen"], ["scan", "Scannen"], ["photo", "Foto-KI"], ["recipes", "Rezepte"], ["manual", "Manuell"], ["multi", "Mehrere"]];
   const s = sheet(`<h3>Lebensmittel hinzufügen</h3>${mealSel}
-    <div class="seg five">${tabs.map(([v, l]) => `<button data-at="${v}" class="${addTab === v ? "on" : ""}">${l}</button>`).join("")}</div><div id="addBody"></div>`);
+    <div class="seg six">${tabs.map(([v, l]) => `<button data-at="${v}" class="${addTab === v ? "on" : ""}">${l}</button>`).join("")}</div><div id="addBody"></div>`);
   $("#aMeal", s).onchange = e => ui.meal = e.target.value;
   $$("[data-at]", s).forEach(b => b.onclick = () => { addTab = b.dataset.at; stopScan(); $$("[data-at]", s).forEach(x => x.classList.toggle("on", x === b)); addBody(); });
   addBody();
@@ -366,6 +366,7 @@ function addBody() {
   else if (addTab === "scan") bodyScan(b);
   else if (addTab === "photo") bodyPhoto(b);
   else if (addTab === "recipes") bodyRecipes(b);
+  else if (addTab === "multi") bodyMulti(b);
   else bodyManual(b);
 }
 
@@ -776,6 +777,34 @@ function readFoodForm(root, base) {
     kcal: num($("#fKcal", root).value), protein: num($("#fP", root).value), carbs: num($("#fC", root).value), fat: num($("#fF", root).value),
     sugar: num($("#fS", root).value), fiber: num($("#fFi", root).value), serving: num($("#fServ", root).value) || 100, used: (base && base.used) || 0 };
 }
+/* Mehrere Gerichte auf einmal (z. B. Buffet): CSV einfügen -> jede Zeile ein Tagebucheintrag, nichts landet in „Meine Lebensmittel“ */
+const MULTI_PROMPT = "Ich habe folgendes gegessen (siehe Fotos/Beschreibung):\n(HIER BESCHREIBEN, z. B. Buffet-Teller mit …)\n\nSchätze pro Gericht die Nährwerte pro 100 g und das Gewicht, das ich tatsächlich gegessen habe. Antworte nur mit CSV, ohne weiteren Text: erste Zeile die Kopfzeile, danach eine Zeile pro Gericht, Trennzeichen Semikolon, Dezimalpunkt.\nname;marke;barcode;kcal;fett;kohlenhydrate;zucker;eiweiss;ballaststoffe;portion_g\nBei portion_g das Gewicht der gegessenen Menge in Gramm angeben (die Nährwerte beziehen sich auf 100 g).";
+function bodyMulti(b) {
+  b.innerHTML = `<div class="muted small">Füge eine CSV mit mehreren Gerichten ein (z. B. von Claude oder einer anderen KI). Jede Zeile wird ein eigener Tagebucheintrag mit der Menge <b>portion_g</b>. Die Gerichte werden <b>nicht</b> in „Meine Lebensmittel“ gespeichert, erscheinen aber einzeln im Export.</div>
+    <textarea id="mPaste" rows="8" style="margin-top:10px;min-height:150px;font-size:12px" placeholder="name;marke;barcode;kcal;fett;kohlenhydrate;zucker;eiweiss;ballaststoffe;portion_g&#10;Hähnchenfleisch (angebraten);Restaurant/Buffet;;165;6.0;2.0;0.5;26.0;0.0;80"></textarea>
+    <div id="mPrev"></div>
+    <div class="grid2" style="margin-top:12px"><button class="btn" id="mGo" disabled>Ins Tagebuch</button><button class="btn sec" id="mCopy">Auftrag für KI kopieren</button></div>`;
+  let rows = [];
+  const ta = $("#mPaste", b), prev = $("#mPrev", b), go = $("#mGo", b);
+  const upd = () => {
+    rows = []; prev.innerHTML = ""; go.disabled = true; go.textContent = "Ins Tagebuch";
+    if (!ta.value.trim()) return;
+    try { rows = parseFoodsText(ta.value); } catch (e) { prev.innerHTML = `<div class="warn small" style="margin-top:10px">Das Format wurde nicht erkannt. Erwartet: name;marke;barcode;kcal;fett;kohlenhydrate;zucker;eiweiss;ballaststoffe;portion_g</div>`; return; }
+    if (!rows.length) { prev.innerHTML = `<div class="warn small" style="margin-top:10px">Keine Zeilen erkannt.</div>`; return; }
+    const tot = rows.reduce((a, f) => { const c = calc(f, f.serving); return { kcal: a.kcal + c.kcal, p: a.p + c.p, c: a.c + c.c, f: a.f + c.f }; }, { kcal: 0, p: 0, c: 0, f: 0 });
+    prev.innerHTML = `<div class="list" style="margin-top:10px">${rows.map(f => { const c = calc(f, f.serving); return `<div class="entry"><div class="nm"><div class="t">${esc(f.name)}</div><div class="s"><span class="g">${r0(f.serving)} g</span><span class="cp">E ${r0(c.p)}</span><span class="cc">KH ${r0(c.c)}</span><span class="cf">F ${r0(c.f)}</span></div></div><div class="kcal">${fmt(c.kcal)}<small>kcal</small></div></div>`; }).join("")}</div>
+      <div class="muted small" style="margin:8px 4px 0"><b>${rows.length}</b> Einträge · zusammen <b>${fmt(tot.kcal)} kcal</b> · E ${r0(tot.p)} · KH ${r0(tot.c)} · F ${r0(tot.f)}</div>`;
+    go.disabled = false; go.textContent = `${rows.length} Einträge ins Tagebuch`;
+  };
+  ta.oninput = upd;
+  go.onclick = () => {
+    if (!rows.length) return;
+    const meal = ui.meal;
+    rows.forEach(f => { const c = calc(f, f.serving); D.entries.push({ id: uid(), date: ui.date, meal, name: f.name, brand: f.brand || undefined, grams: f.serving, kcal: c.kcal, p: c.p, c: c.c, f: c.f, s: f.sugar * f.serving / 100, fi: f.fiber * f.serving / 100 }); });
+    ui.open[meal] = true; closeSheet(); save(); render(); toast(rows.length + " Einträge hinzugefügt");
+  };
+  $("#mCopy", b).onclick = async () => toast(await copyText(MULTI_PROMPT) ? "Auftrag kopiert. An die KI schicken (mit Fotos) und die Antwort hier einfügen." : "Kopieren nicht möglich");
+}
 function bodyManual(b) {
   b.innerHTML = foodForm(manualPrefill) + `<button class="btn block" style="margin-top:14px" id="fSave">Speichern & Menge wählen</button>`;
   manualPrefill = null;
@@ -1022,7 +1051,7 @@ function editEntry(id) {
     <button class="btn danger block" style="margin-top:8px" id="ed">Eintrag löschen</button>`);
   $("#es", s).onclick = () => {
     const g = num($("#eg", s).value); if (g <= 0) return toast("Menge eingeben");
-    const k = g / e.grams; e.kcal *= k; e.p *= k; e.c *= k; e.f *= k; e.grams = g; e.meal = $("#em", s).value;
+    const k = g / e.grams; e.kcal *= k; e.p *= k; e.c *= k; e.f *= k; if (e.s != null) e.s *= k; if (e.fi != null) e.fi *= k; e.grams = g; e.meal = $("#em", s).value;
     save(); closeSheet(); render();
   };
   $("#ed", s).onclick = () => { D.entries = D.entries.filter(x => x.id !== id); save(); closeSheet(); render(); };
@@ -1173,7 +1202,7 @@ function buildReport(from, to) {
       out.push("", `### ${mealName(mid)} – ${nde(ms.kcal, 0)} kcal (Eiweiß ${nde(ms.p, 0)} g · KH ${nde(ms.c, 0)} g · Fett ${nde(ms.f, 0)} g)`);
       es.forEach(e => {
         const rec = recipeFor(e);
-        out.push(`- ${rec ? "Rezept: " : ""}${e.name}, ${nde(e.grams, 0)} g – ${nde(e.kcal, 0)} kcal · E ${nde(e.p)} · KH ${nde(e.c)} · F ${nde(e.f)}`);
+        out.push(`- ${rec ? "Rezept: " : ""}${e.name}${e.brand ? " (" + e.brand + ")" : ""}, ${nde(e.grams, 0)} g – ${nde(e.kcal, 0)} kcal · E ${nde(e.p)} · KH ${nde(e.c)} · F ${nde(e.f)}${e.s != null ? " · Zucker " + nde(e.s) : ""}${e.fi != null ? " · Ballaststoffe " + nde(e.fi) : ""}`);
         if (rec && rec.items && rec.items.length) {
           const tot = rec.items.reduce((a, i) => a + i.grams, 0) || 1, k = e.grams / tot;
           rec.items.forEach(i => { const c = calc(i, i.grams * k); out.push(`  - Zutat: ${i.name}, ${nde(i.grams * k, 0)} g – ${nde(c.kcal, 0)} kcal · E ${nde(c.p)} · KH ${nde(c.c)} · F ${nde(c.f)}`); });
