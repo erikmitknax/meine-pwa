@@ -16,7 +16,7 @@ const NATIVE = !!(window.Capacitor && window.Capacitor.isNativePlatform && windo
 
 const DEFAULTS = () => ({
   ver: 3, foods: [], recipes: [], entries: [], weights: {},
-  settings: { kcal: 2200, pP: 30, pC: 40, pF: 30, mode: "auto", accent: "#12935f", geminiKey: "", geminiModel: "gemini-2.5-flash", goalWeight: "" },
+  settings: { kcal: 2200, pP: 30, pC: 40, pF: 30, mode: "auto", accent: "#12935f", geminiKey: "", geminiModel: "gemini-2.5-flash", goalWeight: "", weightGate: true },
 });
 let D = load();
 let ui = { setOpen: {}, tab: "today", date: iso(new Date()), weekOffset: 0, period: 7, wRange: 90, meal: "b", open: {} };
@@ -94,7 +94,39 @@ function render() {
   const top = v.scrollTop;
   v.innerHTML = { today: viewToday, week: viewWeek, weight: viewWeight, settings: viewSettings }[ui.tab]();
   v.scrollTop = top;
+  weightGate();
 }
+
+/* ---- Morgendliche Gewichts-Abfrage (ab 6 Uhr, bis Gewicht oder "Heute überspringen") ---- */
+const GATE_HOUR = 6;
+function gateSkipped() { try { return localStorage.getItem("foodpro.wskip") === iso(new Date()); } catch (e) { return false; } }
+function weightGate() {
+  const now = new Date(), t = iso(now), el = $("#wGate");
+  const need = D.settings.weightGate !== false && now.getHours() >= GATE_HOUR && D.weights[t] == null && !gateSkipped();
+  if (!need) { if (el) el.remove(); return; }
+  if (el) return;
+  const last = weightList().slice(-1)[0];
+  const g = document.createElement("div");
+  g.id = "wGate"; g.className = "wgate";
+  g.innerHTML = `<div class="wgbox"><div class="wgico">${icon("weight", 30, 2)}</div>
+    <h2>Gewicht eintragen</h2><p class="muted">Wie viel wiegst du heute? Am besten morgens nach dem Aufstehen.</p>
+    <input type="text" inputmode="decimal" id="wgVal" placeholder="0,0" autocomplete="off">
+    <div class="small muted" style="margin:6px 2px 0">kg${last ? ` · zuletzt ${nde(last.w)} kg am ${fromIso(last.d).toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit" })}` : ""}</div>
+    <button class="btn block" id="wgOk" style="margin-top:16px">Speichern</button>
+    <button class="linkbtn" id="wgSkip" style="margin-top:12px">Heute überspringen</button></div>`;
+  document.body.append(g);
+  const ok = () => {
+    const w = num($("#wgVal").value);
+    if (!(w >= 20 && w <= 400)) { toast("Bitte ein gültiges Gewicht eingeben"); return; }
+    D.weights[iso(new Date())] = r1(w); save(); render(); toast("Gewicht gespeichert");
+  };
+  $("#wgOk").onclick = ok;
+  $("#wgVal").addEventListener("keydown", e => { if (e.key === "Enter") ok(); });
+  $("#wgSkip").onclick = () => { try { localStorage.setItem("foodpro.wskip", iso(new Date())); } catch (e) { } g.remove(); };
+  setTimeout(() => { try { $("#wgVal").focus(); } catch (e) { } }, 50);
+}
+setInterval(() => { if (typeof D !== "undefined") weightGate(); }, 60000);
+document.addEventListener("visibilitychange", () => { if (!document.hidden) weightGate(); });
 
 const IC = {
   today: '<path d="M4 11.5 12 4l8 7.5V20a1 1 0 0 1-1 1h-4v-6H9v6H5a1 1 0 0 1-1-1z"/>',
@@ -267,6 +299,7 @@ function viewSettings() {
     <div><label>Fett in %</label><input type="text" inputmode="numeric" id="sF" value="${s.pF}"></div></div>
     <div id="macroInfo" class="small ${tot === 100 ? "muted" : "warn"}" style="margin:10px 2px 0">${macroInfoText(s.pP, s.pC, s.pF, s.kcal)}</div>
     <label>Zielgewicht in kg (optional)</label><input type="text" inputmode="decimal" id="sGoalW" value="${esc(s.goalWeight)}">
+    <label class="toggle"><span>Morgens nach Gewicht fragen (ab 6 Uhr)</span><input type="checkbox" id="wGateOn" ${s.weightGate !== false ? "checked" : ""}></label>
     <button class="btn block" style="margin-top:16px" data-act="saveGoals">Ziele speichern</button></div>
   `)}
   ${acc("design", `Design`, `<div class="panel">
@@ -1645,6 +1678,7 @@ document.addEventListener("change", async ev => {
     try { const m = await importFile(t.files[0]); if (m) toast(m); } catch (e) { toast(e.message || "Datei nicht lesbar"); }
     t.value = "";
   } else if (t.id === "dbxAuto") { DB.auto = t.checked; dbSave(); if (t.checked) queueBackup(); toast(t.checked ? "Automatische Sicherung an" : "Automatische Sicherung aus");
+  } else if (t.id === "wGateOn") { D.settings.weightGate = t.checked; save(); weightGate(); toast(t.checked ? "Gewichts-Abfrage an" : "Gewichts-Abfrage aus");
   } else if (t.id === "sAccent") { D.settings.accent = t.value; save(); applyTheme(); render(); }
 });
 document.addEventListener("input", ev => {
