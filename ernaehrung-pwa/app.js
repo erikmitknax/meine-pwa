@@ -554,6 +554,55 @@ async function startScan(video, onCode, setMsg) {
 
 /* Foto-KI */
 let photoItems = [];
+/* ---- Text sofort mit eigenen Lebensmitteln abgleichen (ohne KI) ---- */
+const normTxt = x => String(x || "").toLowerCase().replace(/ä/g, "ae").replace(/ö/g, "oe").replace(/ü/g, "ue").replace(/ß/g, "ss").replace(/[^a-z0-9 ]+/g, " ").replace(/\s+/g, " ").trim();
+const NUMW = { ein: 1, eine: 1, einen: 1, einem: 1, einer: 1, zwei: 2, drei: 3, vier: 4, fuenf: 5, halbe: .5, halben: .5, halber: .5, halbes: .5 };
+const UNIT_G = { g: 1, gr: 1, gramm: 1, kg: 1000, ml: 1, l: 1000, liter: 1000, cl: 10, dl: 100 };
+const UNIT_PC = /^(stueck|stuecke|stk|scheibe|scheiben|portion|portionen|el|tl|becher|glas|glaeser|tasse|tassen|stange|stangen|packung|riegel|x)$/;
+function parseSeg(seg) {
+  let t = seg.trim().replace(/^(mit|und|plus)\s+/i, ""), grams = null, count = null, name = t;
+  const tr = t.match(/^(.*?)\s*(\d+(?:[.,]\d+)?)\s*(g|gr|gramm|kg|ml|l)\s*$/i);
+  const ld = t.match(/^(\d+(?:[.,]\d+)?)\s*([A-Za-zÄÖÜäöüß]+)?\s*(.*)$/);
+  if (tr && tr[1].trim()) { grams = num(tr[2]) * UNIT_G[tr[3].toLowerCase()]; name = tr[1]; }
+  else if (ld) {
+    const n = num(ld[1]), w = normTxt(ld[2] || ""), rest = ld[3];
+    if (w && UNIT_G[w] && rest.trim()) { grams = n * UNIT_G[w]; name = rest; }
+    else if (w && UNIT_PC.test(w) && rest.trim()) { count = n; name = rest; }
+    else { name = ((ld[2] || "") + " " + rest).trim(); if (n <= 10) count = n; else grams = n; }
+  } else {
+    const m = t.match(/^(\S+)\s+(.+)$/);
+    if (m && NUMW[normTxt(m[1])] != null) { count = NUMW[normTxt(m[1])]; name = m[2]; const m2 = name.match(/^(\S+)\s+(.+)$/); if (m2 && UNIT_PC.test(normTxt(m2[1]))) name = m2[2]; }
+    else count = 1;
+  }
+  return { name: name.trim(), grams, count };
+}
+const wordEq = (x, w) => { if (x === w) return true; const [a, b] = x.length <= w.length ? [x, w] : [w, x]; if (b.startsWith(a) && ["e", "en", "er", "n"].includes(b.slice(a.length))) return true; if (a.length >= 4 && b === a + "s") return true; return Math.min(x.length, w.length) >= 4 && (stem(x).startsWith(stem(w)) || stem(w).startsWith(stem(x))); };
+const stem = w => w.length > 4 ? w.replace(/(en|er|e|n|s)$/, "") : w;
+function findOwnFood(name) {
+  const q = normTxt(name).split(" ").filter(w => w && !["mit", "und", "von", "der", "die", "das", "etwas"].includes(w));
+  if (!q.length) return null;
+  let best = null, bs = 0;
+  for (const f of D.foods) {
+    const ft = normTxt(f.name + " " + (f.brand || "")).split(" ").filter(Boolean), fn = normTxt(f.name);
+    const okAll = q.every(w => ft.some(x => wordEq(x, w)));
+    if (!okAll) continue;
+    const score = (fn === q.join(" ") ? 100 : 60) + 20 * (q.length / Math.max(ft.length, 1)) + Math.min(f.used || 0, 10) * .1;
+    if (score > bs) { bs = score; best = f; }
+  }
+  return best;
+}
+function matchLocal(text) {
+  const items = [], rest = [];
+  text.split(/\s*(?:,|;|\n|\+|\bund\b|\bsowie\b)\s*/i).map(x => x.trim()).filter(Boolean).forEach(seg => {
+    const p = parseSeg(seg), f = p.name ? findOwnFood(p.name) : null;
+    if (!f) return rest.push(seg);
+    const grams = Math.max(1, r1(p.grams != null ? p.grams : (p.count != null ? p.count : 1) * (num(f.serving) || 100)));
+    items.push({ name: f.name, grams, kcal: num(f.kcal), protein: num(f.protein), carbs: num(f.carbs), fat: num(f.fat), sugar: num(f.sugar), fiber: num(f.fiber), on: true, fid: f.id });
+  });
+  return { items, rest };
+}
+let photoStatus = "";
+
 function bodyPhoto(b) {
   if (!D.settings.geminiKey) {
     b.innerHTML = `<div class="card muted small">Für die KI-Erkennung trägst du in den Einstellungen deinen kostenlosen Gemini-Schlüssel ein. Die Werte sind Schätzungen – prüfe sie vor dem Speichern.</div>
@@ -561,7 +610,7 @@ function bodyPhoto(b) {
     $("#toSet", b).onclick = () => { closeSheet(); setTab("settings"); render(); };
     return;
   }
-  b.innerHTML = `<div class="muted small">Beschreibe dein Essen als Text, mache ein Foto oder beides. Die KI füllt Lebensmittel, Menge und Nährwerte aus, danach kannst du alles selbst anpassen.</div>
+  b.innerHTML = `<div class="muted small">Beschreibe dein Essen als Text, mache ein Foto oder beides. Lebensmittel aus deiner Datenbank werden sofort erkannt, nur Unbekanntes fragt die KI. Danach kannst du alles selbst anpassen.</div>
     <label>Beschreibung</label>
     <textarea id="pNote" rows="3" placeholder="z. B. 2 Spiegeleier, 2 Scheiben Vollkornbrot mit Butter und eine Banane">${esc(ui.photoNote || "")}</textarea>
     <input type="file" id="img" accept="image/*" capture="environment" hidden><input type="file" id="img2" accept="image/*" hidden>
@@ -584,11 +633,21 @@ function bodyPhoto(b) {
     const f = file;
     $("#pNote", b).value = ""; ui.photoNote = ""; // Beschreibung wird nach dem Abschicken geleert
     $("#pGo", b).disabled = true;
-    $("#pout", b).innerHTML = `<div class="muted" style="margin-top:14px"><span class="spin"></span>${f ? "Analysiere Foto …" : "Analysiere Text …"}</div>`;
-    try { photoItems = await analyzePhoto(f, note); file = null; $("#pres", b).innerHTML = ""; renderPhotoItems(); }
-    catch (e) {
-      $("#pNote", b).value = note; ui.photoNote = note; // bei Fehler Text zurück, damit nichts verloren geht
-      $("#pout", b).innerHTML = `<div class="warn small" style="margin-top:14px">${esc(e.message)}</div>`;
+    // Text ohne Foto: erst sofort mit eigenen Lebensmitteln abgleichen, nur der Rest geht an die KI
+    const loc = !f ? matchLocal(note) : { items: [], rest: [] };
+    const rest = loc.items.length ? loc.rest.join(", ") : note;
+    photoStatus = ""; lastAi = null;
+    if (loc.items.length) { photoItems = loc.items; photoStatus = rest ? `<div class="muted small"><span class="spin"></span>Rest („${esc(rest)}“) wird von der KI ergänzt …</div>` : ""; renderPhotoItems(); }
+    else $("#pout", b).innerHTML = `<div class="muted" style="margin-top:14px"><span class="spin"></span>${f ? "Analysiere Foto …" : "Analysiere Text …"}</div>`;
+    if (!loc.items.length || rest) {
+      try {
+        const ai = await analyzePhoto(f, rest);
+        photoItems = loc.items.concat(ai); photoStatus = ""; file = null; $("#pres", b).innerHTML = ""; renderPhotoItems();
+      } catch (e) {
+        $("#pNote", b).value = rest; ui.photoNote = rest; // bei Fehler Text zurück, damit nichts verloren geht
+        if (loc.items.length) { photoStatus = `<div class="warn small">KI nicht erreichbar: ${esc(e.message)} Der Rest steht wieder im Textfeld.</div>`; renderPhotoItems(); }
+        else $("#pout", b).innerHTML = `<div class="warn small" style="margin-top:14px">${esc(e.message)}</div>`;
+      }
     }
     $("#pGo", b).disabled = false;
   };
@@ -718,7 +777,7 @@ async function analyzePhoto(file, note) {
   const lead = file ? `Analysiere dieses Foto (Mahlzeit, Lebensmittel oder Nährwert-Etikett). Erkenne jedes einzelne Lebensmittel, schätze die Menge in Gramm und nenne die Nährwerte pro 100 g. Wenn ein Nährwert-Etikett zu sehen ist, nutze dessen Werte.`
     : `Der Nutzer beschreibt in Textform, was er gegessen hat oder welches Lebensmittel er eintragen möchte (es gibt kein Foto). Erkenne jedes einzelne Lebensmittel, rechne genannte Mengen (Stück, Scheiben, Gläser, Esslöffel …) in Gramm um bzw. nimm genannte Gramm-Angaben exakt, sonst schätze eine übliche Portion, und nenne die Nährwerte pro 100 g. Nennt der Nutzer selbst Nährwerte, rechne sie auf 100 g um und nutze sie.`;
   const prompt = `${lead} Antworte ausschließlich mit JSON ohne weiteren Text im Format: {"items":[{"name":"deutscher Name","grams":150,"kcal":120,"protein":5,"carbs":20,"fat":2,"sugar":1,"fiber":3}]}. Alle Nährwerte beziehen sich auf 100 g. Zahlen immer als JSON-Zahlen mit Punkt als Dezimaltrennzeichen (z. B. 5.5, niemals 5,5).` + (note ? (file ? `\n\nZusatzinfos vom Nutzer (verlässlich, haben Vorrang vor deiner Schätzung aus dem Bild, z. B. Gewicht, Zutaten, Zubereitung, Marke): ${note}` : `\n\nBeschreibung des Nutzers: ${note}`) : "");
-  const { text: txt, model: usedModel, ms } = await geminiCall([...imgPart, { text: prompt }], { schema: PHOTO_SCHEMA, maxOut: 1500, onWait: m => { const o = $("#pout"); if (o) o.innerHTML = `<div class="muted" style="margin-top:14px"><span class="spin"></span>${m}</div>`; } });
+  const { text: txt, model: usedModel, ms } = await geminiCall([...imgPart, { text: prompt }], { schema: PHOTO_SCHEMA, maxOut: 1500, onWait: m => { const o = $("#pstat") || $("#pout"); if (o) o.innerHTML = `<div class="muted" style="margin-top:14px"><span class="spin"></span>${m}</div>`; } });
   lastAi = { model: usedModel, ms };
   const items = (parseAiJson(txt).items || []).filter(i => i && i.name);
   if (!items.length) throw new Error(file ? "Es wurde nichts erkannt. Versuche ein schärferes Foto." : "Es wurde nichts erkannt. Beschreibe das Essen etwas genauer.");
@@ -729,9 +788,10 @@ function renderPhotoItems() {
   if (!o) return;
   const fld = (l, f, v) => `<div><label style="margin:8px 0 3px">${l}</label><input type="text" inputmode="decimal" value="${v}" data-f="${f}"></div>`;
   const sum = i => { const c = calc(i, i.grams); return `= ${r0(c.kcal)} kcal · E ${r1(c.p)} · KH ${r1(c.c)} · F ${r1(c.f)}`; };
-  o.innerHTML = `<h2 style="margin-top:18px">Erkannt (Schätzung)</h2><div class="muted small" style="margin-bottom:8px">Alles ist änderbar. Nährwerte gelten pro 100 g.${lastAi ? ` <span class="tiny">· ${(lastAi.ms / 1000).toFixed(1).replace(".", ",")} s, ${esc(lastAi.model)}</span>` : ""}</div>` + photoItems.map((i, k) => `<div class="card" data-k="${k}">
+  o.innerHTML = `<div id="pstat" style="margin-top:12px">${photoStatus}</div><h2 style="margin-top:10px">Erkannt</h2><div class="muted small" style="margin-bottom:8px">Alles ist änderbar, die Summe rechnet mit. Nährwerte gelten pro 100 g.${lastAi && photoItems.some(i => !i.fid) ? ` <span class="tiny">· ${(lastAi.ms / 1000).toFixed(1).replace(".", ",")} s, ${esc(lastAi.model)}</span>` : ""}</div>` + photoItems.map((i, k) => `<div class="card" data-k="${k}">
       <div class="row"><input type="checkbox" ${i.on ? "checked" : ""} data-f="on" style="width:22px;height:22px"><input type="text" value="${esc(i.name)}" data-f="name"></div>
-      <div class="grid2">${fld("Menge (g)", "grams", r0(i.grams))}${fld("Kalorien (kcal)", "kcal", r0(i.kcal))}
+      <div class="tiny muted" style="margin:6px 2px 0">${i.fid ? "aus deinen Lebensmitteln" : "KI-Schätzung"}</div>
+      <div class="grid2"><div><label style="margin:8px 0 3px">Menge (g)</label><div class="row" style="gap:6px"><button type="button" class="chip" data-step="-1" aria-label="weniger">−</button><input type="text" inputmode="decimal" value="${r0(i.grams)}" data-f="grams"><button type="button" class="chip" data-step="1" aria-label="mehr">+</button></div></div>${""}${fld("Kalorien (kcal)", "kcal", r0(i.kcal))}
       ${fld("Eiweiß (g)", "protein", r1(i.protein))}${fld("Kohlenhydrate (g)", "carbs", r1(i.carbs))}
       ${fld("Fett (g)", "fat", r1(i.fat))}${fld("davon Zucker (g)", "sugar", r1(i.sugar))}
       ${fld("Ballaststoffe (g)", "fiber", r1(i.fiber))}</div>
@@ -739,6 +799,10 @@ function renderPhotoItems() {
     <button class="btn sec block" style="margin-top:8px" id="pCsv">Als CSV speichern</button>`;
   $$("[data-k]", o).forEach(card => {
     const it = photoItems[+card.dataset.k];
+    $$("[data-step]", card).forEach(bt => bt.onclick = () => {
+      const g = num($("[data-f=grams]", card).value) || it.grams, st = g < 30 ? 5 : 10;
+      it.grams = Math.max(1, r1(g + st * +bt.dataset.step)); $("[data-f=grams]", card).value = r0(it.grams); $("[data-sum]", card).textContent = sum(it);
+    });
     $$("[data-f]", card).forEach(inp => { const h = () => {
       const f = inp.dataset.f;
       it[f] = f === "on" ? inp.checked : f === "name" ? inp.value : num(inp.value);
@@ -748,14 +812,22 @@ function renderPhotoItems() {
   });
   const chosen = () => photoItems.filter(i => i.on);
   const toFood = i => ({ id: uid(), name: i.name, brand: "", barcode: "", kcal: r1(i.kcal), protein: r1(i.protein), carbs: r1(i.carbs), fat: r1(i.fat), sugar: r1(i.sugar), fiber: r1(i.fiber), serving: r0(i.grams), used: 1 });
-  const toDb = () => chosen().map(i => { const f = toFood(i); const ex = D.foods.find(x => x.name.toLowerCase() === f.name.toLowerCase() && !x.barcode); if (ex) return ex; D.foods.push(f); return f; });
+  const own = i => i.fid && D.foods.find(x => x.id === i.fid);
+  const toDb = list => list.map(i => { if (own(i)) return own(i); const f = toFood(i); const ex = D.foods.find(x => x.name.toLowerCase() === f.name.toLowerCase() && !x.barcode); if (ex) return ex; D.foods.push(f); return f; });
   $("#pDiary", o).onclick = () => {
     const items = chosen(); if (!items.length) return toast("Nichts ausgewählt");
-    const foods = toDb(); items.forEach((i, k) => addEntry(ui.meal, foods[k], i.grams));
-    closeSheet(); save(); render(); toast(items.length + " Einträge hinzugefügt");
+    const foods = toDb(items);
+    // Werte aus der Karte (auch geänderte) gelten für den Tagebucheintrag; eigene Lebensmittel bleiben dabei unverändert
+    items.forEach((i, k) => { foods[k].used = (foods[k].used || 0) + (i.fid ? 1 : 0); addEntry(ui.meal, own(i) ? { name: i.name, kcal: i.kcal, protein: i.protein, carbs: i.carbs, fat: i.fat } : foods[k], i.grams); });
+    closeSheet(); save(); render(); toast(items.length + (items.length === 1 ? " Eintrag" : " Einträge") + " hinzugefügt");
   };
-  $("#pDb", o).onclick = () => { if (!chosen().length) return toast("Nichts ausgewählt"); toDb(); save(); toast("In Datenbank gespeichert"); };
-  $("#pCsv", o).onclick = () => { if (!chosen().length) return toast("Nichts ausgewählt"); exportFile("lebensmittel-foto.csv", new Blob([foodsToCsv(chosen().map(toFood))], { type: "text/csv" })); };
+  $("#pDb", o).onclick = () => {
+    const items = chosen(); if (!items.length) return toast("Nichts ausgewählt");
+    let upd = 0;
+    items.forEach(i => { const f = own(i); if (f && (f.kcal !== r1(i.kcal) || f.protein !== r1(i.protein) || f.carbs !== r1(i.carbs) || f.fat !== r1(i.fat) || (f.sugar || 0) !== r1(i.sugar) || (f.fiber || 0) !== r1(i.fiber) || f.name !== i.name)) { Object.assign(f, { name: i.name, kcal: r1(i.kcal), protein: r1(i.protein), carbs: r1(i.carbs), fat: r1(i.fat), sugar: r1(i.sugar), fiber: r1(i.fiber) }); upd++; } });
+    toDb(items.filter(i => !own(i))); save(); toast(upd ? upd + " Lebensmittel in der Datenbank geändert" : "In Datenbank gespeichert");
+  };
+  $("#pCsv", o).onclick = () => { if (!chosen().length) return toast("Nichts ausgewählt"); exportFile("lebensmittel-ki.csv", new Blob([foodsToCsv(chosen().map(toFood))], { type: "text/csv" })); };
 }
 
 /* Manuell */
