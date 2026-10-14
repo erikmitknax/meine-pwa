@@ -254,6 +254,11 @@ html.pv-lock,html.pv-lock body{overflow:hidden}
 .cm-edit{flex:none;font-size:1.15rem;line-height:1;width:44px;height:44px;padding:0}
 .cm-editor{width:100%;max-width:620px}
 .cm-editor textarea{min-height:90px}
+.face .txt.rich{text-align:left;display:grid;gap:.35em;align-content:center}
+.face .txt .cb{display:grid;grid-template-columns:1.1em 1fr;gap:.1em;align-items:start}
+.face .txt .bd{color:var(--accent);font-weight:700}
+.face .txt .ch{font-weight:700;margin-top:.5em;color:var(--accent)}.face .txt .ch:first-child{margin-top:0}
+.face .txt .cp{white-space:pre-wrap}
 </style>
 </head>
 <body>
@@ -1123,10 +1128,25 @@ function startStudy(src,md,limit){
   Q={active:true,params:[src,md,limit],map,queue:items.map(x=>x.c.id),total:items.length,done:0,flipped:false,stats:[0,0,0]};
   $("#studySetup").hidden=true;$("#studyDone").hidden=true;$("#studyArea").hidden=false;showCard();
 }
+/* Kartentext lesbar darstellen: Zeilenumbrüche bleiben erhalten, Aufzählungen (•, -, –, *) werden Listenpunkte
+   mit hängendem Einzug, kurze Zeilen mit Doppelpunkt am Ende sind Zwischenüberschriften. */
+const BUL=/^\s*(?:[•·▪▫◦‣∙●○*]|[-–—])\s+/;
+function fillCard(e,text){
+  let t=String(text||"").replace(/\r\n?/g,"\n");
+  if(!t.includes("\n")&&(t.match(/\s•\s/g)||[]).length>=1&&/•/.test(t)){t=t.replace(/\s*•\s*/g,"\n• ").replace(/^\n/,"")}   /* alles in einer Zeile: an • trennen */
+  const lines=t.split("\n").map(x=>x.replace(/\s+$/,"")).filter(x=>x.trim()!=="");
+  if(lines.length<2&&!BUL.test(lines[0]||"")){e.textContent=t;e.classList.remove("rich");return}
+  e.replaceChildren();e.classList.add("rich");
+  lines.forEach(l=>{
+    if(BUL.test(l)){e.append(el("div",{class:"cb"},el("span",{class:"bd","aria-hidden":"true"},"•"),el("span",{text:l.replace(BUL,"")})))}
+    else if(/:$/.test(l.trim())&&l.trim().length<=60)e.append(el("div",{class:"ch",text:l.trim()}));
+    else e.append(el("div",{class:"cp",text:l.trim()}));
+  });
+}
 function showCard(){
   const x=Q.map[Q.queue[0]];if(!x)return finishStudy();
   Q.flipped=false;$("#card").classList.remove("flip");$("#rate").hidden=true;
-  $("#cardQ").textContent=x.c.f;$("#cardA").textContent=x.c.b;
+  fillCard($("#cardQ"),x.c.f);fillCard($("#cardA"),x.c.b);
   [["#cardQ",x.c.f],["#cardA",x.c.b]].forEach(([s,t])=>{const e=$(s),n=t.length;e.classList.remove("l1","l2","l3");if(n>500)e.classList.add("l3");else if(n>250)e.classList.add("l2");else if(n>110)e.classList.add("l1")});
   const src=[topicPath(x.d.topic),x.d.title].filter(Boolean).join(" · ");
   $("#cardDeck").textContent=src;closeCardEditor();
@@ -1150,7 +1170,7 @@ function openCardEditor(){
   save.addEventListener("click",()=>{
     const nf=f.value.trim(),nb=bk.value.trim();if(!nf||!nb){toast("Beide Seiten brauchen Text");return}
     x.c.f=nf;x.c.b=nb;x.d.updated=Date.now();saveDeck(x.d);
-    $("#cardQ").textContent=nf;$("#cardA").textContent=nb;
+    fillCard($("#cardQ"),nf);fillCard($("#cardA"),nb);
     [["#cardQ",nf],["#cardA",nb]].forEach(([s,t])=>{const e=$(s);e.classList.remove("l1","l2","l3");if(t.length>500)e.classList.add("l3");else if(t.length>250)e.classList.add("l2");else if(t.length>110)e.classList.add("l1")});
     closeCardEditor();refreshAll();toast("Karte gespeichert");
   });
