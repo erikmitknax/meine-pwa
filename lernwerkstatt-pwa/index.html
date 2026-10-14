@@ -259,6 +259,8 @@ html.pv-lock,html.pv-lock body{overflow:hidden}
 .face .txt .bd{color:var(--accent);font-weight:700}
 .face .txt .ch{font-weight:700;margin-top:.5em;color:var(--accent)}.face .txt .ch:first-child{margin-top:0}
 .face .txt .cp{white-space:pre-wrap}
+.srsbox{display:grid;gap:8px;padding:12px;border:1px solid var(--line);border-radius:12px;background:var(--surface2)}
+.ivgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
 </style>
 </head>
 <body>
@@ -294,7 +296,7 @@ html.pv-lock,html.pv-lock body{overflow:hidden}
     <div class="panel">
       <div class="label">Lernfortschritt nach Fach</div>
       <div class="fach" id="fach"></div>
-      <p style="color:var(--muted);font-size:.85rem;margin-top:10px">Neue Karten starten in „Neu“. Gewusste Karten rücken ein Fach vor (1, 2, 4, 8, 16, 32 Tage). „Nochmal“ schickt sie zurück.</p>
+      <p style="color:var(--muted);font-size:.85rem;margin-top:10px">Neue Karten starten in „Neu“. Gewusste Karten rücken standardmäßig ein Fach vor (1, 2, 4, 8, 16, 32 Tage), „Nochmal“ schickt sie zurück. Die Regeln stellst du in den Einstellungen unter „Wiederholung“ ein.</p>
     </div>
   </div>
 </section>
@@ -422,6 +424,10 @@ html.pv-lock,html.pv-lock body{overflow:hidden}
       <div class="grid" id="alarmOpts" style="gap:10px"></div>
       <p class="syncnote" style="margin-top:8px">Das gilt, wenn im Fokus-Timer eine Phase endet. Der Timer läuft nur, solange die App geöffnet ist.</p>
     </div>
+    <div data-acc="srs" data-title="Wiederholung">
+      <p class="syncnote" style="margin-top:0">Lege fest, was die drei Knöpfe beim Lernen bewirken: wie die Karte im Fach wandert und wie lange es bis zum nächsten Mal dauert.</p>
+      <div class="grid" id="srsOpts" style="gap:12px"></div>
+    </div>
     <div data-acc="tabs" data-title="Reiter">
       <p class="syncnote" style="margin-top:0">Hake an, welche Reiter du siehst, ändere ihre Namen und lege mit den Pfeilen die Reihenfolge fest. Ein leeres Namensfeld stellt den Originalnamen wieder her.</p>
       <div class="grid" id="tabOpts" style="gap:8px;margin-top:8px"></div>
@@ -526,7 +532,7 @@ const SOUNDS=[["klassik","Klassisch"],["glocke","Glocke"],["harfe","Harfe"],["ma
 const VIBS=[["kurz","Kurz",[250]],["doppelt","Doppelt",[200,120,200]],["lang","Lang",[900]],["puls","Pulsierend",[120,80,120,80,120,80,400]],["sos","SOS",[100,100,100,100,100,300,300,100,300,100,300,300,100,100,100,100,100]],["aus","Keine",[]]];
 function alarmCfg(){const a=S&&S.alarm||{};return {sound:SOUNDS.some(x=>x[0]===a.sound)?a.sound:"klassik",vib:VIBS.some(x=>x[0]===a.vib)?a.vib:"kurz",vol:[1,2,3].includes(a.vol)?a.vol:2}}
 function normalize(){
-  S.alarm=alarmCfg();if(!PALETTES.some(p=>p.id===(S.palette||"")))S.palette="";
+  S.alarm=alarmCfg();S.srs=srsCfg();if(!PALETTES.some(p=>p.id===(S.palette||"")))S.palette="";
   S.tabs=tabsList();
   S.topics=(Array.isArray(S.topics)?S.topics:[]).filter(t=>t&&t.id&&t.name);
   const tids=new Set(S.topics.map(t=>t.id));
@@ -676,6 +682,31 @@ function renderSettings(){
   accSum("theme",({light:"Hell",dark:"Dunkel"})[S&&S.theme]||"System");
   accSum("palette",(PALETTES.find(p=>p.id===(S&&S.palette||""))||PALETTES[0]).name);
   accSum("alarm",(SOUNDS.find(x=>x[0]===a.sound)||[])[1]+" · "+(VIBS.find(x=>x[0]===a.vib)||[])[1]);
+
+  /* --- Wiederholung --- */
+  const sb=$("#srsOpts");sb.replaceChildren();
+  const k=srsCfg(),NAMES=["Nochmal","Schwer","Gewusst"];
+  const setK=fn=>{const n=srsCfg();fn(n);S.srs=n;saveMeta();renderSettings()};
+  NAMES.forEach((nm,i)=>{
+    const sa=el("select",{id:"srs-a"+i,"aria-label":nm+": Wirkung aufs Fach"}),sf=el("select",{id:"srs-f"+i,"aria-label":nm+": Abstand"});
+    SRS_ACTS.forEach(o=>sa.append(el("option",{value:o[0],text:o[1]})));SRS_FACTORS.forEach(o=>sf.append(el("option",{value:String(o[0]),text:o[1]})));
+    sa.value=k.b[i].act;sf.value=String(k.b[i].f);
+    sa.addEventListener("change",()=>setK(n=>{n.b[i].act=sa.value}));sf.addEventListener("change",()=>setK(n=>{n.b[i].f=Number(sf.value)}));
+    sb.append(el("div",{class:"srsbox"},el("b",{text:"Knopf „"+nm+"“"}),el("label",{for:"srs-a"+i},"Wirkung aufs Fach",sa),el("label",{for:"srs-f"+i},"Abstand bis zum nächsten Mal",sf)));
+  });
+  const ag=el("input",{type:"checkbox",id:"srs-again"});ag.checked=k.again;
+  ag.addEventListener("change",()=>setK(n=>{n.again=ag.checked}));
+  sb.append(el("label",{class:"tabcheck",for:"srs-again"},ag,el("span",null,"„Nochmal“ kommt in derselben Runde gleich wieder",el("small",{text:"Die Karte wird nach wenigen anderen Karten noch einmal gezeigt."}))));
+  const ivr=el("div",{class:"ivgrid"});
+  for(let b=1;b<=MAXBOX;b++){
+    const inp=el("input",{type:"number",min:"1",max:"365",value:String(k.ivl[b]),id:"srs-i"+b,"aria-label":"Tage in Fach "+b});
+    inp.addEventListener("change",()=>setK(n=>{const v=Math.round(Number(inp.value));n.ivl[b]=v>=1&&v<=365?v:SRS_DEF().ivl[b]}));
+    ivr.append(el("label",{for:"srs-i"+b},"Fach "+b,inp));
+  }
+  const rs=el("button",{class:"btn small",type:"button"},"Alles auf Standard");
+  rs.addEventListener("click",()=>{S.srs=SRS_DEF();saveMeta();renderSettings();toast("Standard wiederhergestellt")});
+  sb.append(el("b",{text:"Tage pro Fach"}),el("p",{class:"syncnote",style:"margin:0",text:"So lange dauert es, bis eine Karte im jeweiligen Fach wieder erscheint. Der Abstand-Faktor oben wird darauf angerechnet."}),ivr,el("div",{class:"row"},rs));
+  accSum("srs","Gewusst: "+(SRS_ACTS.find(o=>o[0]===k.b[2].act)||[])[1].replace("Ein Fach vor","+1 Fach").replace("Zwei Fächer vor","+2 Fächer"));
   accSum("tabs",tabsList().filter(t=>t.on).length+" von "+TABDEF.length+" sichtbar");
   const tb=$("#tabOpts");tb.replaceChildren();
   const list=tabsList();
@@ -731,9 +762,26 @@ function bump(key,n){const d=String(dayNum());S.log[d]=S.log[d]||{};S.log[d][key
 const startOfToday=()=>{const d=new Date();d.setHours(0,0,0,0);return d.getTime()};
 const isDue=c=>(c.due||0)<=Date.now();
 const dueCount=d=>d.cards.filter(isDue).length;
-function nextBox(c,r){if(r===0)return 0;if(r===1)return Math.max(1,c.box||0);return Math.min(MAXBOX,(c.box||0)+1)}
-function dueFor(box){return box===0?Date.now():startOfToday()+INTERVALS[box]*DAY+3*3600000}
-function intervalLabel(c,r){if(r===0)return "gleich nochmal";const n=INTERVALS[nextBox(c,r)];return n===1?"morgen":"in "+n+" Tagen"}
+/* Einstellbar: pro Knopf die Wirkung aufs Fach und ein Abstands-Faktor, dazu die Tage je Fach */
+const SRS_ACTS=[["reset","Zurück auf Neu (Fach 0)"],["back","Ein Fach zurück"],["stay","Im Fach bleiben"],["up1","Ein Fach vor"],["up2","Zwei Fächer vor"]];
+const SRS_FACTORS=[[0.5,"50 % (halb so lang)"],[0.75,"75 %"],[1,"100 % (normal)"],[1.5,"150 %"],[2,"200 % (doppelt so lang)"]];
+const SRS_DEF=()=>({ivl:INTERVALS.slice(),b:[{act:"reset",f:1},{act:"stay",f:1},{act:"up1",f:1}],again:true});
+function srsCfg(){
+  const d=SRS_DEF(),a=S&&S.srs||{};
+  const ivl=d.ivl.map((v,i)=>{if(i===0)return 0;const n=Math.round(Number(a.ivl&&a.ivl[i]));return n>=1&&n<=365?n:v});
+  const b=d.b.map((v,i)=>{const x=a.b&&a.b[i]||{};return {act:SRS_ACTS.some(o=>o[0]===x.act)?x.act:v.act,f:SRS_FACTORS.some(o=>o[0]===Number(x.f))?Number(x.f):1}});
+  return {ivl,b,again:a.again!==false};
+}
+function nextBox(c,r){
+  const box=c.box||0,act=srsCfg().b[r].act;
+  if(act==="reset")return 0;
+  if(act==="back")return Math.max(0,box-1);
+  if(act==="stay")return Math.max(1,box);
+  return Math.min(MAXBOX,box+(act==="up2"?2:1));
+}
+function daysFor(box,r){const k=srsCfg();return Math.max(1,Math.round(k.ivl[box]*k.b[r].f))}
+function dueFor(box,r=2){return box===0?Date.now():startOfToday()+daysFor(box,r)*DAY+3*3600000}
+function intervalLabel(c,r){const b=nextBox(c,r);if(b===0)return r===0&&!srsCfg().again?"beim nächsten Mal":"gleich nochmal";const n=daysFor(b,r);return n===1?"morgen":"in "+n+" Tagen"}
 
 /* ---------- Import-Parser ---------- */
 function pick(o,keys){for(const k of keys){if(o[k]!=null&&String(o[k]).trim()!=="")return String(o[k]).trim()}return ""}
@@ -1195,11 +1243,11 @@ function rate(r){
   if(!Q.active||!Q.flipped)return;
   const id=Q.queue.shift(),x=Q.map[id];if(!x)return;
   const c=x.c;
-  c.box=nextBox(c,r);c.due=dueFor(c.box);
+  c.box=nextBox(c,r);c.due=dueFor(c.box,r);
   if(r===2)c.ok=(c.ok||0)+1;if(r===0)c.bad=(c.bad||0)+1;
   Q.stats[r]++;bump("r",1);if(r===2)bump("c",1);
   saveDeck(x.d);
-  if(r===0)Q.queue.splice(Math.min(Q.queue.length,3),0,id);else Q.done++;
+  if(r===0&&srsCfg().again)Q.queue.splice(Math.min(Q.queue.length,3),0,id);else Q.done++;
   if(!Q.queue.length)finishStudy();else showCard();
 }
 function finishStudy(){
