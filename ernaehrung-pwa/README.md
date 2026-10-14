@@ -6,7 +6,7 @@ Kalorien- und Makro-Tracker. Alle Daten bleiben lokal im Gerät (localStorage).
 - Wochenrückblick und Schnitt je Wochentag (letzte 8 Wochen)
 - Gewichtsverlauf mit Trend und Zielgewicht
 - Lebensmittel: Open Food Facts (online), Barcode-Scanner, eigene Datenbank, CSV-Import/-Export
-- Foto-KI (kostenloser Google-Gemini-Schlüssel in den Einstellungen)
+- KI-Erkennung per Text oder Foto (kostenloser Google-Gemini-Schlüssel in den Einstellungen)
 - Farbdesign: hell/dunkel/automatisch plus Akzentfarbe
 
 Aufruf: https://erikmitknax.github.io/meine-pwa/ernaehrung-pwa/

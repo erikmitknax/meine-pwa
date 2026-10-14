@@ -306,12 +306,12 @@ function viewSettings() {
     <label>Darstellung</label><div class="chips">${[["auto", "Automatisch"], ["dark", "Dunkel"], ["light", "Hell"]].map(([v, l]) => `<button class="chip ${s.mode === v ? "on" : ""}" data-act="mode" data-v="${v}">${l}</button>`).join("")}</div>
     <label>Akzentfarbe</label><div class="swatches">${ACCENTS.map(c => `<button class="sw ${s.accent.toLowerCase() === c ? "on" : ""}" style="background:${c}" data-act="accent" data-v="${c}" aria-label="Farbe ${c}"></button>`).join("")}<input type="color" id="sAccent" value="${s.accent}" aria-label="Eigene Farbe"></div></div>
   `)}
-  ${acc("ai", `Foto-KI (Gemini)`, `<div class="panel">
+  ${acc("ai", `KI-Erkennung (Gemini)`, `<div class="panel">
     <div class="muted small" style="margin-top:14px">Die Foto-Erkennung nutzt Google Gemini. Das Gratis-Kontingent reicht für den Alltag, der Schlüssel bleibt nur auf diesem Gerät und geht direkt an Google. Bei kostenloser Nutzung kann Google Eingaben zur Verbesserung seiner Dienste verwenden.</div>
     <div class="steps"><b>So verknüpfst du Gemini:</b>
       <ol><li>Öffne <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a> und melde dich mit deinem Google-Konto an.</li>
       <li>Tippe auf „API-Schlüssel erstellen“ und kopiere den Schlüssel (beginnt mit „AIza…“).</li>
-      <li>Füge ihn unten ein und tippe auf „Speichern“. Fertig – im Reiter „Foto-KI“ beim Hinzufügen kannst du jetzt Fotos analysieren.</li></ol></div>
+      <li>Füge ihn unten ein und tippe auf „Speichern“. Fertig – im Reiter „KI“ beim Hinzufügen kannst du jetzt Essen per Text oder Foto analysieren.</li></ol></div>
     <label>Gemini-API-Schlüssel</label><input type="password" id="sKey" value="${esc(s.geminiKey)}" placeholder="AIza…" autocomplete="off">
     <label>Modell</label><input type="text" id="sModel" value="${esc(s.geminiModel)}">
     <button class="btn sec block" style="margin-top:16px" data-act="saveAI">Speichern</button></div>`)}
@@ -385,7 +385,7 @@ let addTab = "search";
 function openAdd(meal) {
   if (meal) ui.meal = meal;
   const mealSel = `<select id="aMeal" style="margin-bottom:12px">${MEALS.map(m => `<option value="${m.id}" ${m.id === ui.meal ? "selected" : ""}>${m.name} – ${niceDate(ui.date)}</option>`).join("")}</select>`;
-  const tabs = [["search", "Suchen"], ["scan", "Scannen"], ["photo", "Foto-KI"], ["recipes", "Rezepte"], ["manual", "Manuell"], ["multi", "Mehrere"]];
+  const tabs = [["search", "Suchen"], ["scan", "Scannen"], ["photo", "KI"], ["recipes", "Rezepte"], ["manual", "Manuell"], ["multi", "Mehrere"]];
   const s = sheet(`<h3>Lebensmittel hinzufügen</h3>${mealSel}
     <div class="seg six">${tabs.map(([v, l]) => `<button data-at="${v}" class="${addTab === v ? "on" : ""}">${l}</button>`).join("")}</div><div id="addBody"></div>`);
   $("#aMeal", s).onchange = e => ui.meal = e.target.value;
@@ -556,41 +556,47 @@ async function startScan(video, onCode, setMsg) {
 let photoItems = [];
 function bodyPhoto(b) {
   if (!D.settings.geminiKey) {
-    b.innerHTML = `<div class="card muted small">Für die Foto-Erkennung trägst du in den Einstellungen deinen kostenlosen Gemini-Schlüssel ein. Die Werte sind Schätzungen – prüfe sie vor dem Speichern.</div>
+    b.innerHTML = `<div class="card muted small">Für die KI-Erkennung trägst du in den Einstellungen deinen kostenlosen Gemini-Schlüssel ein. Die Werte sind Schätzungen – prüfe sie vor dem Speichern.</div>
       <button class="btn block" id="toSet">Zu den Einstellungen</button>`;
     $("#toSet", b).onclick = () => { closeSheet(); setTab("settings"); render(); };
     return;
   }
-  b.innerHTML = `<div class="muted small">Fotografiere dein Essen oder ein Nährwert-Etikett. Die KI schätzt Lebensmittel, Menge und Nährwerte.</div>
-    <input type="file" id="img" accept="image/*" capture="environment" hidden>
-    <div class="grid2" style="margin-top:10px"><button class="btn" id="cam">Foto aufnehmen</button><button class="btn sec" id="gal">Aus Galerie</button></div>
-    <input type="file" id="img2" accept="image/*" hidden><div id="pres"></div>`;
-  // Schritt 1: Foto wählen/aufnehmen -> Vorschau + Notiz. Schritt 2: erst mit „Analysieren“ geht es an die KI.
-  let thumb = null;
-  const analyze = async f => {
-    const note = ($("#pNote", b) ? $("#pNote", b).value : "").trim();
-    ui.photoNote = ""; // Notiz wird nach dem Abschicken geleert
-    $("#pres", b).innerHTML = `<div class="muted" style="margin-top:14px"><span class="spin"></span>Analysiere Foto …</div>`;
-    try { photoItems = await analyzePhoto(f, note); renderPhotoItems(); }
-    catch (e) { $("#pres", b).innerHTML = `<div class="warn small" style="margin-top:14px">${esc(e.message)}</div><button class="btn sec block" style="margin-top:10px" id="pRetry">Nochmal versuchen</button>`; $("#pRetry", b).onclick = () => preview(f, note); }
-  };
-  const preview = (f, preset) => {
+  b.innerHTML = `<div class="muted small">Beschreibe dein Essen als Text, mache ein Foto oder beides. Die KI füllt Lebensmittel, Menge und Nährwerte aus, danach kannst du alles selbst anpassen.</div>
+    <label>Beschreibung</label>
+    <textarea id="pNote" rows="3" placeholder="z. B. 2 Spiegeleier, 2 Scheiben Vollkornbrot mit Butter und eine Banane">${esc(ui.photoNote || "")}</textarea>
+    <input type="file" id="img" accept="image/*" capture="environment" hidden><input type="file" id="img2" accept="image/*" hidden>
+    <div class="grid2" style="margin-top:10px"><button class="btn sec" id="cam">Foto aufnehmen</button><button class="btn sec" id="gal">Aus Galerie</button></div>
+    <div id="pres"></div>
+    <button class="btn block" id="pGo" style="margin-top:14px">Analysieren</button>
+    <div id="pout"></div>`;
+  let file = null, thumb = null;
+  $("#pNote", b).oninput = e => { ui.photoNote = e.target.value; };
+  const setFile = f => {
     if (!f) return;
     if (thumb) URL.revokeObjectURL(thumb);
-    thumb = URL.createObjectURL(f);
-    $("#pres", b).innerHTML = `<img class="pthumb" src="${thumb}" alt="Vorschau">
-      <label style="margin-top:12px">Notiz für die KI (optional)</label>
-      <textarea id="pNote" rows="2" placeholder="z. B. 250 g Hähnchenbrust gebraten, Reis ca. 180 g gekocht, Soße ist Joghurtdressing">${esc(preset || "")}</textarea>
-      <div class="grid2" style="margin-top:12px"><button class="btn" id="pGo">Analysieren</button><button class="btn sec" id="pDrop">Anderes Foto</button></div>`;
-    $("#pGo", b).onclick = () => analyze(f);
-    $("#pDrop", b).onclick = () => { $("#pres", b).innerHTML = ""; };
-    $("#pNote", b).focus({ preventScroll: true });
+    file = f; thumb = URL.createObjectURL(f);
+    $("#pres", b).innerHTML = `<img class="pthumb" src="${thumb}" alt="Vorschau"><button class="btn sec small" id="pDrop" style="margin-top:8px">Foto entfernen</button>`;
+    $("#pDrop", b).onclick = () => { file = null; $("#pres", b).innerHTML = ""; };
   };
-  const run = f => preview(f);
-  $("#cam", b).onclick = () => liveCamera(b, run, () => $("#img", b).click());
+  const analyze = async () => {
+    const note = $("#pNote", b).value.trim();
+    if (!file && !note) return toast("Foto aufnehmen oder Beschreibung eingeben");
+    const f = file;
+    $("#pNote", b).value = ""; ui.photoNote = ""; // Beschreibung wird nach dem Abschicken geleert
+    $("#pGo", b).disabled = true;
+    $("#pout", b).innerHTML = `<div class="muted" style="margin-top:14px"><span class="spin"></span>${f ? "Analysiere Foto …" : "Analysiere Text …"}</div>`;
+    try { photoItems = await analyzePhoto(f, note); file = null; $("#pres", b).innerHTML = ""; renderPhotoItems(); }
+    catch (e) {
+      $("#pNote", b).value = note; ui.photoNote = note; // bei Fehler Text zurück, damit nichts verloren geht
+      $("#pout", b).innerHTML = `<div class="warn small" style="margin-top:14px">${esc(e.message)}</div>`;
+    }
+    $("#pGo", b).disabled = false;
+  };
+  $("#pGo", b).onclick = analyze;
+  $("#cam", b).onclick = () => liveCamera(b, setFile, () => $("#img", b).click());
   $("#gal", b).onclick = () => $("#img2", b).click();
-  $("#img", b).onchange = e => run(e.target.files[0]);
-  $("#img2", b).onchange = e => run(e.target.files[0]);
+  $("#img", b).onchange = e => setFile(e.target.files[0]);
+  $("#img2", b).onchange = e => setFile(e.target.files[0]);
 }
 /* Eigene Kamera-Ansicht (öffnet direkt die Kamera, unabhängig vom Datei-Dialog des Handys) */
 async function liveCamera(b, onPhoto, fallback) {
@@ -655,10 +661,13 @@ function parseAiJson(txt) {
   throw new Error("Antwort der KI war nicht lesbar. Bitte nochmal versuchen.");
 }
 async function analyzePhoto(file, note) {
-  const data = await shrink(file, 1024);
-  const prompt = `Analysiere dieses Foto (Mahlzeit, Lebensmittel oder Nährwert-Etikett). Erkenne jedes einzelne Lebensmittel, schätze die Menge in Gramm und nenne die Nährwerte pro 100 g. Wenn ein Nährwert-Etikett zu sehen ist, nutze dessen Werte. Antworte ausschließlich mit JSON ohne weiteren Text im Format: {"items":[{"name":"deutscher Name","grams":150,"kcal":120,"protein":5,"carbs":20,"fat":2,"sugar":1,"fiber":3}]}. Alle Nährwerte beziehen sich auf 100 g. Zahlen immer als JSON-Zahlen mit Punkt als Dezimaltrennzeichen (z. B. 5.5, niemals 5,5).` + (note ? `\n\nZusatzinfos vom Nutzer (verlässlich, haben Vorrang vor deiner Schätzung aus dem Bild, z. B. Gewicht, Zutaten, Zubereitung, Marke): ${note}` : "");
+  const data = file ? await shrink(file, 1024) : null;
+  const imgPart = data ? [{ inline_data: { mime_type: "image/jpeg", data } }] : [];
+  const lead = file ? `Analysiere dieses Foto (Mahlzeit, Lebensmittel oder Nährwert-Etikett). Erkenne jedes einzelne Lebensmittel, schätze die Menge in Gramm und nenne die Nährwerte pro 100 g. Wenn ein Nährwert-Etikett zu sehen ist, nutze dessen Werte.`
+    : `Der Nutzer beschreibt in Textform, was er gegessen hat oder welches Lebensmittel er eintragen möchte (es gibt kein Foto). Erkenne jedes einzelne Lebensmittel, rechne genannte Mengen (Stück, Scheiben, Gläser, Esslöffel …) in Gramm um bzw. nimm genannte Gramm-Angaben exakt, sonst schätze eine übliche Portion, und nenne die Nährwerte pro 100 g. Nennt der Nutzer selbst Nährwerte, rechne sie auf 100 g um und nutze sie.`;
+  const prompt = `${lead} Antworte ausschließlich mit JSON ohne weiteren Text im Format: {"items":[{"name":"deutscher Name","grams":150,"kcal":120,"protein":5,"carbs":20,"fat":2,"sugar":1,"fiber":3}]}. Alle Nährwerte beziehen sich auf 100 g. Zahlen immer als JSON-Zahlen mit Punkt als Dezimaltrennzeichen (z. B. 5.5, niemals 5,5).` + (note ? (file ? `\n\nZusatzinfos vom Nutzer (verlässlich, haben Vorrang vor deiner Schätzung aus dem Bild, z. B. Gewicht, Zutaten, Zubereitung, Marke): ${note}` : `\n\nBeschreibung des Nutzers: ${note}`) : "");
   let lean = false; // bei Ablehnung von Schema/Denk-Einstellung ohne diese Extras erneut versuchen
-  const bodyFor = model => lean ? JSON.stringify({ contents: [{ parts: [{ inline_data: { mime_type: "image/jpeg", data } }, { text: prompt }] }], generationConfig: { responseMimeType: "application/json", maxOutputTokens: 1500 } }) : JSON.stringify({ contents: [{ parts: [{ inline_data: { mime_type: "image/jpeg", data } }, { text: prompt }] }],
+  const bodyFor = model => lean ? JSON.stringify({ contents: [{ parts: [...imgPart, { text: prompt }] }], generationConfig: { responseMimeType: "application/json", maxOutputTokens: 1500 } }) : JSON.stringify({ contents: [{ parts: [...imgPart, { text: prompt }] }],
     // „Nachdenken“ abschalten (Gemini 2.5 Flash): deutlich schneller, für diese Aufgabe reicht es
     generationConfig: { responseMimeType: "application/json", responseSchema: PHOTO_SCHEMA, maxOutputTokens: 1500, temperature: 0.2, ...(/2\.5-flash(?!-lite)/.test(model) ? { thinkingConfig: { thinkingBudget: 0 } } : {}) } });
   // Bei Überlastung (503), unbekanntem Modell (404) oder Limit (429) automatisch erneut bzw. mit anderem Modell versuchen
@@ -677,7 +686,7 @@ async function analyzePhoto(file, note) {
       if (r.status === 401 || r.status === 403 || (r.status === 400 && /API key/i.test(lastErr))) throw new Error("Der Gemini-Schlüssel wird nicht akzeptiert. Prüfe ihn in den Einstellungen.");
       if (r.status === 400 && !lean) { lean = true; attempt = -1; continue; }
       if (r.status === 400) throw new Error("KI-Fehler " + lastErr);
-      if (r.status === 503 || r.status === 500 || r.status === 502 || r.status === 504) { if (attempt === 0) { $("#pres") && ($("#pres").innerHTML = `<div class="muted" style="margin-top:14px"><span class="spin"></span>Gemini ist ausgelastet – neuer Versuch …</div>`); await new Promise(res => setTimeout(res, 1800)); continue; } }
+      if (r.status === 503 || r.status === 500 || r.status === 502 || r.status === 504) { if (attempt === 0) { $("#pout") && ($("#pout").innerHTML = `<div class="muted" style="margin-top:14px"><span class="spin"></span>Gemini ist ausgelastet – neuer Versuch …</div>`); await new Promise(res => setTimeout(res, 1800)); continue; } }
       break; // 404/429/anderes: nächstes Modell
     }
     if (r && r.ok) break;
@@ -687,27 +696,30 @@ async function analyzePhoto(file, note) {
   if (!r || !r.ok) throw new Error(!r && lastErr === "Zeitüberschreitung" ? "Gemini antwortet gerade zu langsam. Bitte gleich nochmal versuchen." : r && (r.status === 503 || r.status === 500) ? "Gemini ist gerade überlastet (Google-Seite). Bitte in ein bis zwei Minuten nochmal versuchen." : r && r.status === 429 ? "Das kostenlose Limit ist gerade erreicht. Warte kurz und versuche es erneut." : "KI-Fehler " + lastErr);
   const txt = ((((j.candidates || [])[0] || {}).content || {}).parts || []).map(c => c.text || "").join("");
   const items = (parseAiJson(txt).items || []).filter(i => i && i.name);
-  if (!items.length) throw new Error("Es wurde nichts erkannt. Versuche ein schärferes Foto.");
+  if (!items.length) throw new Error(file ? "Es wurde nichts erkannt. Versuche ein schärferes Foto." : "Es wurde nichts erkannt. Beschreibe das Essen etwas genauer.");
   return items.map(i => ({ name: String(i.name), grams: Math.max(1, num(i.grams) || 100), kcal: num(i.kcal), protein: num(i.protein), carbs: num(i.carbs), fat: num(i.fat), sugar: num(i.sugar), fiber: num(i.fiber), on: true }));
 }
 function renderPhotoItems() {
-  const o = $("#pres");
+  const o = $("#pout");
   if (!o) return;
-  o.innerHTML = `<h2>Erkannt (Schätzung)</h2>` + photoItems.map((i, k) => {
-    const c = calc(i, i.grams);
-    return `<div class="card" data-k="${k}"><div class="row"><input type="checkbox" ${i.on ? "checked" : ""} data-f="on" style="width:22px;height:22px"><input type="text" value="${esc(i.name)}" data-f="name"></div>
-      <div class="row" style="margin-top:8px"><div class="grow"><label style="margin:0 0 3px">Menge g</label><input type="text" inputmode="decimal" value="${r0(i.grams)}" data-f="grams"></div>
-      <div class="grow"><label style="margin:0 0 3px">kcal/100 g</label><input type="text" inputmode="decimal" value="${r0(i.kcal)}" data-f="kcal"></div></div>
-      <div class="muted small" style="margin-top:6px">= ${r0(c.kcal)} kcal · E ${r1(c.p)} · KH ${r1(c.c)} · F ${r1(c.f)}</div></div>`;
-  }).join("") + `<div class="grid2"><button class="btn" id="pDiary">Ins Tagebuch</button><button class="btn sec" id="pDb">In Datenbank</button></div>
+  const fld = (l, f, v) => `<div><label style="margin:8px 0 3px">${l}</label><input type="text" inputmode="decimal" value="${v}" data-f="${f}"></div>`;
+  const sum = i => { const c = calc(i, i.grams); return `= ${r0(c.kcal)} kcal · E ${r1(c.p)} · KH ${r1(c.c)} · F ${r1(c.f)}`; };
+  o.innerHTML = `<h2 style="margin-top:18px">Erkannt (Schätzung)</h2><div class="muted small" style="margin-bottom:8px">Alles ist änderbar. Nährwerte gelten pro 100 g.</div>` + photoItems.map((i, k) => `<div class="card" data-k="${k}">
+      <div class="row"><input type="checkbox" ${i.on ? "checked" : ""} data-f="on" style="width:22px;height:22px"><input type="text" value="${esc(i.name)}" data-f="name"></div>
+      <div class="grid2">${fld("Menge (g)", "grams", r0(i.grams))}${fld("Kalorien (kcal)", "kcal", r0(i.kcal))}
+      ${fld("Eiweiß (g)", "protein", r1(i.protein))}${fld("Kohlenhydrate (g)", "carbs", r1(i.carbs))}
+      ${fld("Fett (g)", "fat", r1(i.fat))}${fld("davon Zucker (g)", "sugar", r1(i.sugar))}
+      ${fld("Ballaststoffe (g)", "fiber", r1(i.fiber))}</div>
+      <div class="muted small" style="margin-top:8px" data-sum>${sum(i)}</div></div>`).join("") + `<div class="grid2"><button class="btn" id="pDiary">Ins Tagebuch</button><button class="btn sec" id="pDb">In Datenbank</button></div>
     <button class="btn sec block" style="margin-top:8px" id="pCsv">Als CSV speichern</button>`;
   $$("[data-k]", o).forEach(card => {
     const it = photoItems[+card.dataset.k];
-    $$("[data-f]", card).forEach(inp => inp.onchange = () => {
+    $$("[data-f]", card).forEach(inp => { const h = () => {
       const f = inp.dataset.f;
       it[f] = f === "on" ? inp.checked : f === "name" ? inp.value : num(inp.value);
-      if (f === "grams" || f === "kcal") renderPhotoItems();
-    });
+      if (f === "grams") it.grams = Math.max(1, it.grams || 0);
+      $("[data-sum]", card).textContent = sum(it);
+    }; inp.onchange = h; inp.oninput = h; });
   });
   const chosen = () => photoItems.filter(i => i.on);
   const toFood = i => ({ id: uid(), name: i.name, brand: "", barcode: "", kcal: r1(i.kcal), protein: r1(i.protein), carbs: r1(i.carbs), fat: r1(i.fat), sugar: r1(i.sugar), fiber: r1(i.fiber), serving: r0(i.grams), used: 1 });
