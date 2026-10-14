@@ -347,7 +347,7 @@ html.pv-lock,html.pv-lock body{overflow:hidden}
   <div id="studyArea" class="stage" hidden>
     <div class="row between" style="width:100%;max-width:620px">
       <button class="btn small" id="studyEnd" type="button">← Beenden</button>
-      <span class="chip" id="studyCount"></span>
+      <span class="row" style="gap:8px;flex-wrap:nowrap"><button class="btn small" id="studyUndo" type="button" disabled title="Zur vorherigen Karte zurück (Pfeil links)">↶ Zurück</button><span class="chip" id="studyCount"></span></span>
     </div>
     <div class="progress"><i id="studyProg"></i></div>
     <button class="card3d" id="card" type="button" aria-label="Karte umdrehen">
@@ -367,7 +367,7 @@ html.pv-lock,html.pv-lock body{overflow:hidden}
       <button class="r2" id="r2" type="button">Gewusst<small id="i2"></small></button>
     </div>
     <div class="docs" id="studyDocs" hidden></div>
-    <p class="syncnote">Tasten: Leertaste umdrehen, 1 nochmal, 2 schwer, 3 gewusst</p>
+    <p class="syncnote">Tasten: Leertaste umdrehen, 1 nochmal, 2 schwer, 3 gewusst, Pfeil links zurück</p>
   </div>
 
   <div id="studyDone" class="panel" hidden>
@@ -376,6 +376,7 @@ html.pv-lock,html.pv-lock body{overflow:hidden}
     <div class="row" style="margin-top:14px">
       <button class="btn primary" id="studyAgain" type="button">Noch eine Runde</button>
       <button class="btn" id="studyBack" type="button">Zurück zur Auswahl</button>
+      <button class="btn" id="studyUndoDone" type="button">↶ Letzte Karte korrigieren</button>
     </div>
   </div>
 </section>
@@ -1173,7 +1174,7 @@ function startStudy(src,md,limit){
   if(!items.length){toast(md==="due"?"Keine fälligen Karten. Wähle „Alle üben“, um trotzdem zu lernen.":"Hier gibt es noch keine Karten.");return}
   items=shuffle(items);if(limit>0)items=items.slice(0,limit);
   const map={};items.forEach(x=>{map[x.c.id]=x});
-  Q={active:true,params:[src,md,limit],map,queue:items.map(x=>x.c.id),total:items.length,done:0,flipped:false,stats:[0,0,0]};
+  Q={active:true,params:[src,md,limit],map,queue:items.map(x=>x.c.id),total:items.length,done:0,flipped:false,stats:[0,0,0],hist:[]};
   $("#studySetup").hidden=true;$("#studyDone").hidden=true;$("#studyArea").hidden=false;showCard();
 }
 /* Kartentext lesbar darstellen: Zeilenumbrüche bleiben erhalten, Aufzählungen (•, -, –, *) werden Listenpunkte
@@ -1204,6 +1205,7 @@ function showCard(){
   $("#studyCount").textContent=`${Q.done} von ${Q.total} geschafft`;
   $("#studyProg").style.width=(Q.done/Q.total*100)+"%";
   [0,1,2].forEach(r=>{$("#i"+r).textContent=intervalLabel(x.c,r)});
+  $("#studyUndo").disabled=!(Q.hist&&Q.hist.length);
 }
 /* Karte während des Lernens bearbeiten oder löschen */
 function closeCardEditor(){const b=$("#cardEditor");b.hidden=true;b.replaceChildren()}
@@ -1242,13 +1244,28 @@ function flip(){
 function rate(r){
   if(!Q.active||!Q.flipped)return;
   const id=Q.queue.shift(),x=Q.map[id];if(!x)return;
-  const c=x.c;
+  const c=x.c,snap={id,r,prev:{box:c.box,due:c.due,ok:c.ok,bad:c.bad},again:r===0&&srsCfg().again};
+  (Q.hist=Q.hist||[]).push(snap);if(Q.hist.length>200)Q.hist.shift();
   c.box=nextBox(c,r);c.due=dueFor(c.box,r);
   if(r===2)c.ok=(c.ok||0)+1;if(r===0)c.bad=(c.bad||0)+1;
   Q.stats[r]++;bump("r",1);if(r===2)bump("c",1);
   saveDeck(x.d);
   if(r===0&&srsCfg().again)Q.queue.splice(Math.min(Q.queue.length,3),0,id);else Q.done++;
   if(!Q.queue.length)finishStudy();else showCard();
+}
+/* Zurück: letzte Bewertung rückgängig machen und die vorherige Karte (mit Antwort) wieder zeigen */
+function undoRate(){
+  if(!Q.hist||!Q.hist.length)return;
+  let h,x;
+  while(Q.hist.length){h=Q.hist.pop();x=Q.map[h.id];if(x&&x.d.cards.includes(x.c))break;x=null}
+  if(!x)return;
+  Object.assign(x.c,h.prev);
+  if(h.again){const i=Q.queue.indexOf(h.id);if(i>=0)Q.queue.splice(i,1)}else Q.done=Math.max(0,Q.done-1);
+  Q.stats[h.r]=Math.max(0,Q.stats[h.r]-1);bump("r",-1);if(h.r===2)bump("c",-1);
+  saveDeck(x.d);
+  Q.queue.unshift(h.id);Q.active=true;
+  $("#studyDone").hidden=true;$("#studyArea").hidden=false;
+  showCard();flip();
 }
 function finishStudy(){
   Q.active=false;$("#studyArea").hidden=true;$("#studyDone").hidden=false;
@@ -1264,6 +1281,8 @@ function leaveStudy(){
 }
 $("#card").addEventListener("click",flip);
 $("#r0").addEventListener("click",()=>rate(0));
+$("#studyUndo").addEventListener("click",undoRate);
+$("#studyUndoDone").addEventListener("click",undoRate);
 $("#r1").addEventListener("click",()=>rate(1));
 $("#r2").addEventListener("click",()=>rate(2));
 $("#studyEnd").addEventListener("click",leaveStudy);
@@ -1274,6 +1293,7 @@ document.addEventListener("keydown",e=>{
   if(!Q.active||$("#tab-lernen").hidden)return;
   if(/INPUT|TEXTAREA|SELECT/.test((e.target||{}).tagName||""))return;
   if(e.key===" "&&e.target.tagName!=="BUTTON"){e.preventDefault();flip()}
+  else if(e.key==="ArrowLeft"||e.key==="Backspace"){e.preventDefault();undoRate()}
   else if(Q.flipped){if(e.key==="1")rate(0);else if(e.key==="2")rate(1);else if(e.key==="3")rate(2)}
 });
 
