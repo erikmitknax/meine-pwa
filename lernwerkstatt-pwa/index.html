@@ -491,21 +491,20 @@ const PROMPT=`Erstelle mir Karteikarten zum Thema [THEMA]. Gib sie als einen ein
 {"thema": "Oberthema, z. B. Biologie", "titel": "Name des Stapels", "karten": [{"vorne": "Frage", "hinten": "Antwort"}]}`;
 
 function mkCard(f,b){return {id:uidGen("c"),f,b,box:0,due:0,ok:0,bad:0}}
-function seed(){
-  const t1={id:uidGen("t"),name:"Beispiel: Biologie"},t2={id:uidGen("t"),name:"Beispiel: Englisch"};
-  const now=Date.now();
-  const d1={id:uidGen("d"),title:"Zellorganellen",topic:t1.id,created:now,updated:now,cards:[
-    ["Mitochondrium","Zellorganell, in dem die Zellatmung stattfindet und ATP entsteht"],
-    ["Ribosom","Ort der Proteinbiosynthese"],
-    ["Zellkern","Enthält die DNA und steuert die Zelle"],
-    ["Chloroplast","Organell der Fotosynthese in Pflanzenzellen"],
-    ["Golgi-Apparat","Verpackt und versendet Proteine in Vesikeln"],
-    ["Lysosom","Baut mit Verdauungsenzymen Stoffe und Zellreste ab"]].map(x=>mkCard(x[0],x[1]))};
-  const d2={id:uidGen("d"),title:"Vokabeln B2",topic:t2.id,created:now,updated:now,cards:[
-    ["ephemeral","kurzlebig, vergänglich"],["to undermine","untergraben, schwächen"],
-    ["reluctant","widerwillig, zögerlich"],["scarce","knapp, selten"],["to hinder","behindern"]].map(x=>mkCard(x[0],x[1]))};
-  return {v:2,theme:"",set:{work:25,short:5,long:15},log:{},topics:[t1,t2],decks:[d1,d2],
-    sets:[{id:uidGen("s"),name:"Beispiel: Bio und Englisch gemischt",topics:[t1.id,t2.id],decks:[]}]};
+function seed(){return {v:2,theme:"",set:{work:25,short:5,long:15},log:{},topics:[],decks:[],sets:[]}}
+/* Früher eingebaute Beispielkarten entfernen, solange man sie nicht benutzt hat */
+function dropPristineSample(){
+  const SAMPLE_DECKS=["Zellorganellen","Vokabeln B2"];
+  const sampleT=new Set(S.topics.filter(t=>/^Beispiel:/.test(t.name)).map(t=>t.id));
+  if(!sampleT.size)return false;
+  const untouched=d=>d.cards.every(c=>!c.box&&!c.ok&&!c.bad&&!(c.due>Date.now()));
+  const gone=S.decks.filter(d=>sampleT.has(d.topic)&&SAMPLE_DECKS.includes(d.title)&&untouched(d));
+  if(!gone.length)return false;
+  const ids=new Set(gone.map(d=>d.id));
+  S.decks=S.decks.filter(d=>!ids.has(d.id));
+  S.topics=S.topics.filter(t=>!(sampleT.has(t.id)&&!S.decks.some(d=>d.topic===t.id)));
+  S.sets=S.sets.filter(x=>!/^Beispiel:/.test(x.name));
+  return true;
 }
 function migrateV1(o){
   const off=new Date().getTimezoneOffset()*60000;
@@ -585,7 +584,7 @@ async function initStore(){
   let local=null;
   try{local=JSON.parse(localStorage.getItem(LS))}catch(e){}
   if(!local){try{const o=JSON.parse(localStorage.getItem(LS_OLD));if(o&&o.cards)local=migrateV1(o)}catch(e){}}
-  S=local&&Array.isArray(local.decks)?local:seed();normalize();applyTheme();renderAll();
+  S=local&&Array.isArray(local.decks)?local:seed();normalize();if(dropPristineSample()){normalize();lsWrite()}applyTheme();renderAll();
   try{
     if(!window.claude||!window.claude.use)throw 0;
     const [d,u]=await Promise.all([window.claude.use("db"),window.claude.use("user")]);
