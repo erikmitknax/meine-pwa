@@ -1015,7 +1015,8 @@ function pickRecipe(r) {
   $("#rgo", s).onclick = () => {
     const n = num(rp.value); if (n <= 0) return toast("Bitte Portionen eingeben");
     ui.meal = $("#rm", s).value;
-    D.entries.push({ id: uid(), date: ui.date, meal: ui.meal, rid: r.id, name: r.name, grams: p.grams * n, kcal: p.kcal * n, p: p.p * n, c: p.c * n, f: p.f * n });
+    D.entries.push({ id: uid(), date: ui.date, meal: ui.meal, rid: r.id, name: r.name, grams: p.grams * n, kcal: p.kcal * n, p: p.p * n, c: p.c * n, f: p.f * n,
+      ings: r.items.map(i => ({ name: i.name, grams: i.grams * n / (r.servings || 1), kcal: i.kcal, protein: i.protein, carbs: i.carbs, fat: i.fat })) });
     r.used = (r.used || 0) + 1;
     closeSheet(); save(); render(); toast("Hinzugefügt");
   };
@@ -1191,16 +1192,52 @@ function dayChart() {
 }
 
 /* Eintrag bearbeiten */
+/* Zutaten eines Rezept-Eintrags (Kopie am Eintrag, das Rezept selbst bleibt unverändert) */
+function entryIngs(e) {
+  if (Array.isArray(e.ings) && e.ings.length) return e.ings.map(i => ({ ...i }));
+  const r = recipeFor(e); if (!r || !r.items || !r.items.length) return null;
+  const tot = r.items.reduce((a, i) => a + i.grams, 0), k = tot > 0 ? e.grams / tot : 1;
+  return r.items.map(i => ({ name: i.name, grams: i.grams * k, kcal: i.kcal, protein: i.protein, carbs: i.carbs, fat: i.fat }));
+}
 function editEntry(id) {
   const e = D.entries.find(x => x.id === id); if (!e) return;
-  const s = sheet(`<h3>${esc(e.name)}</h3><div class="muted small">${r0(e.kcal)} kcal · E ${r1(e.p)} · KH ${r1(e.c)} · F ${r1(e.f)}</div>
-    <label>Menge (g)</label><input type="text" inputmode="decimal" id="eg" value="${r0(e.grams)}">
+  const ings = entryIngs(e);
+  let dirty = false;
+  const tot = () => { const t = { g: 0, kcal: 0, p: 0, c: 0, f: 0 }; ings.forEach(i => { if (i.off) return; const c = calc(i, i.grams); t.g += i.grams; t.kcal += c.kcal; t.p += c.p; t.c += c.c; t.f += c.f; }); return t; };
+  const line = t => `${r0(t.kcal)} kcal · E ${r1(t.p)} · KH ${r1(t.c)} · F ${r1(t.f)}`;
+  const ingHtml = ings ? `<div class="mealtools" style="margin-top:16px"><b>Zutaten nur für diesen Eintrag</b></div>
+    <div class="muted small" style="margin:2px 0 8px">Mengen ändern oder Zutaten abwählen. Das gespeicherte Rezept bleibt unverändert, beim nächsten Mal ist wieder alles wie im Rezept.</div>
+    ${ings.map((i, k) => `<div class="row" data-i="${k}" style="gap:8px;margin-bottom:8px"><input type="checkbox" ${i.off ? "" : "checked"} data-o style="width:22px;height:22px"><div class="grow" style="min-width:0"><div style="font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(i.name)}</div></div><input type="text" inputmode="decimal" value="${r0(i.grams)}" data-g style="width:84px;flex:none"><span class="muted small">g</span></div>`).join("")}
+    <div class="muted small" id="eiSum" style="margin-top:4px"></div>` : "";
+  const s = sheet(`<h3>${esc(e.name)}</h3><div class="muted small" id="eHead">${r0(e.kcal)} kcal · E ${r1(e.p)} · KH ${r1(e.c)} · F ${r1(e.f)}</div>
+    ${ings ? "" : `<label>Menge (g)</label><input type="text" inputmode="decimal" id="eg" value="${r0(e.grams)}">`}${ings ? `<label>Menge gesamt (g)</label><input type="text" inputmode="decimal" id="eg" value="${r0(e.grams)}">` : ""}
+    ${ingHtml}
     <label>Mahlzeit</label><select id="em">${MEALS.map(m => `<option value="${m.id}" ${m.id === e.meal ? "selected" : ""}>${m.name}</option>`).join("")}</select>
     <button class="btn block" style="margin-top:14px" id="es">Speichern</button>
     <button class="btn danger block" style="margin-top:8px" id="ed">Eintrag löschen</button>`);
+  const refresh = () => { if (!ings) return; const t = tot(); $("#eiSum", s).textContent = "Summe der Zutaten: " + r0(t.g) + " g · " + line(t); $("#eg", s).value = r0(t.g); };
+  if (ings) {
+    refresh();
+    $$("[data-i]", s).forEach(row => {
+      const i = ings[+row.dataset.i];
+      $("[data-o]", row).onchange = ev => { i.off = !ev.target.checked; dirty = true; refresh(); };
+      $("[data-g]", row).oninput = ev => { i.grams = Math.max(0, num(ev.target.value)); dirty = true; refresh(); };
+    });
+    // Gesamtmenge ändern = alle Zutaten anteilig skalieren
+    $("#eg", s).onchange = ev => { const g = num(ev.target.value), t = tot(); if (g > 0 && t.g > 0) { const k = g / t.g; ings.forEach(i => { if (!i.off) i.grams *= k; }); $$("[data-i]", s).forEach(row => { $("[data-g]", row).value = r0(ings[+row.dataset.i].grams); }); dirty = true; } refresh(); };
+  }
   $("#es", s).onclick = () => {
-    const g = num($("#eg", s).value); if (g <= 0) return toast("Menge eingeben");
-    const k = g / e.grams; e.kcal *= k; e.p *= k; e.c *= k; e.f *= k; if (e.s != null) e.s *= k; if (e.fi != null) e.fi *= k; e.grams = g; e.meal = $("#em", s).value;
+    if (ings && dirty) {
+      const t = tot(); if (t.g <= 0) return toast("Mindestens eine Zutat mit Menge");
+      const old = e.kcal || 0;
+      if (e.s != null && old > 0) e.s *= t.kcal / old; if (e.fi != null && old > 0) e.fi *= t.kcal / old;
+      e.kcal = t.kcal; e.p = t.p; e.c = t.c; e.f = t.f; e.grams = t.g; e.ings = ings;
+    } else {
+      const g = num($("#eg", s).value); if (g <= 0) return toast("Menge eingeben");
+      const k = g / e.grams; e.kcal *= k; e.p *= k; e.c *= k; e.f *= k; if (e.s != null) e.s *= k; if (e.fi != null) e.fi *= k; e.grams = g;
+      if (Array.isArray(e.ings)) e.ings = e.ings.map(i => ({ ...i, grams: i.grams * k }));
+    }
+    e.meal = $("#em", s).value;
     save(); closeSheet(); render();
   };
   $("#ed", s).onclick = () => { D.entries = D.entries.filter(x => x.id !== id); save(); closeSheet(); render(); };
@@ -1377,7 +1414,9 @@ function buildReport(from, to) {
       es.forEach(e => {
         const rec = recipeFor(e);
         out.push(`- ${rec ? "Rezept: " : ""}${e.name}${e.brand ? " (" + e.brand + ")" : ""}, ${nde(e.grams, 0)} g – ${nde(e.kcal, 0)} kcal · E ${nde(e.p)} · KH ${nde(e.c)} · F ${nde(e.f)}${e.s != null ? " · Zucker " + nde(e.s) : ""}${e.fi != null ? " · Ballaststoffe " + nde(e.fi) : ""}`);
-        if (rec && rec.items && rec.items.length) {
+        if (Array.isArray(e.ings) && e.ings.length) {
+          e.ings.filter(i => !i.off).forEach(i => { const c = calc(i, i.grams); out.push(`  - Zutat: ${i.name}, ${nde(i.grams, 0)} g – ${nde(c.kcal, 0)} kcal · E ${nde(c.p)} · KH ${nde(c.c)} · F ${nde(c.f)}`); });
+        } else if (rec && rec.items && rec.items.length) {
           const tot = rec.items.reduce((a, i) => a + i.grams, 0) || 1, k = e.grams / tot;
           rec.items.forEach(i => { const c = calc(i, i.grams * k); out.push(`  - Zutat: ${i.name}, ${nde(i.grams * k, 0)} g – ${nde(c.kcal, 0)} kcal · E ${nde(c.p)} · KH ${nde(c.c)} · F ${nde(c.f)}`); });
         }
