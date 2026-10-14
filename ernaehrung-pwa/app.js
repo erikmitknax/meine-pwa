@@ -16,7 +16,7 @@ const NATIVE = !!(window.Capacitor && window.Capacitor.isNativePlatform && windo
 
 const DEFAULTS = () => ({
   ver: 3, foods: [], recipes: [], entries: [], weights: {},
-  settings: { kcal: 2200, pP: 30, pC: 40, pF: 30, mode: "auto", accent: "#12935f", geminiKey: "", geminiModel: "gemini-2.5-flash", goalWeight: "", weightGate: true },
+  settings: { kcal: 2200, pP: 30, pC: 40, pF: 30, mode: "auto", accent: "#12935f", geminiKey: "", geminiModel: "gemini-2.5-flash-lite", goalWeight: "", weightGate: true },
 });
 let D = load();
 let ui = { setOpen: {}, tab: "today", date: iso(new Date()), weekOffset: 0, period: 7, wRange: 90, meal: "b", open: {} };
@@ -660,41 +660,66 @@ function parseAiJson(txt) {
   for (const c of tries) { try { const j = JSON.parse(c); if (j && Array.isArray(j.items)) return j; } catch (e) { /* nächster Versuch */ } }
   throw new Error("Antwort der KI war nicht lesbar. Bitte nochmal versuchen.");
 }
+let lastAi = null;
+/* Gemini-Aufruf mit "Hedging": antwortet das erste Modell nach ~4 s nicht, startet parallel ein zweites,
+   die schnellste gültige Antwort gewinnt. Fällt ein Modell aus (503/429/404), startet sofort das nächste. */
+async function geminiCall(parts, { schema, maxOut = 1500, onWait } = {}) {
+  const key = (D.settings.geminiKey || "").trim(), t0 = Date.now();
+  const models = [...new Set([(D.settings.geminiModel || "gemini-2.5-flash-lite").trim(), "gemini-2.5-flash-lite", "gemini-2.5-flash", "gemini-flash-latest"])];
+  const ctls = new Set();
+  const bodyFor = (model, lean) => JSON.stringify({ contents: [{ parts }], generationConfig: lean ? { responseMimeType: "application/json", maxOutputTokens: maxOut }
+    : { responseMimeType: "application/json", responseSchema: schema, maxOutputTokens: maxOut, temperature: 0.2, ...(/2\.5-flash(?!-lite)/.test(model) ? { thinkingConfig: { thinkingBudget: 0 } } : {}) } });
+  const one = async (model) => {
+    let lean = false;
+    for (let k = 0; k < 2; k++) {
+      let r;
+      const ctl = new AbortController(); ctls.add(ctl);
+      const to = setTimeout(() => ctl.abort(), 30000);
+      try { r = await fetch("https://generativelanguage.googleapis.com/v1beta/models/" + encodeURIComponent(model) + ":generateContent", { method: "POST", headers: { "content-type": "application/json", "x-goog-api-key": key }, body: bodyFor(model, lean), signal: ctl.signal }); }
+      catch (e) { throw Object.assign(new Error(e && e.name === "AbortError" ? "Zeitüberschreitung" : "net"), { net: !(e && e.name === "AbortError"), abort: true }); }
+      finally { clearTimeout(to); ctls.delete(ctl); }
+      const j = await r.json().catch(() => ({}));
+      if (r.ok) {
+        const text = ((((j.candidates || [])[0] || {}).content || {}).parts || []).map(c => c.text || "").join("");
+        if (!text) throw Object.assign(new Error("leer"), { status: 0 });
+        return { text, model };
+      }
+      const msg = r.status + ((j.error && j.error.message) ? ": " + j.error.message : "");
+      if (r.status === 401 || r.status === 403 || (r.status === 400 && /API key/i.test(msg))) throw Object.assign(new Error("Der Gemini-Schlüssel wird nicht akzeptiert. Prüfe ihn in den Einstellungen."), { fatal: true });
+      if (r.status === 400 && !lean) { lean = true; continue; }
+      throw Object.assign(new Error(msg), { status: r.status });
+    }
+  };
+  return new Promise((resolve, reject) => {
+    let next = 0, running = 0, done = false, lastErr = null, hedge = null, net = false;
+    const finish = (fn, v) => { if (done) return; done = true; clearTimeout(hedge); ctls.forEach(c => c.abort()); fn(v); };
+    const launch = () => {
+      if (done || next >= models.length) return false;
+      const m = models[next++]; running++;
+      if (next > 1 && onWait) onWait("Gemini braucht länger – zweites Modell läuft parallel …");
+      one(m).then(r => finish(resolve, { ...r, ms: Date.now() - t0 }), e => {
+        if (done) return;
+        running--; lastErr = e; if (e.net) net = true;
+        if (e.fatal) return finish(reject, e);
+        if (!launch() && running === 0) {
+          const st = lastErr.status;
+          finish(reject, new Error(net && !st ? "Keine Verbindung zur KI. Bist du online?" : lastErr.message === "Zeitüberschreitung" ? "Gemini antwortet gerade zu langsam. Bitte gleich nochmal versuchen." : st === 503 || st === 500 ? "Gemini ist gerade überlastet (Google-Seite). Bitte in ein bis zwei Minuten nochmal versuchen." : st === 429 ? "Das kostenlose Limit ist gerade erreicht. Warte kurz und versuche es erneut." : "KI-Fehler " + lastErr.message));
+        }
+      });
+      if (!hedge && next < models.length) hedge = setTimeout(() => { hedge = null; launch(); }, 4000);
+      return true;
+    };
+    launch();
+  });
+}
 async function analyzePhoto(file, note) {
   const data = file ? await shrink(file, 1024) : null;
   const imgPart = data ? [{ inline_data: { mime_type: "image/jpeg", data } }] : [];
   const lead = file ? `Analysiere dieses Foto (Mahlzeit, Lebensmittel oder Nährwert-Etikett). Erkenne jedes einzelne Lebensmittel, schätze die Menge in Gramm und nenne die Nährwerte pro 100 g. Wenn ein Nährwert-Etikett zu sehen ist, nutze dessen Werte.`
     : `Der Nutzer beschreibt in Textform, was er gegessen hat oder welches Lebensmittel er eintragen möchte (es gibt kein Foto). Erkenne jedes einzelne Lebensmittel, rechne genannte Mengen (Stück, Scheiben, Gläser, Esslöffel …) in Gramm um bzw. nimm genannte Gramm-Angaben exakt, sonst schätze eine übliche Portion, und nenne die Nährwerte pro 100 g. Nennt der Nutzer selbst Nährwerte, rechne sie auf 100 g um und nutze sie.`;
   const prompt = `${lead} Antworte ausschließlich mit JSON ohne weiteren Text im Format: {"items":[{"name":"deutscher Name","grams":150,"kcal":120,"protein":5,"carbs":20,"fat":2,"sugar":1,"fiber":3}]}. Alle Nährwerte beziehen sich auf 100 g. Zahlen immer als JSON-Zahlen mit Punkt als Dezimaltrennzeichen (z. B. 5.5, niemals 5,5).` + (note ? (file ? `\n\nZusatzinfos vom Nutzer (verlässlich, haben Vorrang vor deiner Schätzung aus dem Bild, z. B. Gewicht, Zutaten, Zubereitung, Marke): ${note}` : `\n\nBeschreibung des Nutzers: ${note}`) : "");
-  let lean = false; // bei Ablehnung von Schema/Denk-Einstellung ohne diese Extras erneut versuchen
-  const bodyFor = model => lean ? JSON.stringify({ contents: [{ parts: [...imgPart, { text: prompt }] }], generationConfig: { responseMimeType: "application/json", maxOutputTokens: 1500 } }) : JSON.stringify({ contents: [{ parts: [...imgPart, { text: prompt }] }],
-    // „Nachdenken“ abschalten (Gemini 2.5 Flash): deutlich schneller, für diese Aufgabe reicht es
-    generationConfig: { responseMimeType: "application/json", responseSchema: PHOTO_SCHEMA, maxOutputTokens: 1500, temperature: 0.2, ...(/2\.5-flash(?!-lite)/.test(model) ? { thinkingConfig: { thinkingBudget: 0 } } : {}) } });
-  // Bei Überlastung (503), unbekanntem Modell (404) oder Limit (429) automatisch erneut bzw. mit anderem Modell versuchen
-  const models = [...new Set([(D.settings.geminiModel || "gemini-2.5-flash").trim(), "gemini-2.5-flash", "gemini-flash-latest", "gemini-2.5-flash-lite"])];
-  let r, j, lastErr = "", net = false;
-  for (const model of models) {
-    for (let attempt = 0; attempt < 2; attempt++) {
-      try {
-        r = await fetchT("https://generativelanguage.googleapis.com/v1beta/models/" + encodeURIComponent(model) + ":generateContent", {
-          method: "POST", headers: { "content-type": "application/json", "x-goog-api-key": D.settings.geminiKey.trim() }, body: bodyFor(model),
-        }, 30000);
-      } catch (e) { r = null; if (e && e.name === "AbortError") { lastErr = "Zeitüberschreitung"; break; } net = true; break; }
-      j = await r.json().catch(() => ({}));
-      if (r.ok) break;
-      lastErr = r.status + ((j.error && j.error.message) ? ": " + j.error.message : "");
-      if (r.status === 401 || r.status === 403 || (r.status === 400 && /API key/i.test(lastErr))) throw new Error("Der Gemini-Schlüssel wird nicht akzeptiert. Prüfe ihn in den Einstellungen.");
-      if (r.status === 400 && !lean) { lean = true; attempt = -1; continue; }
-      if (r.status === 400) throw new Error("KI-Fehler " + lastErr);
-      if (r.status === 503 || r.status === 500 || r.status === 502 || r.status === 504) { if (attempt === 0) { $("#pout") && ($("#pout").innerHTML = `<div class="muted" style="margin-top:14px"><span class="spin"></span>Gemini ist ausgelastet – neuer Versuch …</div>`); await new Promise(res => setTimeout(res, 1800)); continue; } }
-      break; // 404/429/anderes: nächstes Modell
-    }
-    if (r && r.ok) break;
-    if (net) break;
-  }
-  if (net && !(r && r.ok)) throw new Error("Keine Verbindung zur KI. Bist du online?");
-  if (!r || !r.ok) throw new Error(!r && lastErr === "Zeitüberschreitung" ? "Gemini antwortet gerade zu langsam. Bitte gleich nochmal versuchen." : r && (r.status === 503 || r.status === 500) ? "Gemini ist gerade überlastet (Google-Seite). Bitte in ein bis zwei Minuten nochmal versuchen." : r && r.status === 429 ? "Das kostenlose Limit ist gerade erreicht. Warte kurz und versuche es erneut." : "KI-Fehler " + lastErr);
-  const txt = ((((j.candidates || [])[0] || {}).content || {}).parts || []).map(c => c.text || "").join("");
+  const { text: txt, model: usedModel, ms } = await geminiCall([...imgPart, { text: prompt }], { schema: PHOTO_SCHEMA, maxOut: 1500, onWait: m => { const o = $("#pout"); if (o) o.innerHTML = `<div class="muted" style="margin-top:14px"><span class="spin"></span>${m}</div>`; } });
+  lastAi = { model: usedModel, ms };
   const items = (parseAiJson(txt).items || []).filter(i => i && i.name);
   if (!items.length) throw new Error(file ? "Es wurde nichts erkannt. Versuche ein schärferes Foto." : "Es wurde nichts erkannt. Beschreibe das Essen etwas genauer.");
   return items.map(i => ({ name: String(i.name), grams: Math.max(1, num(i.grams) || 100), kcal: num(i.kcal), protein: num(i.protein), carbs: num(i.carbs), fat: num(i.fat), sugar: num(i.sugar), fiber: num(i.fiber), on: true }));
@@ -704,7 +729,7 @@ function renderPhotoItems() {
   if (!o) return;
   const fld = (l, f, v) => `<div><label style="margin:8px 0 3px">${l}</label><input type="text" inputmode="decimal" value="${v}" data-f="${f}"></div>`;
   const sum = i => { const c = calc(i, i.grams); return `= ${r0(c.kcal)} kcal · E ${r1(c.p)} · KH ${r1(c.c)} · F ${r1(c.f)}`; };
-  o.innerHTML = `<h2 style="margin-top:18px">Erkannt (Schätzung)</h2><div class="muted small" style="margin-bottom:8px">Alles ist änderbar. Nährwerte gelten pro 100 g.</div>` + photoItems.map((i, k) => `<div class="card" data-k="${k}">
+  o.innerHTML = `<h2 style="margin-top:18px">Erkannt (Schätzung)</h2><div class="muted small" style="margin-bottom:8px">Alles ist änderbar. Nährwerte gelten pro 100 g.${lastAi ? ` <span class="tiny">· ${(lastAi.ms / 1000).toFixed(1).replace(".", ",")} s, ${esc(lastAi.model)}</span>` : ""}</div>` + photoItems.map((i, k) => `<div class="card" data-k="${k}">
       <div class="row"><input type="checkbox" ${i.on ? "checked" : ""} data-f="on" style="width:22px;height:22px"><input type="text" value="${esc(i.name)}" data-f="name"></div>
       <div class="grid2">${fld("Menge (g)", "grams", r0(i.grams))}${fld("Kalorien (kcal)", "kcal", r0(i.kcal))}
       ${fld("Eiweiß (g)", "protein", r1(i.protein))}${fld("Kohlenhydrate (g)", "carbs", r1(i.carbs))}
