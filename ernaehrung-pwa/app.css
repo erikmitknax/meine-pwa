@@ -260,3 +260,12 @@ textarea::placeholder{color:var(--muted);opacity:.8}
 .wgbox input{text-align:center;font-size:28px;font-weight:700;padding:16px}
 .wgico{width:64px;height:64px;border-radius:22px;margin:0 auto;display:flex;align-items:center;justify-content:center;background:var(--card);color:var(--accent,#12935f)}
 .wgbox .linkbtn{display:block;margin-left:auto;margin-right:auto}
+.nrow{padding:12px 2px;border-bottom:1px solid var(--line)}
+.nrow:last-of-type{border-bottom:0}
+.nrow .nbar{height:9px;border-radius:6px;background:var(--card2);overflow:hidden;margin:8px 0 6px}
+.nbar i{display:block;height:100%;border-radius:6px;background:var(--accent);transition:width .25s}
+.nbar i.warn{background:var(--danger)}
+.nbar i.good{background:var(--accent)}
+.nsum{display:grid;grid-template-columns:1fr 1fr;gap:12px 16px;margin-bottom:6px}
+.nsum>div{display:flex;flex-direction:column}
+.nsum b{font-size:20px;letter-spacing:-.02em}

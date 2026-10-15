@@ -47,6 +47,7 @@ const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 
 const num = v => { const n = parseFloat(String(v ?? "").replace(",", ".")); return isFinite(n) ? n : 0; };
 const r0 = n => Math.round(n);
 const r1 = n => Math.round(n * 10) / 10;
+const r2 = n => Math.round(n * 100) / 100;
 function iso(d) { const z = n => String(n).padStart(2, "0"); return d.getFullYear() + "-" + z(d.getMonth() + 1) + "-" + z(d.getDate()); }
 function fromIso(s) { const [y, m, d] = s.split("-").map(Number); return new Date(y, m - 1, d); }
 function addDays(s, n) { const d = fromIso(s); d.setDate(d.getDate() + n); return iso(d); }
@@ -69,6 +70,53 @@ function sum(list) {
   return list.reduce((a, e) => ({ kcal: a.kcal + e.kcal, p: a.p + e.p, c: a.c + e.c, f: a.f + e.f }), { kcal: 0, p: 0, c: 0, f: 0 });
 }
 const dayEntries = d => D.entries.filter(e => e.date === d);
+
+/* ---- Weitere Nährstoffe (wie auf dem Etikett): Zucker, Ballaststoffe, gesättigte Fettsäuren, Salz ---- */
+/* Lebensmittel/Zutaten: Feld fk pro 100 g · Tagebuch-Eintrag: Feld ek in g (Momentaufnahme) */
+const MICRO = [
+  { fk: "sugar", ek: "s", name: "Zucker" },
+  { fk: "fiber", ek: "fi", name: "Ballaststoffe" },
+  { fk: "sat", ek: "sa", name: "Gesättigte Fettsäuren" },
+  { fk: "salt", ek: "sl", name: "Salz" },
+];
+const hasN = v => typeof v === "number" && isFinite(v);
+function microOf(food, grams) { const o = {}, k = grams / 100; MICRO.forEach(m => { if (hasN(food[m.fk])) o[m.ek] = food[m.fk] * k; }); return o; }
+function pick100(o) { const r = {}; MICRO.forEach(m => { if (hasN(o[m.fk])) r[m.fk] = o[m.fk]; }); return r; }
+/* Summe aus Zutaten (nur wenn alle aktiven Zutaten den Wert kennen, sonst unbekannt) */
+function microFromIngs(ings) {
+  const on = (ings || []).filter(i => !i.off), o = {};
+  MICRO.forEach(m => { if (on.length && on.every(i => hasN(i[m.fk]))) o[m.ek] = on.reduce((a, i) => a + i[m.fk] * i.grams / 100, 0); });
+  return o;
+}
+function microSum(list) {
+  const t = {}, miss = {};
+  MICRO.forEach(m => { t[m.ek] = 0; miss[m.ek] = 0; });
+  list.forEach(e => MICRO.forEach(m => { if (hasN(e[m.ek])) t[m.ek] += e[m.ek]; else miss[m.ek]++; }));
+  return { ...t, miss };
+}
+function scaleMicro(e, k) { MICRO.forEach(m => { if (hasN(e[m.ek])) e[m.ek] *= k; }); }
+/* Fehlende Werte älterer Einträge aus Zutaten, gespeicherten Lebensmitteln bzw. Rezepten nachtragen */
+function fillMissingMicro(list) {
+  let changed = 0;
+  list.forEach(e => {
+    const need = MICRO.filter(m => !hasN(e[m.ek])); if (!need.length || !(e.grams > 0)) return;
+    let src = null;
+    if (Array.isArray(e.ings) && e.ings.length) src = microFromIngs(e.ings);
+    if (!src || !need.some(m => hasN(src[m.ek]))) {
+      const nm = String(e.name || "").toLowerCase();
+      const f = D.foods.find(x => x.name.toLowerCase() === nm && (!e.brand || (x.brand || "").toLowerCase() === String(e.brand).toLowerCase()));
+      if (f) src = microOf(f, e.grams);
+      else {
+        const r = recipeFor(e), tt = r && r.items && r.items.length ? recipeTotals(r) : null;
+        if (tt && tt.kcal > 0) { const k = e.kcal / tt.kcal, base = microFromIngs(r.items); src = {}; MICRO.forEach(m => { if (hasN(base[m.ek])) src[m.ek] = base[m.ek] * k; }); }
+      }
+    }
+    if (!src) return;
+    let got = false; need.forEach(m => { if (hasN(src[m.ek])) { e[m.ek] = src[m.ek]; got = true; } });
+    if (got) changed++;
+  });
+  return changed;
+}
 function calc(food, grams) {
   const k = grams / 100;
   return { kcal: food.kcal * k, p: food.protein * k, c: food.carbs * k, f: food.fat * k };
@@ -185,6 +233,7 @@ function viewToday() {
     <div class="hbar"><i style="width:${pct}%"></i></div><div class="hf">${fmt(t.kcal)} kcal gegessen</div></section>
   <section class="macros" data-act="dayChart" role="button" tabindex="0" aria-label="Tagesübersicht öffnen">${macroCol("Eiweiß", t.p, g.p, "p")}${macroCol("Kohlenhydrate", t.c, g.c, "c")}${macroCol("Fett", t.f, g.f, "f")}</section>
   ${meals}
+  <button class="btn sec block gapbtn" data-act="nutri">Nährstoffe im Detail</button>
   <button class="btn block gapbtn" data-act="gaps">${icon("plus", 18, 2.4)}KI-Vorschläge für eine Mahlzeit</button>
   <section class="exportcard"><b>Tag exportieren</b><div class="muted small">Alles, was du an diesem Tag gegessen hast, inkl. Rezept-Zutaten, als Textdatei – z. B. für eine KI-Analyse.</div>
     <div class="grid2"><button class="btn" data-act="exportDay">Als Datei</button><button class="btn sec" data-act="copyDay">Kopieren</button></div></section>`;
@@ -444,7 +493,7 @@ function mapOff(p) {
   return {
     id: uid(), name: p.product_name.trim(), brand: (p.brands || "").split(",")[0].trim(), barcode: String(p.code || ""),
     kcal: r1(kcal), protein: r1(n.proteins_100g || 0), carbs: r1(n.carbohydrates_100g || 0), fat: r1(n.fat_100g || 0),
-    sugar: r1(n.sugars_100g || 0), fiber: r1(n.fiber_100g || 0), serving: num(p.serving_quantity) || 100, used: 0,
+    sugar: r1(n.sugars_100g || 0), fiber: r1(n.fiber_100g || 0), sat: r1(n["saturated-fat_100g"] || 0), salt: r2(n.salt_100g != null ? n.salt_100g : (n.sodium_100g || 0) * 2.5), serving: num(p.serving_quantity) || 100, used: 0,
   };
 }
 const OFF_FIELDS = "code,product_name,brands,nutriments,serving_quantity";
@@ -499,7 +548,7 @@ function pickFood(f, fromOnline) {
 }
 function addEntry(meal, food, grams) {
   const c = calc(food, grams);
-  D.entries.push({ id: uid(), date: ui.date, meal, name: food.name, grams, kcal: c.kcal, p: c.p, c: c.c, f: c.f });
+  D.entries.push({ id: uid(), date: ui.date, meal, name: food.name, grams, kcal: c.kcal, p: c.p, c: c.c, f: c.f, ...microOf(food, grams) });
 }
 
 /* Scannen */
@@ -597,7 +646,7 @@ function matchLocal(text) {
     const p = parseSeg(seg), f = p.name ? findOwnFood(p.name) : null;
     if (!f) return rest.push(seg);
     const grams = Math.max(1, r1(p.grams != null ? p.grams : (p.count != null ? p.count : 1) * (num(f.serving) || 100)));
-    items.push({ name: f.name, grams, kcal: num(f.kcal), protein: num(f.protein), carbs: num(f.carbs), fat: num(f.fat), sugar: num(f.sugar), fiber: num(f.fiber), on: true, fid: f.id });
+    items.push({ name: f.name, grams, kcal: num(f.kcal), protein: num(f.protein), carbs: num(f.carbs), fat: num(f.fat), sugar: num(f.sugar), fiber: num(f.fiber), sat: num(f.sat), salt: num(f.salt), on: true, fid: f.id });
   });
   return { items, rest };
 }
@@ -703,7 +752,7 @@ function shrink(file, max = 1280) {
   });
 }
 const PHOTO_SCHEMA = { type: "OBJECT", properties: { items: { type: "ARRAY", items: { type: "OBJECT", properties: {
-  name: { type: "STRING" }, grams: { type: "NUMBER" }, kcal: { type: "NUMBER" }, protein: { type: "NUMBER" }, carbs: { type: "NUMBER" }, fat: { type: "NUMBER" }, sugar: { type: "NUMBER" }, fiber: { type: "NUMBER" } },
+  name: { type: "STRING" }, grams: { type: "NUMBER" }, kcal: { type: "NUMBER" }, protein: { type: "NUMBER" }, carbs: { type: "NUMBER" }, fat: { type: "NUMBER" }, sugar: { type: "NUMBER" }, fiber: { type: "NUMBER" }, sat: { type: "NUMBER" }, salt: { type: "NUMBER" } },
   required: ["name", "grams", "kcal", "protein", "carbs", "fat"] } } }, required: ["items"] };
 /* tolerant: Dezimalkommas, hängende Kommas, abgeschnittene Antworten reparieren */
 function parseAiJson(txt) {
@@ -776,12 +825,12 @@ async function analyzePhoto(file, note) {
   const imgPart = data ? [{ inline_data: { mime_type: "image/jpeg", data } }] : [];
   const lead = file ? `Analysiere dieses Foto (Mahlzeit, Lebensmittel oder Nährwert-Etikett). Erkenne jedes einzelne Lebensmittel, schätze die Menge in Gramm und nenne die Nährwerte pro 100 g. Wenn ein Nährwert-Etikett zu sehen ist, nutze dessen Werte.`
     : `Der Nutzer beschreibt in Textform, was er gegessen hat oder welches Lebensmittel er eintragen möchte (es gibt kein Foto). Erkenne jedes einzelne Lebensmittel, rechne genannte Mengen (Stück, Scheiben, Gläser, Esslöffel …) in Gramm um bzw. nimm genannte Gramm-Angaben exakt, sonst schätze eine übliche Portion, und nenne die Nährwerte pro 100 g. Nennt der Nutzer selbst Nährwerte, rechne sie auf 100 g um und nutze sie.`;
-  const prompt = `${lead} Antworte ausschließlich mit JSON ohne weiteren Text im Format: {"items":[{"name":"deutscher Name","grams":150,"kcal":120,"protein":5,"carbs":20,"fat":2,"sugar":1,"fiber":3}]}. Alle Nährwerte beziehen sich auf 100 g. Zahlen immer als JSON-Zahlen mit Punkt als Dezimaltrennzeichen (z. B. 5.5, niemals 5,5).` + (note ? (file ? `\n\nZusatzinfos vom Nutzer (verlässlich, haben Vorrang vor deiner Schätzung aus dem Bild, z. B. Gewicht, Zutaten, Zubereitung, Marke): ${note}` : `\n\nBeschreibung des Nutzers: ${note}`) : "");
+  const prompt = `${lead} Antworte ausschließlich mit JSON ohne weiteren Text im Format: {"items":[{"name":"deutscher Name","grams":150,"kcal":120,"protein":5,"carbs":20,"fat":2,"sugar":1,"fiber":3,"sat":0.5,"salt":0.3}]}. Alle Nährwerte beziehen sich auf 100 g. "sat" = davon gesättigte Fettsäuren in g, "salt" = Salz in g (nicht Natrium). Zahlen immer als JSON-Zahlen mit Punkt als Dezimaltrennzeichen (z. B. 5.5, niemals 5,5).` + (note ? (file ? `\n\nZusatzinfos vom Nutzer (verlässlich, haben Vorrang vor deiner Schätzung aus dem Bild, z. B. Gewicht, Zutaten, Zubereitung, Marke): ${note}` : `\n\nBeschreibung des Nutzers: ${note}`) : "");
   const { text: txt, model: usedModel, ms } = await geminiCall([...imgPart, { text: prompt }], { schema: PHOTO_SCHEMA, maxOut: 1500, onWait: m => { const o = $("#pstat") || $("#pout"); if (o) o.innerHTML = `<div class="muted" style="margin-top:14px"><span class="spin"></span>${m}</div>`; } });
   lastAi = { model: usedModel, ms };
   const items = (parseAiJson(txt).items || []).filter(i => i && i.name);
   if (!items.length) throw new Error(file ? "Es wurde nichts erkannt. Versuche ein schärferes Foto." : "Es wurde nichts erkannt. Beschreibe das Essen etwas genauer.");
-  return items.map(i => ({ name: String(i.name), grams: Math.max(1, num(i.grams) || 100), kcal: num(i.kcal), protein: num(i.protein), carbs: num(i.carbs), fat: num(i.fat), sugar: num(i.sugar), fiber: num(i.fiber), on: true }));
+  return items.map(i => ({ name: String(i.name), grams: Math.max(1, num(i.grams) || 100), kcal: num(i.kcal), protein: num(i.protein), carbs: num(i.carbs), fat: num(i.fat), sugar: num(i.sugar), fiber: num(i.fiber), sat: num(i.sat), salt: num(i.salt), on: true }));
 }
 function renderPhotoItems() {
   const o = $("#pout");
@@ -794,7 +843,8 @@ function renderPhotoItems() {
       <div class="grid2"><div><label style="margin:8px 0 3px">Menge (g)</label><div class="row" style="gap:6px"><button type="button" class="chip" data-step="-1" aria-label="weniger">−</button><input type="text" inputmode="decimal" value="${r0(i.grams)}" data-f="grams"><button type="button" class="chip" data-step="1" aria-label="mehr">+</button></div></div>${""}${fld("Kalorien (kcal)", "kcal", r0(i.kcal))}
       ${fld("Eiweiß (g)", "protein", r1(i.protein))}${fld("Kohlenhydrate (g)", "carbs", r1(i.carbs))}
       ${fld("Fett (g)", "fat", r1(i.fat))}${fld("davon Zucker (g)", "sugar", r1(i.sugar))}
-      ${fld("Ballaststoffe (g)", "fiber", r1(i.fiber))}</div>
+      ${fld("Ballaststoffe (g)", "fiber", r1(i.fiber))}${fld("davon gesättigt (g)", "sat", r1(i.sat))}
+      ${fld("Salz (g)", "salt", r2(i.salt))}</div>
       <div class="muted small" style="margin-top:8px" data-sum>${sum(i)}</div></div>`).join("") + `<div class="grid2"><button class="btn" id="pDiary">Ins Tagebuch</button><button class="btn sec" id="pDb">In Datenbank</button></div>
     <button class="btn sec block" style="margin-top:8px" id="pCsv">Als CSV speichern</button>`;
   $$("[data-k]", o).forEach(card => {
@@ -811,20 +861,20 @@ function renderPhotoItems() {
     }; inp.onchange = h; inp.oninput = h; });
   });
   const chosen = () => photoItems.filter(i => i.on);
-  const toFood = i => ({ id: uid(), name: i.name, brand: "", barcode: "", kcal: r1(i.kcal), protein: r1(i.protein), carbs: r1(i.carbs), fat: r1(i.fat), sugar: r1(i.sugar), fiber: r1(i.fiber), serving: r0(i.grams), used: 1 });
+  const toFood = i => ({ id: uid(), name: i.name, brand: "", barcode: "", kcal: r1(i.kcal), protein: r1(i.protein), carbs: r1(i.carbs), fat: r1(i.fat), sugar: r1(i.sugar), fiber: r1(i.fiber), sat: r1(i.sat), salt: r2(i.salt), serving: r0(i.grams), used: 1 });
   const own = i => i.fid && D.foods.find(x => x.id === i.fid);
   const toDb = list => list.map(i => { if (own(i)) return own(i); const f = toFood(i); const ex = D.foods.find(x => x.name.toLowerCase() === f.name.toLowerCase() && !x.barcode); if (ex) return ex; D.foods.push(f); return f; });
   $("#pDiary", o).onclick = () => {
     const items = chosen(); if (!items.length) return toast("Nichts ausgewählt");
     const foods = toDb(items);
     // Werte aus der Karte (auch geänderte) gelten für den Tagebucheintrag; eigene Lebensmittel bleiben dabei unverändert
-    items.forEach((i, k) => { foods[k].used = (foods[k].used || 0) + (i.fid ? 1 : 0); addEntry(ui.meal, own(i) ? { name: i.name, kcal: i.kcal, protein: i.protein, carbs: i.carbs, fat: i.fat } : foods[k], i.grams); });
+    items.forEach((i, k) => { foods[k].used = (foods[k].used || 0) + (i.fid ? 1 : 0); addEntry(ui.meal, own(i) ? { name: i.name, kcal: i.kcal, protein: i.protein, carbs: i.carbs, fat: i.fat, sugar: i.sugar, fiber: i.fiber, sat: i.sat, salt: i.salt } : foods[k], i.grams); });
     closeSheet(); save(); render(); toast(items.length + (items.length === 1 ? " Eintrag" : " Einträge") + " hinzugefügt");
   };
   $("#pDb", o).onclick = () => {
     const items = chosen(); if (!items.length) return toast("Nichts ausgewählt");
     let upd = 0;
-    items.forEach(i => { const f = own(i); if (f && (f.kcal !== r1(i.kcal) || f.protein !== r1(i.protein) || f.carbs !== r1(i.carbs) || f.fat !== r1(i.fat) || (f.sugar || 0) !== r1(i.sugar) || (f.fiber || 0) !== r1(i.fiber) || f.name !== i.name)) { Object.assign(f, { name: i.name, kcal: r1(i.kcal), protein: r1(i.protein), carbs: r1(i.carbs), fat: r1(i.fat), sugar: r1(i.sugar), fiber: r1(i.fiber) }); upd++; } });
+    items.forEach(i => { const f = own(i); if (f && (f.kcal !== r1(i.kcal) || f.protein !== r1(i.protein) || f.carbs !== r1(i.carbs) || f.fat !== r1(i.fat) || (f.sugar || 0) !== r1(i.sugar) || (f.fiber || 0) !== r1(i.fiber) || (f.sat || 0) !== r1(i.sat) || (f.salt || 0) !== r2(i.salt) || f.name !== i.name)) { Object.assign(f, { name: i.name, kcal: r1(i.kcal), protein: r1(i.protein), carbs: r1(i.carbs), fat: r1(i.fat), sugar: r1(i.sugar), fiber: r1(i.fiber), sat: r1(i.sat), salt: r2(i.salt) }); upd++; } });
     toDb(items.filter(i => !own(i))); save(); toast(upd ? upd + " Lebensmittel in der Datenbank geändert" : "In Datenbank gespeichert");
   };
   $("#pCsv", o).onclick = () => { if (!chosen().length) return toast("Nichts ausgewählt"); exportFile("lebensmittel-ki.csv", new Blob([foodsToCsv(chosen().map(toFood))], { type: "text/csv" })); };
@@ -836,7 +886,7 @@ function foodForm(f) {
   f = f || {};
   const v = k => esc(f[k] ?? "");
   return `<div class="pastebox"><label style="margin-top:0">Aus Text einfügen</label>
-    <textarea id="fPaste" rows="3" spellcheck="false" autocapitalize="off" autocomplete="off" placeholder="Hier einfügen, z. B.&#10;name;marke;barcode;kcal;fett;kohlenhydrate;zucker;eiweiss;ballaststoffe;portion_g&#10;Banane medium;;;89;0,3;23;12;1,1;2,6;118"></textarea>
+    <textarea id="fPaste" rows="3" spellcheck="false" autocapitalize="off" autocomplete="off" placeholder="Hier einfügen, z. B.&#10;name;marke;barcode;kcal;fett;gesaettigt;kohlenhydrate;zucker;eiweiss;ballaststoffe;salz;portion_g&#10;Banane medium;;;89;0,3;23;12;1,1;2,6;118"></textarea>
     <div class="grid2" style="margin-top:8px"><button class="btn sec small" type="button" id="fPasteGo">Felder füllen</button><button class="btn sec small" type="button" id="fPasteCopy">Auftrag für KI kopieren</button></div>
     <div class="muted tiny" style="margin-top:8px">CSV mit Semikolon, Tab oder JSON. Beim Einfügen füllt sich das Formular automatisch. Mehrere Zeilen speichern mehrere Lebensmittel auf einmal.</div></div>
     <label>Name</label><input type="text" id="fName" value="${v("name")}">
@@ -844,17 +894,20 @@ function foodForm(f) {
     <div class="muted small" style="margin-top:12px">Nährwerte pro 100 g / 100 ml</div>
     <div class="grid2"><div><label>Kalorien (kcal)</label><input type="text" inputmode="decimal" id="fKcal" value="${v("kcal")}"></div><div><label>Eiweiß (g)</label><input type="text" inputmode="decimal" id="fP" value="${v("protein")}"></div>
     <div><label>Kohlenhydrate (g)</label><input type="text" inputmode="decimal" id="fC" value="${v("carbs")}"></div><div><label>Fett (g)</label><input type="text" inputmode="decimal" id="fF" value="${v("fat")}"></div>
-    <div><label>davon Zucker (g)</label><input type="text" inputmode="decimal" id="fS" value="${v("sugar")}"></div><div><label>Ballaststoffe (g)</label><input type="text" inputmode="decimal" id="fFi" value="${v("fiber")}"></div></div>
+    <div><label>davon Zucker (g)</label><input type="text" inputmode="decimal" id="fS" value="${v("sugar")}"></div><div><label>Ballaststoffe (g)</label><input type="text" inputmode="decimal" id="fFi" value="${v("fiber")}"></div>
+    <div><label>davon gesättigte Fettsäuren (g)</label><input type="text" inputmode="decimal" id="fSat" value="${v("sat")}"></div><div><label>Salz (g)</label><input type="text" inputmode="decimal" id="fSalt" value="${v("salt")}"></div></div>
     <label>Portionsgröße (g)</label><input type="text" inputmode="decimal" id="fServ" value="${v("serving") || 100}">`;
 }
 /* Lebensmittel aus eingefügtem Text (CSV, Tab, JSON) */
 const FOOD_KEYS = { name: "name", bezeichnung: "name", lebensmittel: "name", produkt: "name", marke: "brand", brand: "brand", barcode: "barcode", ean: "barcode",
   kcal: "kcal", kalorien: "kcal", calories: "kcal", energie: "kcal", fett: "fat", fat: "fat", kohlenhydrate: "carbs", carbs: "carbs", kh: "carbs",
   zucker: "sugar", sugar: "sugar", eiweiss: "protein", "eiweiß": "protein", protein: "protein", ballaststoffe: "fiber", fiber: "fiber",
+  gesaettigt: "sat", "gesättigt": "sat", gesaettigte_fettsaeuren: "sat", "gesättigte_fettsäuren": "sat", gesaettigte_fettsaeure: "sat", saturated_fat: "sat", saturates: "sat", sat: "sat", davon_gesaettigt: "sat", "davon_gesättigt": "sat",
+  salz: "salt", salt: "salt",
   portion_g: "serving", portion: "serving", portionsgroesse: "serving", serving: "serving" };
 const foodKey = h => FOOD_KEYS[String(h).trim().toLowerCase().replace(/[\s-]+/g, "_").replace(/_100g$/, "")];
 function normFood(o) {
-  const out = { name: "", brand: "", barcode: "", kcal: 0, protein: 0, carbs: 0, fat: 0, sugar: 0, fiber: 0, serving: 100 };
+  const out = { name: "", brand: "", barcode: "", kcal: 0, protein: 0, carbs: 0, fat: 0, sugar: 0, fiber: 0, sat: 0, salt: 0, serving: 100 };
   Object.entries(o).forEach(([k, v]) => {
     const key = foodKey(k); if (!key) return;
     out[key] = ["name", "brand", "barcode"].includes(key) ? String(v ?? "").trim() : num(String(v ?? ""));
@@ -886,7 +939,7 @@ function upsertFood(f) {
   if (ex) { Object.assign(ex, f, { id: ex.id, used: ex.used || 0 }); return "updated"; }
   D.foods.push({ ...f, id: uid(), used: 0 }); return "added";
 }
-const FOOD_PROMPT = "Gib mir die Nährwerte pro 100 g für:\n(HIER LEBENSMITTEL EINTRAGEN, z. B. Banane medium)\n\nAntworte nur mit CSV, ohne weiteren Text: erste Zeile die Kopfzeile, danach eine Zeile pro Lebensmittel, Trennzeichen Semikolon.\nname;marke;barcode;kcal;fett;kohlenhydrate;zucker;eiweiss;ballaststoffe;portion_g\nBei portion_g bitte das übliche Gewicht einer Portion in Gramm angeben (z. B. mittlere Banane ohne Schale: 118).";
+const FOOD_PROMPT = "Gib mir die Nährwerte pro 100 g für:\n(HIER LEBENSMITTEL EINTRAGEN, z. B. Banane medium)\n\nAntworte nur mit CSV, ohne weiteren Text: erste Zeile die Kopfzeile, danach eine Zeile pro Lebensmittel, Trennzeichen Semikolon.\nname;marke;barcode;kcal;fett;gesaettigt;kohlenhydrate;zucker;eiweiss;ballaststoffe;salz;portion_g\ngesaettigt = davon gesättigte Fettsäuren in g, salz = Salz in g (nicht Natrium).\nBei portion_g bitte das übliche Gewicht einer Portion in Gramm angeben (z. B. mittlere Banane ohne Schale: 118).";
 async function copyText(text) {
   try { await navigator.clipboard.writeText(text); return true; } catch (e) { /* weiter */ }
   try { const ta = document.createElement("textarea"); ta.value = text; ta.style.cssText = "position:fixed;opacity:0;top:0"; document.body.append(ta); ta.select(); const ok = document.execCommand("copy"); ta.remove(); return ok; } catch (e) { return false; }
@@ -903,7 +956,7 @@ function bindPaste(root, onMulti) {
       const n = (v, keep) => v || keep ? String(v).replace(".", ",") : "";
       set("#fName", f.name); set("#fBrand", f.brand); if (f.barcode) set("#fBar", f.barcode);
       set("#fKcal", n(f.kcal, true)); set("#fP", n(f.protein, true)); set("#fC", n(f.carbs, true)); set("#fF", n(f.fat, true));
-      set("#fS", n(f.sugar)); set("#fFi", n(f.fiber)); set("#fServ", n(f.serving, true));
+      set("#fS", n(f.sugar)); set("#fFi", n(f.fiber)); set("#fSat", n(f.sat)); set("#fSalt", n(f.salt)); set("#fServ", n(f.serving, true));
       ta.value = ""; toast("Felder ausgefüllt. Bitte kurz prüfen und speichern.");
     } else {
       list.forEach(upsertFood); save(); toast(list.length + " Lebensmittel gespeichert"); onMulti();
@@ -918,13 +971,13 @@ function readFoodForm(root, base) {
   if (!name) { toast("Bitte einen Namen eingeben"); return null; }
   return { ...(base || {}), id: (base && base.id) || uid(), name, brand: $("#fBrand", root).value.trim(), barcode: $("#fBar", root).value.replace(/\D/g, ""),
     kcal: num($("#fKcal", root).value), protein: num($("#fP", root).value), carbs: num($("#fC", root).value), fat: num($("#fF", root).value),
-    sugar: num($("#fS", root).value), fiber: num($("#fFi", root).value), serving: num($("#fServ", root).value) || 100, used: (base && base.used) || 0 };
+    sugar: num($("#fS", root).value), fiber: num($("#fFi", root).value), sat: num($("#fSat", root).value), salt: num($("#fSalt", root).value), serving: num($("#fServ", root).value) || 100, used: (base && base.used) || 0 };
 }
 /* Mehrere Gerichte auf einmal (z. B. Buffet): CSV einfügen -> jede Zeile ein Tagebucheintrag, nichts landet in „Meine Lebensmittel“ */
-const MULTI_PROMPT = "Ich habe folgendes gegessen (siehe Fotos/Beschreibung):\n(HIER BESCHREIBEN, z. B. Buffet-Teller mit …)\n\nSchätze pro Gericht die Nährwerte pro 100 g und das Gewicht, das ich tatsächlich gegessen habe. Antworte nur mit CSV, ohne weiteren Text: erste Zeile die Kopfzeile, danach eine Zeile pro Gericht, Trennzeichen Semikolon, Dezimalpunkt.\nname;marke;barcode;kcal;fett;kohlenhydrate;zucker;eiweiss;ballaststoffe;portion_g\nBei portion_g das Gewicht der gegessenen Menge in Gramm angeben (die Nährwerte beziehen sich auf 100 g).";
+const MULTI_PROMPT = "Ich habe folgendes gegessen (siehe Fotos/Beschreibung):\n(HIER BESCHREIBEN, z. B. Buffet-Teller mit …)\n\nSchätze pro Gericht die Nährwerte pro 100 g und das Gewicht, das ich tatsächlich gegessen habe. Antworte nur mit CSV, ohne weiteren Text: erste Zeile die Kopfzeile, danach eine Zeile pro Gericht, Trennzeichen Semikolon, Dezimalpunkt.\nname;marke;barcode;kcal;fett;gesaettigt;kohlenhydrate;zucker;eiweiss;ballaststoffe;salz;portion_g\ngesaettigt = davon gesättigte Fettsäuren in g, salz = Salz in g (nicht Natrium).\nBei portion_g das Gewicht der gegessenen Menge in Gramm angeben (die Nährwerte beziehen sich auf 100 g).";
 function bodyMulti(b) {
   b.innerHTML = `<div class="muted small">Füge eine CSV mit mehreren Gerichten ein (z. B. von Claude oder einer anderen KI). Jede Zeile wird ein eigener Tagebucheintrag mit der Menge <b>portion_g</b>. Die Gerichte werden <b>nicht</b> in „Meine Lebensmittel“ gespeichert, erscheinen aber einzeln im Export.</div>
-    <textarea id="mPaste" rows="8" style="margin-top:10px;min-height:150px;font-size:12px" placeholder="name;marke;barcode;kcal;fett;kohlenhydrate;zucker;eiweiss;ballaststoffe;portion_g&#10;Hähnchenfleisch (angebraten);Restaurant/Buffet;;165;6.0;2.0;0.5;26.0;0.0;80"></textarea>
+    <textarea id="mPaste" rows="8" style="margin-top:10px;min-height:150px;font-size:12px" placeholder="name;marke;barcode;kcal;fett;gesaettigt;kohlenhydrate;zucker;eiweiss;ballaststoffe;salz;portion_g&#10;Hähnchenfleisch (angebraten);Restaurant/Buffet;;165;6.0;1.8;2.0;0.5;26.0;0.0;0.9;80"></textarea>
     <div id="mPrev"></div>
     <label style="margin-top:14px">Alles zuordnen zu</label>
     <div class="chips" id="mMeal">${MEALS.map(m => `<button class="chip ${m.id === ui.meal ? "on" : ""}" data-m="${m.id}">${m.name}</button>`).join("")}</div>
@@ -934,7 +987,7 @@ function bodyMulti(b) {
   const upd = () => {
     rows = []; prev.innerHTML = ""; go.disabled = true; go.textContent = "Ins Tagebuch";
     if (!ta.value.trim()) return;
-    try { rows = parseFoodsText(ta.value); } catch (e) { prev.innerHTML = `<div class="warn small" style="margin-top:10px">Das Format wurde nicht erkannt. Erwartet: name;marke;barcode;kcal;fett;kohlenhydrate;zucker;eiweiss;ballaststoffe;portion_g</div>`; return; }
+    try { rows = parseFoodsText(ta.value); } catch (e) { prev.innerHTML = `<div class="warn small" style="margin-top:10px">Das Format wurde nicht erkannt. Erwartet: name;marke;barcode;kcal;fett;gesaettigt;kohlenhydrate;zucker;eiweiss;ballaststoffe;salz;portion_g</div>`; return; }
     if (!rows.length) { prev.innerHTML = `<div class="warn small" style="margin-top:10px">Keine Zeilen erkannt.</div>`; return; }
     const tot = rows.reduce((a, f) => { const c = calc(f, f.serving); return { kcal: a.kcal + c.kcal, p: a.p + c.p, c: a.c + c.c, f: a.f + c.f }; }, { kcal: 0, p: 0, c: 0, f: 0 });
     prev.innerHTML = `<div class="list" style="margin-top:10px">${rows.map(f => { const c = calc(f, f.serving); return `<div class="entry"><div class="nm"><div class="t">${esc(f.name)}</div><div class="s"><span class="g">${r0(f.serving)} g</span><span class="cp">E ${r0(c.p)}</span><span class="cc">KH ${r0(c.c)}</span><span class="cf">F ${r0(c.f)}</span></div></div><div class="kcal">${fmt(c.kcal)}<small>kcal</small></div></div>`; }).join("")}</div>
@@ -949,7 +1002,7 @@ function bodyMulti(b) {
   go.onclick = () => {
     if (!rows.length) return;
     const meal = ui.meal;
-    rows.forEach(f => { const c = calc(f, f.serving); D.entries.push({ id: uid(), date: ui.date, meal, name: f.name, brand: f.brand || undefined, grams: f.serving, kcal: c.kcal, p: c.p, c: c.c, f: c.f, s: f.sugar * f.serving / 100, fi: f.fiber * f.serving / 100 }); });
+    rows.forEach(f => { const c = calc(f, f.serving); D.entries.push({ id: uid(), date: ui.date, meal, name: f.name, brand: f.brand || undefined, grams: f.serving, kcal: c.kcal, p: c.p, c: c.c, f: c.f, ...microOf(f, f.serving) }); });
     ui.open[meal] = true; closeSheet(); save(); render(); toast(rows.length + " Einträge zu " + mealName(meal) + " hinzugefügt");
   };
   $("#mCopy", b).onclick = async () => toast(await copyText(MULTI_PROMPT) ? "Auftrag kopiert. An die KI schicken (mit Fotos) und die Antwort hier einfügen." : "Kopieren nicht möglich");
@@ -966,7 +1019,7 @@ function bodyManual(b) {
 
 /* ---------- Rezepte ---------- */
 let rdraft = null;
-const per100 = f => ({ kcal: f.kcal, protein: f.protein, carbs: f.carbs, fat: f.fat });
+const per100 = f => ({ kcal: f.kcal, protein: f.protein, carbs: f.carbs, fat: f.fat, ...pick100(f) });
 function recipeTotals(r) {
   const t = { kcal: 0, p: 0, c: 0, f: 0, grams: 0 };
   r.items.forEach(i => { const c = calc(i, i.grams); t.kcal += c.kcal; t.p += c.p; t.c += c.c; t.f += c.f; t.grams += i.grams; });
@@ -1040,7 +1093,8 @@ function pickRecipe(r) {
     ui.meal = $("#rm", s).value;
     const gf = tot.grams > 0 ? g / (tot.grams * f) : 1; // Verhältnis Waage (fertig) zu Summe der Zutaten
     D.entries.push({ id: uid(), date: ui.date, meal: ui.meal, rid: r.id, name: r.name, grams: g, kcal: tot.kcal * f, p: tot.p * f, c: tot.c * f, f: tot.f * f, ...(Math.abs(gf - 1) > 1e-6 ? { gf } : {}),
-      ings: r.items.map(i => ({ name: i.name, grams: i.grams * f, kcal: i.kcal, protein: i.protein, carbs: i.carbs, fat: i.fat })) });
+      ...(() => { const mi = microFromIngs(r.items), o = {}; MICRO.forEach(m => { if (hasN(mi[m.ek])) o[m.ek] = mi[m.ek] * f; }); return o; })(),
+      ings: r.items.map(i => ({ name: i.name, grams: i.grams * f, kcal: i.kcal, protein: i.protein, carbs: i.carbs, fat: i.fat, ...pick100(i) })) });
     r.used = (r.used || 0) + 1;
     closeSheet(); save(); render(); toast("Hinzugefügt");
   };
@@ -1100,7 +1154,7 @@ function drawRecipeEditor() {
     if (!d.name) return toast("Bitte einen Namen eingeben");
     if (!d.items.length) return toast("Füge mindestens eine Zutat hinzu");
     if (d.items.some(i => i.grams <= 0)) return toast("Jede Zutat braucht eine Menge");
-    const rec = { id: d.id || uid(), name: d.name, servings: d.servings, weight: d.weight > 0 ? d.weight : 0, items: d.items.map(i => ({ name: i.name, grams: i.grams, kcal: i.kcal, protein: i.protein, carbs: i.carbs, fat: i.fat })), used: 0 };
+    const rec = { id: d.id || uid(), name: d.name, servings: d.servings, weight: d.weight > 0 ? d.weight : 0, items: d.items.map(i => ({ name: i.name, grams: i.grams, kcal: i.kcal, protein: i.protein, carbs: i.carbs, fat: i.fat, ...pick100(i) })), used: 0 };
     const ex = D.recipes.find(x => x.id === rec.id);
     if (ex) { rec.used = ex.used || 0; Object.assign(ex, rec); } else D.recipes.push(rec);
     save(); toast("Rezept gespeichert"); recipeExit();
@@ -1187,8 +1241,41 @@ function mealToRecipe(meal) {
   const es = dayEntries(ui.date).filter(e => e.meal === meal && e.grams > 0);
   if (!es.length) return;
   recipeEditor(null, "close");
-  rdraft.items = es.map(e => ({ name: e.name, grams: e.grams, kcal: e.kcal / e.grams * 100, protein: e.p / e.grams * 100, carbs: e.c / e.grams * 100, fat: e.f / e.grams * 100 }));
+  rdraft.items = es.map(e => { const it = { name: e.name, grams: e.grams, kcal: e.kcal / e.grams * 100, protein: e.p / e.grams * 100, carbs: e.c / e.grams * 100, fat: e.f / e.grams * 100 }; MICRO.forEach(m => { if (hasN(e[m.ek])) it[m.fk] = e[m.ek] / e.grams * 100; }); return it; });
   drawRecipeEditor();
+}
+
+/* ---------- Nährstoff-Details pro Tag ---------- */
+function microRefs() { const k = D.settings.kcal; return { s: { max: k * 0.10 / 4 }, fi: { min: 30 }, sa: { max: k * 0.10 / 9 }, sl: { max: 6 } }; }
+function microMissNote(m) { const n = Math.max(...MICRO.map(x => m.miss[x.ek])); return n > 0 ? ` (bei bis zu ${n} Einträgen fehlt die Angabe)` : ""; }
+const MICRO_HINT = { s: "Richtwert: unter 10 % der Kalorien (zählt auch Zucker aus Obst und Milch)", fi: "Richtwert: mindestens 30 g am Tag", sa: "Richtwert: unter 10 % der Kalorien", sl: "Richtwert: höchstens 6 g am Tag" };
+function nutrientSheet(date) {
+  date = date || ui.date;
+  const list = dayEntries(date);
+  if (fillMissingMicro(list)) save();
+  const t = sum(list), m = microSum(list), refs = microRefs();
+  const head = `<div class="row between" style="margin:-4px 0 12px"><button class="iconbtn" id="nvPrev" aria-label="Vorheriger Tag">${icon("left", 18)}</button><div style="text-align:center"><h3 style="margin:0">Nährstoffe</h3><div class="muted small">${niceDate(date)}, ${fromIso(date).toLocaleDateString("de-DE", { day: "numeric", month: "long" })}</div></div><button class="iconbtn" id="nvNext" aria-label="Nächster Tag">${icon("right", 18)}</button></div>`;
+  let body;
+  if (!list.length) body = `<div class="muted center" style="padding:28px 10px">An diesem Tag ist noch nichts eingetragen.</div>`;
+  else {
+    const rows = MICRO.map(x => {
+      const v = m[x.ek], ref = refs[x.ek], isMin = ref.min != null, lim = isMin ? ref.min : ref.max;
+      const pct = lim > 0 ? Math.min(v / lim * 100, 100) : 0, bad = !isMin && v > lim, good = isMin && v >= lim;
+      const top = list.filter(e => hasN(e[x.ek]) && e[x.ek] > 0.05).sort((a, b) => b[x.ek] - a[x.ek]).slice(0, 3).map(e => `${esc(e.name)} ${nde(e[x.ek])} g`).join(" · ");
+      const miss = m.miss[x.ek];
+      return `<div class="nrow"><div class="row between"><b>${x.name}</b><span><b ${bad ? 'class="warn"' : ""}>${nde(v, x.ek === "sl" ? 2 : 1)} g</b> <span class="muted small">${isMin ? "von mind." : "von max."} ${nde(lim, 0)} g</span></span></div>
+        <div class="nbar"><i class="${bad ? "warn" : good ? "good" : ""}" style="width:${pct}%"></i></div>
+        <div class="muted tiny">${MICRO_HINT[x.ek]}</div>${top ? `<div class="muted tiny">Meist aus: ${top}</div>` : ""}
+        ${miss ? `<div class="warn tiny">Für ${miss} von ${list.length} Einträgen ist diese Angabe nicht bekannt.</div>` : ""}</div>`;
+    }).join("");
+    body = `<div class="card nsum"><div><b>${fmt(t.kcal)}</b><span class="muted tiny">kcal</span></div><div><b>${r0(t.p)} g</b><span class="muted tiny">Eiweiß</span></div>
+      <div><b>${r0(t.c)} g</b><span class="muted tiny">Kohlenh.${hasN(m.s) ? ", davon Zucker " + nde(m.s, 0) + " g" : ""}</span></div><div><b>${r0(t.f)} g</b><span class="muted tiny">Fett${hasN(m.sa) ? ", davon gesättigt " + nde(m.sa, 0) + " g" : ""}</span></div></div>${rows}
+      <div class="muted tiny" style="margin-top:12px">Richtwerte nach WHO/DGE sind eine Orientierung, keine Ernährungsberatung. Die Werte stammen aus deiner Datenbank, Scans, Rezepten oder KI-Schätzungen.</div>`;
+  }
+  const s = sheet(head + body + `<button class="btn sec block" style="margin-top:16px" id="nvClose">Schließen</button>`);
+  $("#nvClose", s).onclick = closeSheet;
+  $("#nvPrev", s).onclick = () => nutrientSheet(addDays(date, -1));
+  $("#nvNext", s).onclick = () => nutrientSheet(addDays(date, 1));
 }
 
 /* ---------- Tages-Diagramm: Mahlzeiten und Makros ---------- */
@@ -1224,7 +1311,7 @@ function entryIngs(e) {
   if (Array.isArray(e.ings) && e.ings.length) return e.ings.map(i => ({ ...i }));
   const r = recipeFor(e); if (!r || !r.items || !r.items.length) return null;
   const tot = r.items.reduce((a, i) => a + i.grams, 0), k = tot > 0 ? e.grams / tot : 1;
-  return r.items.map(i => ({ name: i.name, grams: i.grams * k, kcal: i.kcal, protein: i.protein, carbs: i.carbs, fat: i.fat }));
+  return r.items.map(i => ({ name: i.name, grams: i.grams * k, kcal: i.kcal, protein: i.protein, carbs: i.carbs, fat: i.fat, ...pick100(i) }));
 }
 function editEntry(id) {
   const e = D.entries.find(x => x.id === id); if (!e) return;
@@ -1256,12 +1343,12 @@ function editEntry(id) {
   $("#es", s).onclick = () => {
     if (ings && dirty) {
       const t = tot(); if (t.g <= 0) return toast("Mindestens eine Zutat mit Menge");
-      const old = e.kcal || 0;
-      if (e.s != null && old > 0) e.s *= t.kcal / old; if (e.fi != null && old > 0) e.fi *= t.kcal / old;
+      const old = e.kcal || 0, mi = microFromIngs(ings);
+      MICRO.forEach(m => { if (hasN(mi[m.ek])) e[m.ek] = mi[m.ek]; else if (hasN(e[m.ek]) && old > 0) e[m.ek] *= t.kcal / old; });
       e.kcal = t.kcal; e.p = t.p; e.c = t.c; e.f = t.f; e.grams = t.g * gf; e.ings = ings;
     } else {
       const g = num($("#eg", s).value); if (g <= 0) return toast("Menge eingeben");
-      const k = g / e.grams; e.kcal *= k; e.p *= k; e.c *= k; e.f *= k; if (e.s != null) e.s *= k; if (e.fi != null) e.fi *= k; e.grams = g;
+      const k = g / e.grams; e.kcal *= k; e.p *= k; e.c *= k; e.f *= k; scaleMicro(e, k); e.grams = g;
       if (Array.isArray(e.ings)) e.ings = e.ings.map(i => ({ ...i, grams: i.grams * k }));
     }
     e.meal = $("#em", s).value;
@@ -1322,8 +1409,8 @@ function foodEdit(f) {
 }
 
 /* ---------- CSV ---------- */
-const CSV_COLS = ["name", "brand", "barcode", "kcal", "fat", "carbs", "sugar", "protein", "fiber", "serving"];
-const CSV_HEAD = ["name", "marke", "barcode", "kcal", "fett", "kohlenhydrate", "zucker", "eiweiss", "ballaststoffe", "portion_g"];
+const CSV_COLS = ["name", "brand", "barcode", "kcal", "fat", "sat", "carbs", "sugar", "protein", "fiber", "salt", "serving"];
+const CSV_HEAD = ["name", "marke", "barcode", "kcal", "fett", "gesaettigt", "kohlenhydrate", "zucker", "eiweiss", "ballaststoffe", "salz", "portion_g"];
 const csvCell = v => { const s = String(v ?? ""); return /[";\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
 function foodsToCsv(foods) {
   return "﻿" + [CSV_HEAD.join(";")].concat(foods.map(f => CSV_COLS.map(c => csvCell(typeof f[c] === "number" ? String(f[c]).replace(".", ",") : f[c])).join(";"))).join("\r\n") + "\r\n";
@@ -1347,7 +1434,7 @@ function parseCsv(text) {
 function importCsv(text) {
   const rows = parseCsv(text); if (rows.length < 2) return { added: 0, updated: 0 };
   const alias = { name: "name", bezeichnung: "name", lebensmittel: "name", marke: "brand", brand: "brand", barcode: "barcode", ean: "barcode", kcal: "kcal", kalorien: "kcal", fett: "fat", fat: "fat",
-    kohlenhydrate: "carbs", carbs: "carbs", kh: "carbs", zucker: "sugar", sugar: "sugar", eiweiss: "protein", "eiweiß": "protein", protein: "protein", ballaststoffe: "fiber", fiber: "fiber", portion_g: "serving", portion: "serving", serving: "serving" };
+    kohlenhydrate: "carbs", carbs: "carbs", kh: "carbs", zucker: "sugar", sugar: "sugar", eiweiss: "protein", "eiweiß": "protein", protein: "protein", ballaststoffe: "fiber", fiber: "fiber", gesaettigt: "sat", "gesättigt": "sat", gesaettigte_fettsaeuren: "sat", "gesättigte_fettsäuren": "sat", sat: "sat", salz: "salt", salt: "salt", portion_g: "serving", portion: "serving", serving: "serving" };
   const idx = {};
   rows[0].forEach((h, i) => { const k = alias[h.trim().toLowerCase()]; if (k && idx[k] == null) idx[k] = i; });
   if (idx.name == null) throw new Error("Spalte „name“ fehlt in der CSV");
@@ -1355,7 +1442,8 @@ function importCsv(text) {
   rows.slice(1).forEach(r => {
     const g = k => idx[k] == null ? "" : (r[idx[k]] ?? "").trim();
     const name = g("name"); if (!name) return;
-    const f = { name, brand: g("brand"), barcode: g("barcode").replace(/\D/g, ""), kcal: num(g("kcal")), protein: num(g("protein")), carbs: num(g("carbs")), fat: num(g("fat")), sugar: num(g("sugar")), fiber: num(g("fiber")), serving: num(g("serving")) || 100 };
+    const f = { name, brand: g("brand"), barcode: g("barcode").replace(/\D/g, ""), kcal: num(g("kcal")), protein: num(g("protein")), carbs: num(g("carbs")), fat: num(g("fat")), sugar: num(g("sugar")), fiber: num(g("fiber")), sat: num(g("sat")), salt: num(g("salt")), serving: num(g("serving")) || 100 };
+    if (idx.sat == null) delete f.sat; if (idx.salt == null) delete f.salt;
     const ex = D.foods.find(x => (f.barcode && x.barcode === f.barcode) || (!f.barcode && !x.barcode && x.name.toLowerCase() === f.name.toLowerCase() && x.brand === f.brand));
     if (ex) { Object.assign(ex, f); updated++; } else { D.foods.push({ ...f, id: uid(), used: 0 }); added++; }
   });
@@ -1403,6 +1491,7 @@ const nde = (v, d = 1) => (Math.round(v * Math.pow(10, d)) / Math.pow(10, d)).to
 const dLong = x => fromIso(x).toLocaleDateString("de-DE", { weekday: "long", day: "2-digit", month: "2-digit", year: "numeric" });
 function recipeFor(e) { return (e.rid && D.recipes.find(r => r.id === e.rid)) || D.recipes.find(r => r.name === e.name) || null; }
 function buildReport(from, to) {
+  for (let d = from; d <= to; d = addDays(d, 1)) fillMissingMicro(dayEntries(d));
   const g = goals(), s = D.settings, days = [];
   for (let d = from; d <= to; d = addDays(d, 1)) days.push(d);
   const rows = days.map(d => { const es = dayEntries(d); return { d, es, t: sum(es) }; });
@@ -1414,6 +1503,7 @@ function buildReport(from, to) {
   out.push("", "## Tagesziele");
   out.push(`- Kalorien: ${nde(g.kcal, 0)} kcal`);
   out.push(`- Eiweiß: ${nde(g.p, 0)} g (${s.pP} %) · Kohlenhydrate: ${nde(g.c, 0)} g (${s.pC} %) · Fett: ${nde(g.f, 0)} g (${s.pF} %)`);
+  { const rf = microRefs(); out.push(`- Richtwerte (Orientierung): Zucker unter ${nde(rf.s.max, 0)} g · Ballaststoffe mindestens ${nde(rf.fi.min, 0)} g · gesättigte Fettsäuren unter ${nde(rf.sa.max, 0)} g · Salz höchstens ${nde(rf.sl.max, 0)} g pro Tag`); }
   if (s.goalWeight) out.push(`- Zielgewicht: ${s.goalWeight} kg`);
   if (days.length > 1) {
     const a = sum(logged.flatMap(r => r.es)), L = logged.length || 1;
@@ -1421,18 +1511,20 @@ function buildReport(from, to) {
     out.push(`- Erfasste Tage: ${logged.length} von ${days.length}`);
     if (logged.length) {
       out.push(`- Durchschnitt pro erfasstem Tag: ${nde(a.kcal / L, 0)} kcal · Eiweiß ${nde(a.p / L, 0)} g · Kohlenhydrate ${nde(a.c / L, 0)} g · Fett ${nde(a.f / L, 0)} g`);
+      { const mm = microSum(logged.flatMap(r => r.es)); out.push(`- Durchschnitt weitere Nährstoffe pro erfasstem Tag: Zucker ${nde(mm.s / L)} g · Ballaststoffe ${nde(mm.fi / L)} g · gesättigte Fettsäuren ${nde(mm.sa / L)} g · Salz ${nde(mm.sl / L, 2)} g${microMissNote(mm)}`); }
       out.push(`- Tage im Zielbereich (±10 % vom Kalorienziel): ${logged.filter(r => Math.abs(r.t.kcal - g.kcal) <= g.kcal * 0.1).length}`);
     }
     const ws = days.filter(d => D.weights[d] != null);
     if (ws.length) out.push(`- Gewicht: ${nde(D.weights[ws[0]])} kg (${fromIso(ws[0]).toLocaleDateString("de-DE")}) → ${nde(D.weights[ws[ws.length - 1]])} kg (${fromIso(ws[ws.length - 1]).toLocaleDateString("de-DE")})`);
-    out.push("", "| Datum | kcal | Eiweiß g | Kohlenh. g | Fett g | Gewicht kg |", "|---|---|---|---|---|---|");
-    rows.forEach(r => out.push(`| ${fromIso(r.d).toLocaleDateString("de-DE", { weekday: "short", day: "2-digit", month: "2-digit" })} | ${r.es.length ? nde(r.t.kcal, 0) : "–"} | ${r.es.length ? nde(r.t.p, 0) : "–"} | ${r.es.length ? nde(r.t.c, 0) : "–"} | ${r.es.length ? nde(r.t.f, 0) : "–"} | ${D.weights[r.d] != null ? nde(D.weights[r.d]) : ""} |`));
+    out.push("", "| Datum | kcal | Eiweiß g | Kohlenh. g | Fett g | Zucker g | Ballaststoffe g | ges. Fett g | Salz g | Gewicht kg |", "|---|---|---|---|---|---|---|---|---|---|");
+    rows.forEach(r => out.push(`| ${fromIso(r.d).toLocaleDateString("de-DE", { weekday: "short", day: "2-digit", month: "2-digit" })} | ${r.es.length ? nde(r.t.kcal, 0) : "–"} | ${r.es.length ? nde(r.t.p, 0) : "–"} | ${r.es.length ? nde(r.t.c, 0) : "–"} | ${r.es.length ? nde(r.t.f, 0) : "–"} | ${(() => { if (!r.es.length) return "– | – | – | –"; const q = microSum(r.es); return [nde(q.s, 0), nde(q.fi, 0), nde(q.sa, 0), nde(q.sl, 1)].join(" | "); })()} | ${D.weights[r.d] != null ? nde(D.weights[r.d]) : ""} |`));
   }
   const order = MEALS.map(m => m.id);
   rows.forEach(r => {
     out.push("", `## ${dLong(r.d)}`);
     if (!r.es.length) { out.push("Keine Einträge."); if (D.weights[r.d] != null) out.push(`Gewicht: ${nde(D.weights[r.d])} kg`); return; }
     out.push(`Summe: ${nde(r.t.kcal, 0)} kcal (Ziel ${nde(g.kcal, 0)}) · Eiweiß ${nde(r.t.p, 0)} g (Ziel ${nde(g.p, 0)}) · Kohlenhydrate ${nde(r.t.c, 0)} g (Ziel ${nde(g.c, 0)}) · Fett ${nde(r.t.f, 0)} g (Ziel ${nde(g.f, 0)})`);
+    { const q = microSum(r.es); out.push(`Weitere Nährstoffe: Zucker ${nde(q.s)} g · Ballaststoffe ${nde(q.fi)} g · gesättigte Fettsäuren ${nde(q.sa)} g · Salz ${nde(q.sl, 2)} g${microMissNote(q)}`); }
     if (D.weights[r.d] != null) out.push(`Gewicht: ${nde(D.weights[r.d])} kg`);
     order.forEach(mid => {
       const es = r.es.filter(e => e.meal === mid || (!order.includes(e.meal) && mid === "s")); if (!es.length) return;
@@ -1440,7 +1532,7 @@ function buildReport(from, to) {
       out.push("", `### ${mealName(mid)} – ${nde(ms.kcal, 0)} kcal (Eiweiß ${nde(ms.p, 0)} g · KH ${nde(ms.c, 0)} g · Fett ${nde(ms.f, 0)} g)`);
       es.forEach(e => {
         const rec = recipeFor(e);
-        out.push(`- ${rec ? "Rezept: " : ""}${e.name}${e.brand ? " (" + e.brand + ")" : ""}, ${nde(e.grams, 0)} g – ${nde(e.kcal, 0)} kcal · E ${nde(e.p)} · KH ${nde(e.c)} · F ${nde(e.f)}${e.s != null ? " · Zucker " + nde(e.s) : ""}${e.fi != null ? " · Ballaststoffe " + nde(e.fi) : ""}`);
+        out.push(`- ${rec ? "Rezept: " : ""}${e.name}${e.brand ? " (" + e.brand + ")" : ""}, ${nde(e.grams, 0)} g – ${nde(e.kcal, 0)} kcal · E ${nde(e.p)} · KH ${nde(e.c)} · F ${nde(e.f)}${hasN(e.s) ? " · Zucker " + nde(e.s) : ""}${hasN(e.fi) ? " · Ballaststoffe " + nde(e.fi) : ""}${hasN(e.sa) ? " · ges. Fettsäuren " + nde(e.sa) : ""}${hasN(e.sl) ? " · Salz " + nde(e.sl, 2) : ""}`);
         if (Array.isArray(e.ings) && e.ings.length) {
           e.ings.filter(i => !i.off).forEach(i => { const c = calc(i, i.grams); out.push(`  - Zutat: ${i.name}, ${nde(i.grams, 0)} g – ${nde(c.kcal, 0)} kcal · E ${nde(c.p)} · KH ${nde(c.c)} · F ${nde(c.f)}`); });
         } else if (rec && rec.items && rec.items.length) {
@@ -1462,13 +1554,13 @@ const mealName = id => (MEALS.find(m => m.id === id) || MEALS[3]).name;
 function diaryCsv() {
   const order = MEALS.map(m => m.id);
   const es = D.entries.slice().sort((a, b) => a.date.localeCompare(b.date) || order.indexOf(a.meal) - order.indexOf(b.meal));
-  return csvOf(["datum", "mahlzeit", "name", "menge_g", "kcal", "eiweiss", "kohlenhydrate", "fett"], es.map(e => [e.date, mealName(e.meal), e.name, csvNum(e.grams), csvNum(e.kcal), csvNum(e.p), csvNum(e.c), csvNum(e.f)]));
+  return csvOf(["datum", "mahlzeit", "name", "menge_g", "kcal", "eiweiss", "kohlenhydrate", "fett", "zucker", "ballaststoffe", "gesaettigt", "salz"], es.map(e => [e.date, mealName(e.meal), e.name, csvNum(e.grams), csvNum(e.kcal), csvNum(e.p), csvNum(e.c), csvNum(e.f), ...MICRO.map(m => hasN(e[m.ek]) ? csvNum(e[m.ek]) : "")]));
 }
 function weightCsv() { return csvOf(["datum", "gewicht_kg"], weightList().map(w => [w.d, csvNum(w.w)])); }
 function recipesCsv() {
   const rows = [];
-  D.recipes.forEach(r => r.items.forEach(i => rows.push([r.name, csvNum(r.servings), i.name, csvNum(i.grams), csvNum(i.kcal), csvNum(i.protein), csvNum(i.carbs), csvNum(i.fat), r.weight > 0 ? csvNum(r.weight) : ""])));
-  return csvOf(["rezept", "portionen", "zutat", "menge_g", "kcal_100g", "eiweiss_100g", "kohlenhydrate_100g", "fett_100g", "gesamtgewicht_g"], rows);
+  D.recipes.forEach(r => r.items.forEach(i => rows.push([r.name, csvNum(r.servings), i.name, csvNum(i.grams), csvNum(i.kcal), csvNum(i.protein), csvNum(i.carbs), csvNum(i.fat), r.weight > 0 ? csvNum(r.weight) : "", ...["sugar", "fiber", "sat", "salt"].map(k => hasN(i[k]) ? csvNum(i[k]) : "")])));
+  return csvOf(["rezept", "portionen", "zutat", "menge_g", "kcal_100g", "eiweiss_100g", "kohlenhydrate_100g", "fett_100g", "gesamtgewicht_g", "zucker_100g", "ballaststoffe_100g", "gesaettigt_100g", "salz_100g"], rows);
 }
 const csvBlob = t => new Blob([t], { type: "text/csv" });
 
@@ -1493,19 +1585,21 @@ function importAnyCsv(text) {
   const get = (r, i) => i < 0 ? "" : (r[i] ?? "").trim();
   const iRec = col("rezept"), iIng = col("zutat"), iDate = col("datum"), iMeal = col("mahlzeit"), iKg = col("gewicht_kg", "gewicht", "kg");
   if (iRec >= 0 && iIng >= 0) {
-    const iS = col("portionen"), iG = col("menge_g"), iK = col("kcal_100g"), iP = col("eiweiss_100g"), iC = col("kohlenhydrate_100g"), iF = col("fett_100g"), iW = col("gesamtgewicht_g");
+    const iS = col("portionen"), iG = col("menge_g"), iK = col("kcal_100g"), iP = col("eiweiss_100g"), iC = col("kohlenhydrate_100g"), iF = col("fett_100g"), iW = col("gesamtgewicht_g"), iMi = ["zucker_100g", "ballaststoffe_100g", "gesaettigt_100g", "salz_100g"].map(n => col(n));
     const byName = new Map();
     rows.slice(1).forEach(r => {
       const n = get(r, iRec); if (!n || !get(r, iIng)) return;
       if (!byName.has(n)) byName.set(n, { id: uid(), name: n, servings: num(get(r, iS)) || 1, weight: num(get(r, iW)) || 0, items: [], used: 0 });
-      byName.get(n).items.push({ name: get(r, iIng), grams: num(get(r, iG)) || 100, kcal: num(get(r, iK)), protein: num(get(r, iP)), carbs: num(get(r, iC)), fat: num(get(r, iF)) });
+      const it = { name: get(r, iIng), grams: num(get(r, iG)) || 100, kcal: num(get(r, iK)), protein: num(get(r, iP)), carbs: num(get(r, iC)), fat: num(get(r, iF)) };
+      MICRO.forEach((m, k) => { if (iMi[k] >= 0 && get(r, iMi[k]) !== "") it[m.fk] = num(get(r, iMi[k])); });
+      byName.get(n).items.push(it);
     });
     let added = 0, updated = 0;
     byName.forEach(rec => { const ex = D.recipes.find(x => x.name.toLowerCase() === rec.name.toLowerCase()); if (ex) { rec.id = ex.id; rec.used = ex.used || 0; Object.assign(ex, rec); updated++; } else { D.recipes.push(rec); added++; } });
     return `${added} Rezepte neu, ${updated} aktualisiert`;
   }
   if (iDate >= 0 && iMeal >= 0) {
-    const iN = col("name", "lebensmittel"), iG = col("menge_g"), iK = col("kcal"), iP = col("eiweiss"), iC = col("kohlenhydrate"), iF = col("fett");
+    const iN = col("name", "lebensmittel"), iG = col("menge_g"), iK = col("kcal"), iP = col("eiweiss"), iC = col("kohlenhydrate"), iF = col("fett"), iMe = ["zucker", "ballaststoffe", "gesaettigt", "salz"].map(n => col(n));
     const key = e => [e.date, e.meal, e.name.toLowerCase(), Math.round(e.grams), Math.round(e.kcal)].join("|");
     const have = new Set(D.entries.map(key));
     let added = 0, skipped = 0;
@@ -1513,6 +1607,7 @@ function importAnyCsv(text) {
       const date = isoDate(get(r, iDate)), name = get(r, iN); if (!date || !name) return;
       const m = MEALS.find(x => x.name.toLowerCase() === get(r, iMeal).toLowerCase() || x.id === get(r, iMeal).toLowerCase());
       const e = { id: uid(), date, meal: m ? m.id : "s", name, grams: num(get(r, iG)), kcal: num(get(r, iK)), p: num(get(r, iP)), c: num(get(r, iC)), f: num(get(r, iF)) };
+      MICRO.forEach((m, k) => { if (iMe[k] >= 0 && get(r, iMe[k]) !== "") e[m.ek] = num(get(r, iMe[k])); });
       if (have.has(key(e))) { skipped++; return; }
       have.add(key(e)); D.entries.push(e); added++;
     });
@@ -1673,7 +1768,7 @@ function gapAnalysis(date) {
   const left = { kcal: g.kcal - t.kcal, p: g.p - t.p, c: g.c - t.c, f: g.f - t.f };
   // Ballaststoffe nur dort, wo der Eintrag einem Lebensmittel aus der Liste zugeordnet werden kann
   let fiber = 0, matched = 0;
-  list.forEach(e => { const f = D.foods.find(x => x.name === e.name); if (f && num(f.fiber) > 0) { fiber += f.fiber * e.grams / 100; matched++; } });
+  list.forEach(e => { if (hasN(e.fi)) { fiber += e.fi; matched++; return; } const f = D.foods.find(x => x.name === e.name); if (f && num(f.fiber) > 0) { fiber += f.fiber * e.grams / 100; matched++; } });
   return { g, t, left, n: list.length, fiber, matched };
 }
 function gapSheetHtml() {
@@ -1823,6 +1918,7 @@ document.addEventListener("click", async ev => {
   else if (a === "exWeight") { if (!Object.keys(D.weights).length) return toast("Noch kein Gewicht eingetragen"); exportFile("foodpro-gewicht.csv", csvBlob(weightCsv())); }
   else if (a === "exRecipes") { if (!D.recipes.length) return toast("Noch keine Rezepte"); exportFile("foodpro-rezepte.csv", csvBlob(recipesCsv())); }
   else if (a === "dayChart") dayChart();
+  else if (a === "nutri") nutrientSheet(ui.date);
   else if (a.startsWith("dbx")) dbxAction(a);
   else if (a === "wipe") {
     const sh = sheet(`<h3>Alle Daten löschen</h3>
