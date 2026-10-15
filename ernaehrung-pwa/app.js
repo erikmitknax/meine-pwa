@@ -1315,6 +1315,7 @@ function entryIngs(e) {
 }
 function editEntry(id) {
   const e = D.entries.find(x => x.id === id); if (!e) return;
+  if (fillMissingMicro([e])) save();
   const ings = entryIngs(e), gf = e.gf > 0 ? e.gf : 1; // Waage fertig / Summe Zutaten
   let dirty = false;
   const tot = () => { const t = { g: 0, kcal: 0, p: 0, c: 0, f: 0 }; ings.forEach(i => { if (i.off) return; const c = calc(i, i.grams); t.g += i.grams; t.kcal += c.kcal; t.p += c.p; t.c += c.c; t.f += c.f; }); return t; };
@@ -1323,13 +1324,29 @@ function editEntry(id) {
     <div class="muted small" style="margin:2px 0 8px">Mengen ändern oder Zutaten abwählen. Das gespeicherte Rezept bleibt unverändert, beim nächsten Mal ist wieder alles wie im Rezept.</div>
     ${ings.map((i, k) => `<div class="row" data-i="${k}" style="gap:8px;margin-bottom:8px"><input type="checkbox" ${i.off ? "" : "checked"} data-o style="width:22px;height:22px"><div class="grow" style="min-width:0"><div style="font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(i.name)}</div></div><input type="text" inputmode="decimal" value="${r0(i.grams)}" data-g style="width:84px;flex:none"><span class="muted small">g</span></div>`).join("")}
     <div class="muted small" id="eiSum" style="margin-top:4px"></div>` : "";
-  const s = sheet(`<h3>${esc(e.name)}</h3><div class="muted small" id="eHead">${r0(e.kcal)} kcal · E ${r1(e.p)} · KH ${r1(e.c)} · F ${r1(e.f)}</div>
+  const s = sheet(`<h3>${esc(e.name)}</h3><div id="eNut"></div>
     ${ings ? "" : `<label>Menge (g)</label><input type="text" inputmode="decimal" id="eg" value="${r0(e.grams)}">`}${ings ? `<label>Menge gesamt (g)</label><input type="text" inputmode="decimal" id="eg" value="${r0(e.grams)}">` : ""}
     ${ingHtml}
     <label>Mahlzeit</label><select id="em">${MEALS.map(m => `<option value="${m.id}" ${m.id === e.meal ? "selected" : ""}>${m.name}</option>`).join("")}</select>
     <button class="btn block" style="margin-top:14px" id="es">Speichern</button>
     <button class="btn danger block" style="margin-top:8px" id="ed">Eintrag löschen</button>`);
-  const refresh = () => { if (!ings) return; const t = tot(); $("#eiSum", s).textContent = "Summe: " + r0(t.g * gf) + " g · " + line(t); $("#eg", s).value = r0(t.g * gf); };
+  // Nährstoff-Aufschlüsselung dieses Eintrags (rechnet bei Änderungen live mit)
+  const curVals = () => {
+    if (ings && dirty) { const t = tot(), mi = microFromIngs(ings), v = { kcal: t.kcal, p: t.p, c: t.c, f: t.f }; MICRO.forEach(m => { v[m.ek] = hasN(mi[m.ek]) ? mi[m.ek] : (hasN(e[m.ek]) && e.kcal > 0 ? e[m.ek] * t.kcal / e.kcal : undefined); }); return v; }
+    const g = num(($("#eg", s) || {}).value), k = g > 0 && e.grams > 0 ? g / e.grams : 1, v = { kcal: e.kcal * k, p: e.p * k, c: e.c * k, f: e.f * k };
+    MICRO.forEach(m => { v[m.ek] = hasN(e[m.ek]) ? e[m.ek] * k : undefined; }); return v;
+  };
+  const drawNut = () => {
+    const v = curVals(), kt = v.p * 4 + v.c * 4 + v.f * 9 || 1, refs = microRefs(), pc = x => Math.round(x / kt * 100);
+    $("#eNut", s).innerHTML = `<div class="nsum" style="margin-top:6px"><div><b>${fmt(v.kcal)}</b><span class="muted tiny">kcal</span></div><div><b>${r1(v.p)} g</b><span class="muted tiny cp">Eiweiß · ${pc(v.p * 4)} % der kcal</span></div>
+      <div><b>${r1(v.c)} g</b><span class="muted tiny cc">Kohlenhydrate · ${pc(v.c * 4)} %</span></div><div><b>${r1(v.f)} g</b><span class="muted tiny cf">Fett · ${pc(v.f * 9)} %</span></div></div>
+      <div class="stack" style="margin:2px 0 10px"><div style="display:flex;width:100%;height:100%"><i class="p" style="width:${v.p * 4 / kt * 100}%"></i><i class="c" style="width:${v.c * 4 / kt * 100}%"></i><i class="f" style="width:${v.f * 9 / kt * 100}%"></i></div></div>
+      ${MICRO.map(x => { const val = v[x.ek], ref = refs[x.ek], isMin = ref.min != null, lim = isMin ? ref.min : ref.max;
+        return `<div class="row between" style="padding:5px 2px;font-size:14.5px"><span>${x.ek === "s" ? "davon Zucker" : x.ek === "sa" ? "davon gesättigt" : x.name}</span>${hasN(val) ? `<span><b>${nde(val, x.ek === "sl" ? 2 : 1)} g</b> <span class="muted tiny">${Math.round(val / lim * 100)} % ${isMin ? "des Tagesziels" : "des Tageslimits"}</span></span>` : `<span class="muted small">nicht bekannt</span>`}</div>`; }).join("")}`;
+  };
+  drawNut();
+  if ($("#eg", s)) $("#eg", s).oninput = () => { if (!ings) drawNut(); };
+  const refresh = () => { drawNut(); if (!ings) return; const t = tot(); $("#eiSum", s).textContent = "Summe: " + r0(t.g * gf) + " g · " + line(t); $("#eg", s).value = r0(t.g * gf); };
   if (ings) {
     refresh();
     $$("[data-i]", s).forEach(row => {
