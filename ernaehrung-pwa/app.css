@@ -269,3 +269,6 @@ textarea::placeholder{color:var(--muted);opacity:.8}
 .nsum{display:grid;grid-template-columns:1fr 1fr;gap:12px 16px;margin-bottom:6px}
 .nsum>div{display:flex;flex-direction:column}
 .nsum b{font-size:20px;letter-spacing:-.02em}
+.mrow.tap{cursor:pointer;border-radius:12px;transition:background .15s}
+.mrow.tap:active{background:var(--card2)}
+.mrow.tap .mt span svg{vertical-align:-2px;margin-left:2px}

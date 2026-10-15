@@ -1249,33 +1249,50 @@ function mealToRecipe(meal) {
 function microRefs() { const k = D.settings.kcal; return { s: { max: k * 0.10 / 4 }, fi: { min: 30 }, sa: { max: k * 0.10 / 9 }, sl: { max: 6 } }; }
 function microMissNote(m) { const n = Math.max(...MICRO.map(x => m.miss[x.ek])); return n > 0 ? ` (bei bis zu ${n} Einträgen fehlt die Angabe)` : ""; }
 const MICRO_HINT = { s: "Richtwert: unter 10 % der Kalorien (zählt auch Zucker aus Obst und Milch)", fi: "Richtwert: mindestens 30 g am Tag", sa: "Richtwert: unter 10 % der Kalorien", sl: "Richtwert: höchstens 6 g am Tag" };
+/* Übersicht der Nährstoffe für eine Liste von Einträgen; dayList = ganzer Tag (für „Anteil am Tag“ bei einer Mahlzeit) */
+function nutrientBody(list, dayList) {
+  const t = sum(list), m = microSum(list), refs = microRefs(), dm = dayList ? microSum(dayList) : null;
+  const rows = MICRO.map(x => {
+    const v = m[x.ek], ref = refs[x.ek], isMin = ref.min != null, lim = isMin ? ref.min : ref.max;
+    const pct = lim > 0 ? Math.min(v / lim * 100, 100) : 0, bad = !isMin && v > lim, good = isMin && v >= lim;
+    const top = list.filter(e => hasN(e[x.ek]) && e[x.ek] > 0.05).sort((a, b) => b[x.ek] - a[x.ek]).slice(0, 3).map(e => `${esc(e.name)} ${nde(e[x.ek])} g`).join(" · ");
+    const miss = m.miss[x.ek], share = dm && dm[x.ek] > 0 ? Math.round(v / dm[x.ek] * 100) : null;
+    return `<div class="nrow"><div class="row between"><b>${x.name}</b><span><b ${bad ? 'class="warn"' : ""}>${nde(v, x.ek === "sl" ? 2 : 1)} g</b> <span class="muted small">${isMin ? "von mind." : "von max."} ${nde(lim, 0)} g</span></span></div>
+      <div class="nbar"><i class="${bad ? "warn" : good ? "good" : ""}" style="width:${pct}%"></i></div>
+      <div class="muted tiny">${dayList ? (share != null ? `${share} % des Tageswerts · ` : "") + (isMin ? "Tagesziel" : "Tageslimit") + " " + nde(lim, 0) + " g" : MICRO_HINT[x.ek]}</div>${top ? `<div class="muted tiny">Meist aus: ${top}</div>` : ""}
+      ${miss ? `<div class="warn tiny">Für ${miss} von ${list.length} Einträgen ist diese Angabe nicht bekannt.</div>` : ""}</div>`;
+  }).join("");
+  return `<div class="card nsum"><div><b>${fmt(t.kcal)}</b><span class="muted tiny">kcal</span></div><div><b>${r0(t.p)} g</b><span class="muted tiny">Eiweiß</span></div>
+    <div><b>${r0(t.c)} g</b><span class="muted tiny">Kohlenh.${hasN(m.s) ? ", davon Zucker " + nde(m.s, 0) + " g" : ""}</span></div><div><b>${r0(t.f)} g</b><span class="muted tiny">Fett${hasN(m.sa) ? ", davon gesättigt " + nde(m.sa, 0) + " g" : ""}</span></div></div>${rows}`;
+}
 function nutrientSheet(date) {
   date = date || ui.date;
   const list = dayEntries(date);
   if (fillMissingMicro(list)) save();
-  const t = sum(list), m = microSum(list), refs = microRefs();
   const head = `<div class="row between" style="margin:-4px 0 12px"><button class="iconbtn" id="nvPrev" aria-label="Vorheriger Tag">${icon("left", 18)}</button><div style="text-align:center"><h3 style="margin:0">Nährstoffe</h3><div class="muted small">${niceDate(date)}, ${fromIso(date).toLocaleDateString("de-DE", { day: "numeric", month: "long" })}</div></div><button class="iconbtn" id="nvNext" aria-label="Nächster Tag">${icon("right", 18)}</button></div>`;
-  let body;
-  if (!list.length) body = `<div class="muted center" style="padding:28px 10px">An diesem Tag ist noch nichts eingetragen.</div>`;
-  else {
-    const rows = MICRO.map(x => {
-      const v = m[x.ek], ref = refs[x.ek], isMin = ref.min != null, lim = isMin ? ref.min : ref.max;
-      const pct = lim > 0 ? Math.min(v / lim * 100, 100) : 0, bad = !isMin && v > lim, good = isMin && v >= lim;
-      const top = list.filter(e => hasN(e[x.ek]) && e[x.ek] > 0.05).sort((a, b) => b[x.ek] - a[x.ek]).slice(0, 3).map(e => `${esc(e.name)} ${nde(e[x.ek])} g`).join(" · ");
-      const miss = m.miss[x.ek];
-      return `<div class="nrow"><div class="row between"><b>${x.name}</b><span><b ${bad ? 'class="warn"' : ""}>${nde(v, x.ek === "sl" ? 2 : 1)} g</b> <span class="muted small">${isMin ? "von mind." : "von max."} ${nde(lim, 0)} g</span></span></div>
-        <div class="nbar"><i class="${bad ? "warn" : good ? "good" : ""}" style="width:${pct}%"></i></div>
-        <div class="muted tiny">${MICRO_HINT[x.ek]}</div>${top ? `<div class="muted tiny">Meist aus: ${top}</div>` : ""}
-        ${miss ? `<div class="warn tiny">Für ${miss} von ${list.length} Einträgen ist diese Angabe nicht bekannt.</div>` : ""}</div>`;
-    }).join("");
-    body = `<div class="card nsum"><div><b>${fmt(t.kcal)}</b><span class="muted tiny">kcal</span></div><div><b>${r0(t.p)} g</b><span class="muted tiny">Eiweiß</span></div>
-      <div><b>${r0(t.c)} g</b><span class="muted tiny">Kohlenh.${hasN(m.s) ? ", davon Zucker " + nde(m.s, 0) + " g" : ""}</span></div><div><b>${r0(t.f)} g</b><span class="muted tiny">Fett${hasN(m.sa) ? ", davon gesättigt " + nde(m.sa, 0) + " g" : ""}</span></div></div>${rows}
-      <div class="muted tiny" style="margin-top:12px">Richtwerte nach WHO/DGE sind eine Orientierung, keine Ernährungsberatung. Die Werte stammen aus deiner Datenbank, Scans, Rezepten oder KI-Schätzungen.</div>`;
-  }
+  const body = !list.length ? `<div class="muted center" style="padding:28px 10px">An diesem Tag ist noch nichts eingetragen.</div>`
+    : nutrientBody(list) + `<div class="muted tiny" style="margin-top:12px">Richtwerte nach WHO/DGE sind eine Orientierung, keine Ernährungsberatung. Die Werte stammen aus deiner Datenbank, Scans, Rezepten oder KI-Schätzungen.</div>`;
   const s = sheet(head + body + `<button class="btn sec block" style="margin-top:16px" id="nvClose">Schließen</button>`);
   $("#nvClose", s).onclick = closeSheet;
   $("#nvPrev", s).onclick = () => nutrientSheet(addDays(date, -1));
   $("#nvNext", s).onclick = () => nutrientSheet(addDays(date, 1));
+}
+/* Detailansicht einer Mahlzeit (aus der Tagesübersicht) */
+function mealSheet(mid, date) {
+  date = date || ui.date;
+  const day = dayEntries(date), list = day.filter(e => e.meal === mid || (!MEALS.some(m => m.id === e.meal) && mid === "s"));
+  if (fillMissingMicro(list)) save();
+  const t = sum(list), dt = sum(day), name = mealName(mid);
+  const entries = list.map(e => `<div class="entry" data-eid="${e.id}" role="button" tabindex="0"><div class="nm"><div class="t">${esc(e.name)}</div>
+    <div class="s"><span class="g">${r0(e.grams)} g</span><span class="cp">E ${r0(e.p)}</span><span class="cc">KH ${r0(e.c)}</span><span class="cf">F ${r0(e.f)}</span></div></div><div class="kcal">${fmt(e.kcal)}<small>kcal</small></div></div>`).join("");
+  const s = sheet(`<button class="linkbtn" id="mvBack" style="margin:-4px 0 6px">‹ Tagesübersicht</button><h3>${name}</h3>
+    <div class="muted small" style="margin:-6px 0 12px">${fmt(t.kcal)} kcal${dt.kcal > 0 ? ` · ${Math.round(t.kcal / dt.kcal * 100)} % des Tages` : ""} · ${list.length} ${list.length === 1 ? "Eintrag" : "Einträge"}</div>
+    ${list.length ? nutrientBody(list, day) : `<div class="muted center" style="padding:24px 10px">In dieser Mahlzeit ist nichts eingetragen.</div>`}
+    ${list.length ? `<h2 style="margin:18px 2px 4px">Einträge</h2><div class="list">${entries}</div><div class="muted tiny" style="margin:8px 4px 0">Tippe einen Eintrag an, um ihn genauer zu sehen oder zu ändern.</div>` : ""}
+    <button class="btn sec block" style="margin-top:16px" id="mvClose">Schließen</button>`);
+  $("#mvBack", s).onclick = () => dayChart();
+  $("#mvClose", s).onclick = closeSheet;
+  $$("[data-eid]", s).forEach(el => el.onclick = () => editEntry(el.dataset.eid));
 }
 
 /* ---------- Tages-Diagramm: Mahlzeiten und Makros ---------- */
@@ -1292,7 +1309,7 @@ function dayChart() {
   const maxK = Math.max(...meals.map(x => x.s.kcal), 1);
   const rows = meals.map(({ m, s }) => {
     const mk = s.p * 4 + s.c * 4 + s.f * 9 || 1, scale = s.kcal / maxK * 100;
-    return `<div class="mrow"><div class="mt"><b>${m.name}</b><span>${fmt(s.kcal)} kcal${t.kcal > 0 ? ", " + Math.round(s.kcal / t.kcal * 100) + " % des Tages" : ""}</span></div>
+    return `<div class="mrow tap" data-mrow="${m.id}" role="button" tabindex="0" aria-label="${m.name} im Detail"><div class="mt"><b>${m.name}</b><span>${fmt(s.kcal)} kcal${t.kcal > 0 ? ", " + Math.round(s.kcal / t.kcal * 100) + " % des Tages" : ""} ${icon("right", 14, 2.4)}</span></div>
       <div class="stack"><div style="display:flex;width:${scale}%;height:100%"><i class="p" style="width:${s.p * 4 / mk * 100}%"></i><i class="c" style="width:${s.c * 4 / mk * 100}%"></i><i class="f" style="width:${s.f * 9 / mk * 100}%"></i></div></div>
       <div class="mg"><span class="cp">Eiweiß ${r0(s.p)} g</span><span class="cc">Kohlenh. ${r0(s.c)} g</span><span class="cf">Fett ${r0(s.f)} g</span></div></div>`;
   }).join("");
@@ -1300,9 +1317,14 @@ function dayChart() {
     ${list.length ? `<div class="donutwrap"><div class="donut">${donut}<div class="mid"><b>${fmt(t.kcal)}</b><span>kcal</span></div></div>
       <div class="dleg">${leg("Eiweiß", "var(--p)", t.p, g.p, kP)}${leg("Kohlenhydrate", "var(--c)", t.c, g.c, kC)}${leg("Fett", "var(--f)", t.f, g.f, kF)}</div></div>
       <h2 style="margin:6px 2px 4px">Nach Mahlzeit</h2><div class="list" style="padding:0 16px">${rows}</div>
-      <div class="muted tiny" style="margin:10px 4px 0">Die Balken zeigen, woher die Kalorien jeder Mahlzeit kommen. Prozentwerte beziehen sich auf die Kalorien aus Eiweiß, Kohlenhydraten und Fett.</div>`
+      <div class="muted tiny" style="margin:10px 4px 0">Die Balken zeigen, woher die Kalorien jeder Mahlzeit kommen. Tippe eine Mahlzeit an für alle Nährstoffe und Einträge. Prozentwerte beziehen sich auf die Kalorien aus Eiweiß, Kohlenhydraten und Fett.</div>
+      <button class="btn sec block" style="margin-top:14px" id="dcNutri">Alle Nährstoffe des Tages</button>`
       : `<div class="muted center" style="padding:30px 10px">Heute ist noch nichts eingetragen. Sobald du etwas hinzufügst, siehst du hier die Verteilung.</div>`}
-    <button class="btn sec block" style="margin-top:16px" id="dcClose">Schließen</button>`, s => { $("#dcClose", s).onclick = closeSheet; });
+    <button class="btn sec block" style="margin-top:16px" id="dcClose">Schließen</button>`, s => {
+    $("#dcClose", s).onclick = closeSheet;
+    $$("[data-mrow]", s).forEach(el => { const go = () => mealSheet(el.dataset.mrow, ui.date); el.onclick = go; el.onkeydown = ev => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); go(); } }; });
+    if ($("#dcNutri", s)) $("#dcNutri", s).onclick = () => nutrientSheet(ui.date);
+  });
 }
 
 /* Eintrag bearbeiten */
