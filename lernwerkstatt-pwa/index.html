@@ -415,6 +415,7 @@ html.pv-lock,html.pv-lock body{overflow:hidden}
     <div class="row between"><h2>Einstellungen</h2><button class="btn small" id="settingsClose" type="button">Schließen</button></div>
     <div data-acc="theme" data-title="Darstellung">
       <div class="row" id="themeOpts" role="group" aria-label="Darstellung"></div>
+      <label class="tabcheck" for="fxOpt" style="margin-top:12px"><input type="checkbox" id="fxOpt"><span>Animation beim Bewerten<small>Konfetti bei „Gewusst“, Muskeln bei „Schwer“, Schweißtropfen bei „Nochmal“.</small></span></label>
       <p class="syncnote" style="margin-top:8px">„System“ folgt der Einstellung deines Geräts.</p>
     </div>
     <div data-acc="palette" data-title="Farbdesign">
@@ -653,6 +654,7 @@ function renderSettings(){
     b.addEventListener("click",()=>{if(v)S.theme=v;else delete S.theme;applyTheme();saveMeta();renderSettings()});
     box.append(b);
   });
+  const fo=$("#fxOpt");fo.checked=!S||S.fx!==false;fo.onchange=()=>{S.fx=fo.checked;saveMeta();if(fo.checked)toast("Animation an")};
   const pb=$("#paletteOpts");pb.replaceChildren();
   const dark=isDarkNow();
   PALETTES.forEach(p=>{
@@ -1240,8 +1242,36 @@ function flip(){
   if(!Q.active)return;
   Q.flipped=!Q.flipped;$("#card").classList.toggle("flip",Q.flipped);$("#rate").hidden=!Q.flipped;
 }
+/* Kleine Rückmeldung nach der Bewertung: Konfetti, Bizeps, Schweißtropfen */
+const fxOn=()=>(!S||S.fx!==false)&&!(window.matchMedia&&matchMedia("(prefers-reduced-motion: reduce)").matches);
+function fxBurst(r){
+  if(!fxOn()||!document.body.animate)return;
+  const btn=$("#r"+r),rc=btn&&btn.getBoundingClientRect();if(!rc||!rc.width)return;
+  const cx=rc.left+rc.width/2,cy=rc.top+rc.height/2;
+  const layer=el("div",{"aria-hidden":"true",style:"position:fixed;inset:0;pointer-events:none;z-index:9999;overflow:hidden"});document.body.append(layer);
+  const spawn=(ch,dx,dy,rot,dur,size,delay=0)=>{
+    const p=el("span",{style:"position:absolute;left:"+cx+"px;top:"+cy+"px;font-size:"+size+"px;line-height:1;will-change:transform,opacity"},ch);layer.append(p);
+    p.animate([{transform:"translate(-50%,-50%) scale(.4) rotate(0deg)",opacity:1},
+      {transform:"translate(calc(-50% + "+dx*.6+"px),calc(-50% + "+dy+"px)) scale(1.1) rotate("+rot*.5+"deg)",opacity:1,offset:.45},
+      {transform:"translate(calc(-50% + "+dx+"px),calc(-50% + "+(dy+90)+"px)) scale(.9) rotate("+rot+"deg)",opacity:0}],
+      {duration:dur,delay,easing:"cubic-bezier(.2,.7,.4,1)",fill:"both"});
+  };
+  const rnd=(a,b)=>a+Math.random()*(b-a);
+  if(r===2){   // Gewusst: Konfetti
+    const set=["🎉","🎊","✨","🎉","⭐"];
+    for(let i=0;i<16;i++)spawn(set[i%set.length],rnd(-170,170),rnd(-230,-90),rnd(-300,300),rnd(900,1400),rnd(18,30),rnd(0,120));
+    spawn("🎉",0,-170,20,1200,46);
+  }else if(r===1){   // Schwer: Muskeln, du schaffst das
+    for(let i=0;i<4;i++)spawn(i===0?"💪":"✨",rnd(-70,70),rnd(-150,-90),rnd(-40,40),rnd(900,1200),i===0?40:20,i*80);
+  }else{   // Nochmal: kurz schütteln, Schweißtropfen
+    ["😅","💧","💧"].forEach((c,i)=>spawn(c,rnd(-60,60),rnd(-110,-60),rnd(-30,30),rnd(900,1100),i?20:38,i*90));
+    const card=$("#card");if(card&&card.animate)card.animate([{transform:"translateX(0)"},{transform:"translateX(-9px)"},{transform:"translateX(8px)"},{transform:"translateX(-6px)"},{transform:"translateX(4px)"},{transform:"translateX(0)"}],{duration:380,easing:"ease-out"});
+  }
+  setTimeout(()=>layer.remove(),1700);
+}
 function rate(r){
   if(!Q.active||!Q.flipped)return;
+  fxBurst(r);
   const id=Q.queue.shift(),x=Q.map[id];if(!x)return;
   const c=x.c,snap={id,r,prev:{box:c.box,due:c.due,ok:c.ok,bad:c.bad},again:r===0&&srsCfg().again};
   (Q.hist=Q.hist||[]).push(snap);if(Q.hist.length>200)Q.hist.shift();
