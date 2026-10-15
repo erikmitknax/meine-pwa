@@ -972,6 +972,7 @@ function recipeTotals(r) {
   r.items.forEach(i => { const c = calc(i, i.grams); t.kcal += c.kcal; t.p += c.p; t.c += c.c; t.f += c.f; t.grams += i.grams; });
   return t;
 }
+const recipeWeight = r => (num(r.weight) > 0 ? num(r.weight) : recipeTotals(r).grams);
 function recipePortion(r) {
   const t = recipeTotals(r), n = Math.max(r.servings || 1, 0.01);
   return { kcal: t.kcal / n, p: t.p / n, c: t.c / n, f: t.f / n, grams: t.grams / n };
@@ -998,25 +999,48 @@ function bodyRecipes(b) {
 
 function pickRecipe(r) {
   if (!r) return;
-  const p = recipePortion(r);
+  const p = recipePortion(r), tot = recipeTotals(r), W0 = recipeWeight(r);
+  let mode = "p";
   const s = sheet(`<h3>${esc(r.name)}</h3><div class="muted small">Pro Portion: ${r0(p.kcal)} kcal, Eiweiß ${r1(p.p)} g, Kohlenhydrate ${r1(p.c)} g, Fett ${r1(p.f)} g</div>
-    <label>Portionen</label><div class="row"><input type="text" inputmode="decimal" id="rp" value="1"><button class="chip" data-m="0.5">½</button><button class="chip" data-m="1">1</button><button class="chip" data-m="2">2</button></div>
+    <div class="seg" style="margin-top:14px"><button data-md="p" class="on">Portionen</button><button data-md="g">Gramm</button></div>
+    <div id="mP"><label>Portionen</label><div class="row"><input type="text" inputmode="decimal" id="rp" value="1"><button class="chip" data-m="0.5">½</button><button class="chip" data-m="1">1</button><button class="chip" data-m="2">2</button></div></div>
+    <div id="mG" style="display:none"><label>Gesamtgewicht des Gerichts (g)</label><input type="text" inputmode="decimal" id="rw" value="${r0(W0)}">
+      <div class="row between" style="margin:6px 2px 0"><span class="muted tiny">${r.weight > 0 ? "aus dem Rezept" : "Summe der Zutaten – gekocht wiegt es oft anders"}</span><button class="linkbtn" id="rwSave" style="margin:0">Im Rezept speichern</button></div>
+      <label>Davon genommen (g)</label><div class="row"><input type="text" inputmode="decimal" id="rg" placeholder="z. B. 350"><button class="chip" data-q="0.25">¼</button><button class="chip" data-q="0.5">½</button></div></div>
     <div class="card" style="margin-top:14px" id="rv"></div>
     <label>Mahlzeit</label><select id="rm">${MEALS.map(m => `<option value="${m.id}" ${m.id === ui.meal ? "selected" : ""}>${m.name}</option>`).join("")}</select>
     <button class="btn block" style="margin-top:14px" id="rgo">Zum Tagebuch hinzufügen</button>
     <button class="btn sec block" style="margin-top:8px" id="red">Rezept bearbeiten</button>
     <button class="btn sec block" style="margin-top:8px" id="rback">Zurück</button>`);
-  const rp = $("#rp", s);
-  const upd = () => { const n = num(rp.value); $("#rv", s).innerHTML = `<div class="row between"><b style="font-size:22px">${r0(p.kcal * n)} kcal</b><span class="small"><span class="cp">E ${r1(p.p * n)}</span> &nbsp;<span class="cc">KH ${r1(p.c * n)}</span> &nbsp;<span class="cf">F ${r1(p.f * n)}</span></span></div>`; };
-  rp.oninput = upd; upd();
+  const rp = $("#rp", s), rw = $("#rw", s), rg = $("#rg", s);
+  // Anteil am ganzen Rezept (f) und tatsächliche Menge in g
+  const calcF = () => {
+    if (mode === "p") { const n = num(rp.value); return { f: n / Math.max(r.servings || 1, 0.01), g: W0 * n / Math.max(r.servings || 1, 0.01), n }; }
+    const W = num(rw.value), g = num(rg.value); return { f: W > 0 ? g / W : 0, g, n: W > 0 ? (g / W) * (r.servings || 1) : 0, W };
+  };
+  const upd = () => {
+    const { f, g, n } = calcF();
+    $("#rv", s).innerHTML = `<div class="row between"><b style="font-size:22px">${r0(tot.kcal * f)} kcal</b><span class="small"><span class="cp">E ${r1(tot.p * f)}</span> &nbsp;<span class="cc">KH ${r1(tot.c * f)}</span> &nbsp;<span class="cf">F ${r1(tot.f * f)}</span></span></div>
+      <div class="muted tiny" style="margin-top:6px">${mode === "g" ? `≈ ${nde(n, 2)} ${Math.abs(n - 1) < 0.005 ? "Portion" : "Portionen"} (${r0(f * 100)} % des Gerichts)` : `≈ ${r0(g)} g`}</div>`;
+  };
+  rp.oninput = upd; rw.oninput = upd; rg.oninput = upd; upd();
   $$("[data-m]", s).forEach(b => b.onclick = () => { rp.value = b.dataset.m; upd(); });
+  $$("[data-q]", s).forEach(b => b.onclick = () => { rg.value = r0(num(rw.value) * +b.dataset.q); upd(); });
+  $$("[data-md]", s).forEach(b => b.onclick = () => {
+    mode = b.dataset.md; $$("[data-md]", s).forEach(x => x.classList.toggle("on", x === b));
+    $("#mP", s).style.display = mode === "p" ? "" : "none"; $("#mG", s).style.display = mode === "g" ? "" : "none";
+    if (mode === "g") rg.focus({ preventScroll: true }); upd();
+  });
+  $("#rwSave", s).onclick = () => { const W = num(rw.value); if (!(W > 0)) return toast("Bitte ein Gewicht eingeben"); r.weight = W; save(); toast("Gesamtgewicht im Rezept gespeichert"); };
   $("#rback", s).onclick = () => { addTab = "recipes"; openAdd(); };
   $("#red", s).onclick = () => recipeEditor(r, "add");
   $("#rgo", s).onclick = () => {
-    const n = num(rp.value); if (n <= 0) return toast("Bitte Portionen eingeben");
+    const { f, g } = calcF();
+    if (!(f > 0) || !(g > 0)) return toast(mode === "g" ? "Bitte Gramm eingeben" : "Bitte Portionen eingeben");
     ui.meal = $("#rm", s).value;
-    D.entries.push({ id: uid(), date: ui.date, meal: ui.meal, rid: r.id, name: r.name, grams: p.grams * n, kcal: p.kcal * n, p: p.p * n, c: p.c * n, f: p.f * n,
-      ings: r.items.map(i => ({ name: i.name, grams: i.grams * n / (r.servings || 1), kcal: i.kcal, protein: i.protein, carbs: i.carbs, fat: i.fat })) });
+    const gf = tot.grams > 0 ? g / (tot.grams * f) : 1; // Verhältnis Waage (fertig) zu Summe der Zutaten
+    D.entries.push({ id: uid(), date: ui.date, meal: ui.meal, rid: r.id, name: r.name, grams: g, kcal: tot.kcal * f, p: tot.p * f, c: tot.c * f, f: tot.f * f, ...(Math.abs(gf - 1) > 1e-6 ? { gf } : {}),
+      ings: r.items.map(i => ({ name: i.name, grams: i.grams * f, kcal: i.kcal, protein: i.protein, carbs: i.carbs, fat: i.fat })) });
     r.used = (r.used || 0) + 1;
     closeSheet(); save(); render(); toast("Hinzugefügt");
   };
@@ -1038,6 +1062,8 @@ function drawRecipeEditor() {
   const s = sheet(`<h3>${d.id ? "Rezept bearbeiten" : "Neues Rezept"}</h3>
     <label style="margin-top:0">Name</label><input type="text" id="rn" value="${esc(d.name)}" placeholder="z. B. Overnight Oats">
     <label>Ergibt Portionen</label><input type="text" inputmode="decimal" id="rs" value="${d.servings}">
+    <label>Gesamtgewicht fertig (g, optional)</label><input type="text" inputmode="decimal" id="rw" value="${d.weight > 0 ? r0(d.weight) : ""}" placeholder="${r0(recipeTotals(d).grams) || "z. B. 850"}">
+    <div class="muted tiny" style="margin:6px 2px 0">Gewicht des fertigen Gerichts auf der Waage. Damit trägst du später einfach ein, wie viel Gramm du genommen hast. Leer = Summe der Zutaten.</div>
     <h2 style="margin:20px 2px 6px">Zutaten</h2>
     <div id="ri">${d.items.length ? d.items.map((i, k) => `<div class="ing" data-k="${k}"><div class="grow"><div class="t">${esc(i.name)}</div><div class="muted tiny" data-kc></div></div>
       <input type="text" inputmode="decimal" value="${r0(i.grams)}" aria-label="Menge in Gramm"><span class="muted small">g</span><button class="iconbtn" data-del aria-label="Zutat entfernen">×</button></div>`).join("")
@@ -1047,7 +1073,7 @@ function drawRecipeEditor() {
     <button class="btn block" id="rSave">Rezept speichern</button>
     ${d.id ? `<button class="btn danger block" style="margin-top:8px" id="rDel">Rezept löschen</button>` : ""}
     <button class="btn sec block" style="margin-top:8px" id="rCancel">Abbrechen</button>`);
-  const capture = () => { d.name = $("#rn", s).value.trim(); d.servings = num($("#rs", s).value) || 1; };
+  const capture = () => { d.name = $("#rn", s).value.trim(); d.servings = num($("#rs", s).value) || 1; d.weight = Math.max(0, num($("#rw", s).value) || 0); };
   const sumUpd = () => {
     const t = recipeTotals(d), n = Math.max(num($("#rs", s).value) || 1, 0.01);
     $$(".ing", s).forEach(row => { const i = d.items[+row.dataset.k]; $("[data-kc]", row).textContent = r0(calc(i, i.grams).kcal) + " kcal"; });
@@ -1055,11 +1081,12 @@ function drawRecipeEditor() {
       <div class="row between" style="margin-top:6px"><span class="muted small">Pro Portion</span><b style="font-size:22px">${r0(t.kcal / n)} kcal</b></div>
       <div class="small" style="margin-top:6px"><span class="cp">E ${r1(t.p / n)} g</span> &nbsp;<span class="cc">KH ${r1(t.c / n)} g</span> &nbsp;<span class="cf">F ${r1(t.f / n)} g</span></div>`;
   };
-  sumUpd();
+  const phUpd = () => { const g = recipeTotals(d).grams; $("#rw", s).placeholder = g ? r0(g) : "z. B. 850"; };
+  sumUpd(); phUpd();
   $("#rs", s).oninput = sumUpd;
   $$(".ing", s).forEach(row => {
     const k = +row.dataset.k;
-    $("input", row).oninput = e => { d.items[k].grams = num(e.target.value); sumUpd(); };
+    $("input", row).oninput = e => { d.items[k].grams = num(e.target.value); sumUpd(); phUpd(); };
     $("[data-del]", row).onclick = () => { capture(); d.items.splice(k, 1); drawRecipeEditor(); };
   });
   $("#rAdd", s).onclick = () => {
@@ -1073,7 +1100,7 @@ function drawRecipeEditor() {
     if (!d.name) return toast("Bitte einen Namen eingeben");
     if (!d.items.length) return toast("Füge mindestens eine Zutat hinzu");
     if (d.items.some(i => i.grams <= 0)) return toast("Jede Zutat braucht eine Menge");
-    const rec = { id: d.id || uid(), name: d.name, servings: d.servings, items: d.items.map(i => ({ name: i.name, grams: i.grams, kcal: i.kcal, protein: i.protein, carbs: i.carbs, fat: i.fat })), used: 0 };
+    const rec = { id: d.id || uid(), name: d.name, servings: d.servings, weight: d.weight > 0 ? d.weight : 0, items: d.items.map(i => ({ name: i.name, grams: i.grams, kcal: i.kcal, protein: i.protein, carbs: i.carbs, fat: i.fat })), used: 0 };
     const ex = D.recipes.find(x => x.id === rec.id);
     if (ex) { rec.used = ex.used || 0; Object.assign(ex, rec); } else D.recipes.push(rec);
     save(); toast("Rezept gespeichert"); recipeExit();
@@ -1201,7 +1228,7 @@ function entryIngs(e) {
 }
 function editEntry(id) {
   const e = D.entries.find(x => x.id === id); if (!e) return;
-  const ings = entryIngs(e);
+  const ings = entryIngs(e), gf = e.gf > 0 ? e.gf : 1; // Waage fertig / Summe Zutaten
   let dirty = false;
   const tot = () => { const t = { g: 0, kcal: 0, p: 0, c: 0, f: 0 }; ings.forEach(i => { if (i.off) return; const c = calc(i, i.grams); t.g += i.grams; t.kcal += c.kcal; t.p += c.p; t.c += c.c; t.f += c.f; }); return t; };
   const line = t => `${r0(t.kcal)} kcal · E ${r1(t.p)} · KH ${r1(t.c)} · F ${r1(t.f)}`;
@@ -1215,7 +1242,7 @@ function editEntry(id) {
     <label>Mahlzeit</label><select id="em">${MEALS.map(m => `<option value="${m.id}" ${m.id === e.meal ? "selected" : ""}>${m.name}</option>`).join("")}</select>
     <button class="btn block" style="margin-top:14px" id="es">Speichern</button>
     <button class="btn danger block" style="margin-top:8px" id="ed">Eintrag löschen</button>`);
-  const refresh = () => { if (!ings) return; const t = tot(); $("#eiSum", s).textContent = "Summe der Zutaten: " + r0(t.g) + " g · " + line(t); $("#eg", s).value = r0(t.g); };
+  const refresh = () => { if (!ings) return; const t = tot(); $("#eiSum", s).textContent = "Summe: " + r0(t.g * gf) + " g · " + line(t); $("#eg", s).value = r0(t.g * gf); };
   if (ings) {
     refresh();
     $$("[data-i]", s).forEach(row => {
@@ -1224,14 +1251,14 @@ function editEntry(id) {
       $("[data-g]", row).oninput = ev => { i.grams = Math.max(0, num(ev.target.value)); dirty = true; refresh(); };
     });
     // Gesamtmenge ändern = alle Zutaten anteilig skalieren
-    $("#eg", s).onchange = ev => { const g = num(ev.target.value), t = tot(); if (g > 0 && t.g > 0) { const k = g / t.g; ings.forEach(i => { if (!i.off) i.grams *= k; }); $$("[data-i]", s).forEach(row => { $("[data-g]", row).value = r0(ings[+row.dataset.i].grams); }); dirty = true; } refresh(); };
+    $("#eg", s).onchange = ev => { const g = num(ev.target.value), t = tot(); if (g > 0 && t.g > 0) { const k = g / (t.g * gf); ings.forEach(i => { if (!i.off) i.grams *= k; }); $$("[data-i]", s).forEach(row => { $("[data-g]", row).value = r0(ings[+row.dataset.i].grams); }); dirty = true; } refresh(); };
   }
   $("#es", s).onclick = () => {
     if (ings && dirty) {
       const t = tot(); if (t.g <= 0) return toast("Mindestens eine Zutat mit Menge");
       const old = e.kcal || 0;
       if (e.s != null && old > 0) e.s *= t.kcal / old; if (e.fi != null && old > 0) e.fi *= t.kcal / old;
-      e.kcal = t.kcal; e.p = t.p; e.c = t.c; e.f = t.f; e.grams = t.g; e.ings = ings;
+      e.kcal = t.kcal; e.p = t.p; e.c = t.c; e.f = t.f; e.grams = t.g * gf; e.ings = ings;
     } else {
       const g = num($("#eg", s).value); if (g <= 0) return toast("Menge eingeben");
       const k = g / e.grams; e.kcal *= k; e.p *= k; e.c *= k; e.f *= k; if (e.s != null) e.s *= k; if (e.fi != null) e.fi *= k; e.grams = g;
@@ -1440,8 +1467,8 @@ function diaryCsv() {
 function weightCsv() { return csvOf(["datum", "gewicht_kg"], weightList().map(w => [w.d, csvNum(w.w)])); }
 function recipesCsv() {
   const rows = [];
-  D.recipes.forEach(r => r.items.forEach(i => rows.push([r.name, csvNum(r.servings), i.name, csvNum(i.grams), csvNum(i.kcal), csvNum(i.protein), csvNum(i.carbs), csvNum(i.fat)])));
-  return csvOf(["rezept", "portionen", "zutat", "menge_g", "kcal_100g", "eiweiss_100g", "kohlenhydrate_100g", "fett_100g"], rows);
+  D.recipes.forEach(r => r.items.forEach(i => rows.push([r.name, csvNum(r.servings), i.name, csvNum(i.grams), csvNum(i.kcal), csvNum(i.protein), csvNum(i.carbs), csvNum(i.fat), r.weight > 0 ? csvNum(r.weight) : ""])));
+  return csvOf(["rezept", "portionen", "zutat", "menge_g", "kcal_100g", "eiweiss_100g", "kohlenhydrate_100g", "fett_100g", "gesamtgewicht_g"], rows);
 }
 const csvBlob = t => new Blob([t], { type: "text/csv" });
 
@@ -1466,11 +1493,11 @@ function importAnyCsv(text) {
   const get = (r, i) => i < 0 ? "" : (r[i] ?? "").trim();
   const iRec = col("rezept"), iIng = col("zutat"), iDate = col("datum"), iMeal = col("mahlzeit"), iKg = col("gewicht_kg", "gewicht", "kg");
   if (iRec >= 0 && iIng >= 0) {
-    const iS = col("portionen"), iG = col("menge_g"), iK = col("kcal_100g"), iP = col("eiweiss_100g"), iC = col("kohlenhydrate_100g"), iF = col("fett_100g");
+    const iS = col("portionen"), iG = col("menge_g"), iK = col("kcal_100g"), iP = col("eiweiss_100g"), iC = col("kohlenhydrate_100g"), iF = col("fett_100g"), iW = col("gesamtgewicht_g");
     const byName = new Map();
     rows.slice(1).forEach(r => {
       const n = get(r, iRec); if (!n || !get(r, iIng)) return;
-      if (!byName.has(n)) byName.set(n, { id: uid(), name: n, servings: num(get(r, iS)) || 1, items: [], used: 0 });
+      if (!byName.has(n)) byName.set(n, { id: uid(), name: n, servings: num(get(r, iS)) || 1, weight: num(get(r, iW)) || 0, items: [], used: 0 });
       byName.get(n).items.push({ name: get(r, iIng), grams: num(get(r, iG)) || 100, kcal: num(get(r, iK)), protein: num(get(r, iP)), carbs: num(get(r, iC)), fat: num(get(r, iF)) });
     });
     let added = 0, updated = 0;
