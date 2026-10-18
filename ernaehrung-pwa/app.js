@@ -44,7 +44,8 @@ const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
-const num = v => { const n = parseFloat(String(v ?? "").replace(",", ".")); return isFinite(n) ? n : 0; };
+/* Zahl aus Text lesen, auch aus Eingaben wie "<0,1", "ca. 2,5 g", "~3" oder "1,2 g" (erste Zahl zählt; "Spuren", "-", "k. A." ergeben 0) */
+const num = v => { const m = String(v ?? "").replace(",", ".").match(/-?\d*\.?\d+/); const n = m ? parseFloat(m[0]) : NaN; return isFinite(n) ? n : 0; };
 const r0 = n => Math.round(n);
 const r1 = n => Math.round(n * 10) / 10;
 const r2 = n => Math.round(n * 100) / 100;
@@ -939,7 +940,7 @@ function upsertFood(f) {
   if (ex) { Object.assign(ex, f, { id: ex.id, used: ex.used || 0 }); return "updated"; }
   D.foods.push({ ...f, id: uid(), used: 0 }); return "added";
 }
-const FOOD_PROMPT = "Gib mir die Nährwerte pro 100 g für:\n(HIER LEBENSMITTEL EINTRAGEN, z. B. Banane medium)\n\nAntworte nur mit CSV, ohne weiteren Text: erste Zeile die Kopfzeile, danach eine Zeile pro Lebensmittel, Trennzeichen Semikolon.\nname;marke;barcode;kcal;fett;gesaettigt;kohlenhydrate;zucker;eiweiss;ballaststoffe;salz;portion_g\ngesaettigt = davon gesättigte Fettsäuren in g, salz = Salz in g (nicht Natrium).\nBei portion_g bitte das übliche Gewicht einer Portion in Gramm angeben (z. B. mittlere Banane ohne Schale: 118).";
+const FOOD_PROMPT = "Gib mir die Nährwerte pro 100 g für:\n(HIER LEBENSMITTEL EINTRAGEN, z. B. Banane medium)\n\nAntworte nur mit CSV, ohne weiteren Text: erste Zeile die Kopfzeile, danach eine Zeile pro Lebensmittel, Trennzeichen Semikolon.\nname;marke;barcode;kcal;fett;gesaettigt;kohlenhydrate;zucker;eiweiss;ballaststoffe;salz;portion_g\ngesaettigt = davon gesättigte Fettsäuren in g, salz = Salz in g (nicht Natrium).\nIn den Zahlenfeldern nur Zahlen ohne <, ca., g oder Einheiten (bei „weniger als 0,1“ bitte 0,05 schreiben, bei „Spuren“ 0).\nBei portion_g bitte das übliche Gewicht einer Portion in Gramm angeben (z. B. mittlere Banane ohne Schale: 118).";
 async function copyText(text) {
   try { await navigator.clipboard.writeText(text); return true; } catch (e) { /* weiter */ }
   try { const ta = document.createElement("textarea"); ta.value = text; ta.style.cssText = "position:fixed;opacity:0;top:0"; document.body.append(ta); ta.select(); const ok = document.execCommand("copy"); ta.remove(); return ok; } catch (e) { return false; }
@@ -974,7 +975,7 @@ function readFoodForm(root, base) {
     sugar: num($("#fS", root).value), fiber: num($("#fFi", root).value), sat: num($("#fSat", root).value), salt: num($("#fSalt", root).value), serving: num($("#fServ", root).value) || 100, used: (base && base.used) || 0 };
 }
 /* Mehrere Gerichte auf einmal (z. B. Buffet): CSV einfügen -> jede Zeile ein Tagebucheintrag, nichts landet in „Meine Lebensmittel“ */
-const MULTI_PROMPT = "Ich habe folgendes gegessen (siehe Fotos/Beschreibung):\n(HIER BESCHREIBEN, z. B. Buffet-Teller mit …)\n\nSchätze pro Gericht die Nährwerte pro 100 g und das Gewicht, das ich tatsächlich gegessen habe. Antworte nur mit CSV, ohne weiteren Text: erste Zeile die Kopfzeile, danach eine Zeile pro Gericht, Trennzeichen Semikolon, Dezimalpunkt.\nname;marke;barcode;kcal;fett;gesaettigt;kohlenhydrate;zucker;eiweiss;ballaststoffe;salz;portion_g\ngesaettigt = davon gesättigte Fettsäuren in g, salz = Salz in g (nicht Natrium).\nBei portion_g das Gewicht der gegessenen Menge in Gramm angeben (die Nährwerte beziehen sich auf 100 g).";
+const MULTI_PROMPT = "Ich habe folgendes gegessen (siehe Fotos/Beschreibung):\n(HIER BESCHREIBEN, z. B. Buffet-Teller mit …)\n\nSchätze pro Gericht die Nährwerte pro 100 g und das Gewicht, das ich tatsächlich gegessen habe. Antworte nur mit CSV, ohne weiteren Text: erste Zeile die Kopfzeile, danach eine Zeile pro Gericht, Trennzeichen Semikolon, Dezimalpunkt.\nname;marke;barcode;kcal;fett;gesaettigt;kohlenhydrate;zucker;eiweiss;ballaststoffe;salz;portion_g\ngesaettigt = davon gesättigte Fettsäuren in g, salz = Salz in g (nicht Natrium).\nIn den Zahlenfeldern nur Zahlen ohne <, ca., g oder Einheiten (bei „weniger als 0,1“ bitte 0,05 schreiben, bei „Spuren“ 0).\nBei portion_g das Gewicht der gegessenen Menge in Gramm angeben (die Nährwerte beziehen sich auf 100 g).";
 function bodyMulti(b) {
   b.innerHTML = `<div class="muted small">Füge eine CSV mit mehreren Gerichten ein (z. B. von Claude oder einer anderen KI). Jede Zeile wird ein eigener Tagebucheintrag mit der Menge <b>portion_g</b>. Die Gerichte werden <b>nicht</b> in „Meine Lebensmittel“ gespeichert, erscheinen aber einzeln im Export.</div>
     <textarea id="mPaste" rows="8" style="margin-top:10px;min-height:150px;font-size:12px" placeholder="name;marke;barcode;kcal;fett;gesaettigt;kohlenhydrate;zucker;eiweiss;ballaststoffe;salz;portion_g&#10;Hähnchenfleisch (angebraten);Restaurant/Buffet;;165;6.0;1.8;2.0;0.5;26.0;0.0;0.9;80"></textarea>
