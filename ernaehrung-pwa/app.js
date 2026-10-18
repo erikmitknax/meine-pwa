@@ -1260,10 +1260,51 @@ function nutrientBody(list, dayList) {
     return `<div class="nrow"><div class="row between"><b>${x.name}</b><span><b ${bad ? 'class="warn"' : ""}>${nde(v, x.ek === "sl" ? 2 : 1)} g</b> <span class="muted small">${isMin ? "von mind." : "von max."} ${nde(lim, 0)} g</span></span></div>
       <div class="nbar"><i class="${bad ? "warn" : good ? "good" : ""}" style="width:${pct}%"></i></div>
       <div class="muted tiny">${dayList ? (share != null ? `${share} % des Tageswerts · ` : "") + (isMin ? "Tagesziel" : "Tageslimit") + " " + nde(lim, 0) + " g" : MICRO_HINT[x.ek]}</div>${top ? `<div class="muted tiny">Meist aus: ${top}</div>` : ""}
-      ${miss ? `<div class="warn tiny">Für ${miss} von ${list.length} Einträgen ist diese Angabe nicht bekannt.</div>` : ""}</div>`;
+      ${miss ? `<div class="warn tiny">Für ${miss} von ${list.length} Einträgen ist diese Angabe nicht bekannt.</div><button class="linkbtn" data-miss="${x.ek}">Fehlende ansehen und nachtragen ›</button>` : ""}</div>`;
   }).join("");
   return `<div class="card nsum"><div><b>${fmt(t.kcal)}</b><span class="muted tiny">kcal</span></div><div><b>${r0(t.p)} g</b><span class="muted tiny">Eiweiß</span></div>
     <div><b>${r0(t.c)} g</b><span class="muted tiny">Kohlenh.${hasN(m.s) ? ", davon Zucker " + nde(m.s, 0) + " g" : ""}</span></div><div><b>${r0(t.f)} g</b><span class="muted tiny">Fett${hasN(m.sa) ? ", davon gesättigt " + nde(m.sa, 0) + " g" : ""}</span></div></div>${rows}`;
+}
+/* Einträge mit fehlender Angabe anzeigen und direkt nachtragen (Werte pro 100 g) */
+function foodOfEntry(e) {
+  const nm = String(e.name || "").toLowerCase();
+  return D.foods.find(x => x.name.toLowerCase() === nm && (!e.brand || (x.brand || "").toLowerCase() === String(e.brand).toLowerCase()));
+}
+function missingSheet(list, ek, back) {
+  const todo = list.filter(e => e.grams > 0 && !hasN(e[ek]));
+  const lab = { s: "Zucker", fi: "Ballaststoffe", sa: "Gesättigte Fettsäuren", sl: "Salz" };
+  const anyFood = todo.some(foodOfEntry);
+  const items = todo.map(e => {
+    const ms = MICRO.filter(m => !hasN(e[m.ek])).sort((a, b) => (b.ek === ek) - (a.ek === ek));
+    return `<div class="card" style="margin-bottom:10px"><div class="row between"><b style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(e.name)}</b><span class="muted small">${r0(e.grams)} g</span></div>
+      ${ms.map(m => `<div class="ing" style="padding:6px 0"><div class="grow"><div class="t">${m.name}</div><div class="muted tiny">pro 100 g · <span data-calc="${e.id}|${m.ek}">–</span></div></div><input type="text" inputmode="decimal" placeholder="–" data-me="${e.id}" data-mk="${m.ek}" aria-label="${m.name} pro 100 g für ${esc(e.name)}"></div>`).join("")}</div>`;
+  }).join("");
+  const s = sheet(`<button class="linkbtn" id="msBack" style="margin:-4px 0 6px">‹ Zurück</button><h3>${lab[ek]} nachtragen</h3>
+    <div class="muted small" style="margin:-6px 0 12px">Trage die Werte pro 100 g von der Verpackung ein. Felder, die du leer lässt, bleiben unbekannt.</div>
+    ${items || `<div class="muted center" style="padding:24px 10px">Hier fehlt nichts mehr.</div>`}
+    ${anyFood ? `<label style="display:flex;gap:10px;align-items:center;margin:10px 2px"><input type="checkbox" id="msFood" checked style="width:auto"> Auch im Lebensmittel speichern (gilt dann für alle Einträge davon)</label>` : ""}
+    <button class="btn block" style="margin-top:12px" id="msSave">Speichern</button><button class="btn sec block" style="margin-top:8px" id="msCancel">Abbrechen</button>`);
+  const byId = id => list.find(e => e.id === id);
+  $$("[data-me]", s).forEach(inp => inp.oninput = () => {
+    const e = byId(inp.dataset.me), out = $(`[data-calc="${inp.dataset.me}|${inp.dataset.mk}"]`, s);
+    out.textContent = inp.value.trim() === "" ? "–" : "= " + nde(num(inp.value) * e.grams / 100, inp.dataset.mk === "sl" ? 2 : 1) + " g im Eintrag";
+  });
+  $("#msBack", s).onclick = $("#msCancel", s).onclick = back;
+  $("#msSave", s).onclick = () => {
+    const toFood = $("#msFood", s) && $("#msFood", s).checked; let n = 0;
+    $$("[data-me]", s).forEach(inp => {
+      if (inp.value.trim() === "") return;
+      const e = byId(inp.dataset.me), m = MICRO.find(x => x.ek === inp.dataset.mk), v = Math.max(0, num(inp.value));
+      e[m.ek] = v * e.grams / 100; n++;
+      const f = toFood && foodOfEntry(e); if (f && !hasN(f[m.fk])) f[m.fk] = v;
+    });
+    if (n) { fillMissingMicro(D.entries); save(); render(); toast(n + (n === 1 ? " Wert gespeichert" : " Werte gespeichert")); }
+    back();
+  };
+  const first = $("[data-me]", s); if (first) first.focus();
+}
+function wireMiss(s, list, back) {
+  $$("[data-miss]", s).forEach(b => b.onclick = () => missingSheet(list, b.dataset.miss, back));
 }
 function nutrientSheet(date) {
   date = date || ui.date;
@@ -1276,6 +1317,7 @@ function nutrientSheet(date) {
   $("#nvClose", s).onclick = closeSheet;
   $("#nvPrev", s).onclick = () => nutrientSheet(addDays(date, -1));
   $("#nvNext", s).onclick = () => nutrientSheet(addDays(date, 1));
+  wireMiss(s, list, () => nutrientSheet(date));
 }
 /* Detailansicht einer Mahlzeit (aus der Tagesübersicht) */
 function mealSheet(mid, date) {
@@ -1292,6 +1334,7 @@ function mealSheet(mid, date) {
     <button class="btn sec block" style="margin-top:16px" id="mvClose">Schließen</button>`);
   $("#mvBack", s).onclick = () => dayChart();
   $("#mvClose", s).onclick = closeSheet;
+  wireMiss(s, list, () => mealSheet(mid, date));
   $$("[data-eid]", s).forEach(el => el.onclick = () => editEntry(el.dataset.eid));
 }
 
