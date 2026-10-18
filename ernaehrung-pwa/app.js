@@ -1475,6 +1475,24 @@ function foodsManage() {
   $("#fAll", s).onclick = () => { const all = filtered(), every = all.every(f => sel.has(f.id)); all.forEach(f => every ? sel.delete(f.id) : sel.add(f.id)); draw(); };
   draw();
 }
+/* Geändertes Lebensmittel auch in Rezepten übernehmen (Zutaten werden über den Namen zugeordnet) */
+function recipeSyncSheet(f, oldName, hits) {
+  const cnt = hits.reduce((a, r) => a + r.items.filter(i => String(i.name).toLowerCase() === oldName).length, 0);
+  const s = sheet(`<h3>Gespeichert</h3><p class="muted" style="margin:0 0 14px">„${esc(f.name)}“ steckt in ${hits.length} ${hits.length === 1 ? "Rezept" : "Rezepten"} (${cnt} ${cnt === 1 ? "Zutat" : "Zutaten"}):</p>
+    <div class="card" style="margin-bottom:14px">${hits.map(r => `<div style="padding:3px 0">${esc(r.name)}</div>`).join("")}</div>
+    <div class="muted small" style="margin-bottom:6px">Soll die Änderung dort auch gelten? Bereits eingetragene Mahlzeiten bleiben unverändert.</div>
+    <button class="btn block" style="margin-top:10px" id="rsYes">In ${hits.length === 1 ? "dem Rezept" : "allen Rezepten"} übernehmen</button>
+    <button class="btn sec block" style="margin-top:8px" id="rsNo">Nur das Lebensmittel ändern</button>`);
+  $("#rsNo", s).onclick = () => { closeSheet(); render(); toast("Gespeichert"); };
+  $("#rsYes", s).onclick = () => {
+    hits.forEach(r => r.items.forEach(i => {
+      if (String(i.name).toLowerCase() !== oldName) return;
+      i.name = f.name; i.kcal = num(f.kcal); i.protein = num(f.protein); i.carbs = num(f.carbs); i.fat = num(f.fat);
+      MICRO.forEach(m => { if (hasN(f[m.fk])) i[m.fk] = f[m.fk]; else delete i[m.fk]; });
+    }));
+    save(); closeSheet(); render(); toast(hits.length + (hits.length === 1 ? " Rezept aktualisiert" : " Rezepte aktualisiert"));
+  };
+}
 function foodEdit(f) {
   const s = sheet(`<h3>${f ? "Lebensmittel bearbeiten" : "Neues Lebensmittel"}</h3>${foodForm(f)}
     <button class="btn block" style="margin-top:14px" id="fs">Speichern</button>
@@ -1483,8 +1501,12 @@ function foodEdit(f) {
   bindPaste(s, () => { closeSheet(); render(); });
   $("#fs", s).onclick = () => {
     const n = readFoodForm(s, f); if (!n) return;
+    const oldName = f ? String(f.name).toLowerCase() : "";
     if (f) Object.assign(f, n); else D.foods.push(n);
-    save(); closeSheet(); render(); toast("Gespeichert");
+    save();
+    const hits = f ? D.recipes.filter(r => (r.items || []).some(i => String(i.name).toLowerCase() === oldName)) : [];
+    if (hits.length) return recipeSyncSheet(f, oldName, hits);
+    closeSheet(); render(); toast("Gespeichert");
   };
   if (f) $("#fd", s).onclick = () => { D.foods = D.foods.filter(x => x !== f); save(); closeSheet(); render(); };
   $("#fb", s).onclick = () => { closeSheet(); };
