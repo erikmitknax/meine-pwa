@@ -272,3 +272,18 @@ textarea::placeholder{color:var(--muted);opacity:.8}
 .mrow.tap{cursor:pointer;border-radius:12px;transition:background .15s}
 .mrow.tap:active{background:var(--card2)}
 .mrow.tap .mt span svg{vertical-align:-2px;margin-left:2px}
+
+/* Verlauf über den Tag */
+.tcchips{display:flex;gap:6px;flex-wrap:wrap;margin:0 0 10px}
+.tcchip{border:1.5px solid var(--line);background:var(--card);color:var(--muted);border-radius:999px;padding:6px 12px;font:600 13px "Bricolage Grotesque",system-ui}
+.tcchip.on{border-color:var(--cc);color:var(--text);background:color-mix(in srgb,var(--cc) 16%,transparent)}
+.tcsplit{display:flex;gap:8px;margin-top:6px}
+.tcsplit>div{flex:1;background:var(--card2);border-radius:12px;padding:8px 6px;text-align:center}
+.tcsplit b{display:block;font-size:16px}.tcsplit span{font-size:11.5px;color:var(--muted);font-weight:600}
+.tcrow{display:flex;align-items:center;gap:10px;padding:9px 0;cursor:pointer}
+.tcrow+.tcrow{border-top:1px solid var(--line)}
+.tcrow .tt{font-weight:700;font-variant-numeric:tabular-nums;color:var(--muted);flex:none}
+.tcrow .tn{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600}
+.tcrow .tv{flex:none;text-align:right;font-weight:700;font-size:14px}
+.tcrow .tv small{display:block;color:var(--muted);font-weight:600;font-size:11.5px}
+.mrow .mt span{display:inline-flex;align-items:center;gap:4px;white-space:nowrap}

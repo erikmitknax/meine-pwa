@@ -71,6 +71,10 @@ function sum(list) {
   return list.reduce((a, e) => ({ kcal: a.kcal + e.kcal, p: a.p + e.p, c: a.c + e.c, f: a.f + e.f }), { kcal: 0, p: 0, c: 0, f: 0 });
 }
 const dayEntries = d => D.entries.filter(e => e.date === d);
+/* Uhrzeit neuer Einträge: jetzt, aber nur wenn der Tag heute ist (bei Nachträgen für andere Tage bleibt sie leer) */
+const timeOk = t => typeof t === "string" && /^([01]\d|2[0-3]):[0-5]\d$/.test(t);
+function nowT() { const d = new Date(), z = n => String(n).padStart(2, "0"); return z(d.getHours()) + ":" + z(d.getMinutes()); }
+const stamp = () => ui.date === iso(new Date()) ? { t: nowT() } : {};
 
 /* ---- Weitere Nährstoffe (wie auf dem Etikett): Zucker, Ballaststoffe, gesättigte Fettsäuren, Salz ---- */
 /* Lebensmittel/Zutaten: Feld fk pro 100 g · Tagebuch-Eintrag: Feld ek in g (Momentaufnahme) */
@@ -549,7 +553,7 @@ function pickFood(f, fromOnline) {
 }
 function addEntry(meal, food, grams) {
   const c = calc(food, grams);
-  D.entries.push({ id: uid(), date: ui.date, meal, name: food.name, grams, kcal: c.kcal, p: c.p, c: c.c, f: c.f, ...microOf(food, grams) });
+  D.entries.push({ id: uid(), date: ui.date, ...stamp(), meal, name: food.name, grams, kcal: c.kcal, p: c.p, c: c.c, f: c.f, ...microOf(food, grams) });
 }
 
 /* Scannen */
@@ -1003,7 +1007,7 @@ function bodyMulti(b) {
   go.onclick = () => {
     if (!rows.length) return;
     const meal = ui.meal;
-    rows.forEach(f => { const c = calc(f, f.serving); D.entries.push({ id: uid(), date: ui.date, meal, name: f.name, brand: f.brand || undefined, grams: f.serving, kcal: c.kcal, p: c.p, c: c.c, f: c.f, ...microOf(f, f.serving) }); });
+    rows.forEach(f => { const c = calc(f, f.serving); D.entries.push({ id: uid(), date: ui.date, ...stamp(), meal, name: f.name, brand: f.brand || undefined, grams: f.serving, kcal: c.kcal, p: c.p, c: c.c, f: c.f, ...microOf(f, f.serving) }); });
     ui.open[meal] = true; closeSheet(); save(); render(); toast(rows.length + " Einträge zu " + mealName(meal) + " hinzugefügt");
   };
   $("#mCopy", b).onclick = async () => toast(await copyText(MULTI_PROMPT) ? "Auftrag kopiert. An die KI schicken (mit Fotos) und die Antwort hier einfügen." : "Kopieren nicht möglich");
@@ -1093,7 +1097,7 @@ function pickRecipe(r) {
     if (!(f > 0) || !(g > 0)) return toast(mode === "g" ? "Bitte Gramm eingeben" : "Bitte Portionen eingeben");
     ui.meal = $("#rm", s).value;
     const gf = tot.grams > 0 ? g / (tot.grams * f) : 1; // Verhältnis Waage (fertig) zu Summe der Zutaten
-    D.entries.push({ id: uid(), date: ui.date, meal: ui.meal, rid: r.id, name: r.name, grams: g, kcal: tot.kcal * f, p: tot.p * f, c: tot.c * f, f: tot.f * f, ...(Math.abs(gf - 1) > 1e-6 ? { gf } : {}),
+    D.entries.push({ id: uid(), date: ui.date, ...stamp(), meal: ui.meal, rid: r.id, name: r.name, grams: g, kcal: tot.kcal * f, p: tot.p * f, c: tot.c * f, f: tot.f * f, ...(Math.abs(gf - 1) > 1e-6 ? { gf } : {}),
       ...(() => { const mi = microFromIngs(r.items), o = {}; MICRO.forEach(m => { if (hasN(mi[m.ek])) o[m.ek] = mi[m.ek] * f; }); return o; })(),
       ings: r.items.map(i => ({ name: i.name, grams: i.grams * f, kcal: i.kcal, protein: i.protein, carbs: i.carbs, fat: i.fat, ...pick100(i) })) });
     r.used = (r.used || 0) + 1;
@@ -1339,6 +1343,37 @@ function mealSheet(mid, date) {
   $$("[data-eid]", s).forEach(el => el.onclick = () => editEntry(el.dataset.eid));
 }
 
+/* ---------- Verlauf über den Tag (kumuliert nach Uhrzeit) ---------- */
+const TC_MET = { kcal: { n: "Kalorien", u: "kcal", k: "kcal", col: "var(--accent)" }, p: { n: "Eiweiß", u: "g", k: "p", col: "var(--p)" }, c: { n: "Kohlenhydrate", u: "g", k: "c", col: "var(--c)" }, f: { n: "Fett", u: "g", k: "f", col: "var(--f)" } };
+const tMin = t => +t.slice(0, 2) * 60 + +t.slice(3);
+function timeChartHtml(list, mk) {
+  const M = TC_MET[mk], g = goals(), goal = mk === "kcal" ? g.kcal : g[mk], fmtv = v => M.u === "kcal" ? fmt(v) : nde(v, 0);
+  const withT = list.filter(e => timeOk(e.t)).sort((a, b) => a.t.localeCompare(b.t)), noT = list.length - withT.length;
+  const chips = `<div class="tcchips">${Object.entries(TC_MET).map(([k, m]) => `<button class="tcchip ${k === mk ? "on" : ""}" data-tcm="${k}" style="--cc:${m.col}">${m.n}</button>`).join("")}</div>`;
+  const note = noT ? `<div class="muted tiny" style="margin-top:8px">${noT} ${noT === 1 ? "Eintrag hat" : "Einträge haben"} keine Uhrzeit und ${noT === 1 ? "fehlt" : "fehlen"} hier. Tippe den Eintrag an und stelle die Uhrzeit ein.</div>` : "";
+  if (!withT.length) return chips + `<div class="muted center" style="padding:20px 10px">Noch keine Uhrzeiten an diesem Tag. Neue Einträge von heute bekommen automatisch die aktuelle Uhrzeit.</div>` + note;
+  const today = ui.date === iso(new Date()), nowM = today ? tMin(nowT()) : 0;
+  let cum = 0; const pts = withT.map(e => { cum += e[M.k]; return { m: tMin(e.t), v: cum, e }; });
+  const total = cum, first = pts[0].m, last = Math.max(pts[pts.length - 1].m, nowM);
+  let lo = Math.max(0, Math.floor(first / 60) - 1) * 60, hi = Math.min(1440, (Math.ceil(last / 60) + 1) * 60);
+  if (hi - lo < 360) { hi = Math.min(1440, lo + 360); lo = Math.max(0, hi - 360); }
+  const W = 340, H = 190, L = 40, R = 10, T = 12, B = 26, pw = W - L - R, ph = H - T - B;
+  const ymax = Math.max(total, goal > 0 ? goal : 0, 1) * 1.08, X = m => L + (m - lo) / (hi - lo) * pw, Y = v => T + ph - v / ymax * ph;
+  const step = hi - lo <= 480 ? 60 : hi - lo <= 840 ? 120 : 180;
+  let xt = ""; for (let m = Math.ceil(lo / step) * step; m <= hi; m += step) xt += `<line x1="${X(m)}" x2="${X(m)}" y1="${T}" y2="${T + ph}" stroke="var(--line)"/><text x="${X(m)}" y="${H - 8}" text-anchor="middle" font-size="10" fill="var(--muted)">${m / 60}</text>`;
+  let yt = ""; for (let i = 0; i <= 4; i++) { const v = ymax / 1.08 * i / 4; yt += `<line x1="${L}" x2="${W - R}" y1="${Y(v)}" y2="${Y(v)}" stroke="var(--line)"/><text x="${L - 5}" y="${Y(v) + 3}" text-anchor="end" font-size="10" fill="var(--muted)">${fmtv(v)}</text>`; }
+  const path = [{ m: lo, v: 0 }, ...pts, ...(today && nowM > pts[pts.length - 1].m ? [{ m: nowM, v: total }] : [])];
+  const d = path.map((q, i) => (i ? "L" : "M") + X(q.m).toFixed(1) + " " + Y(q.v).toFixed(1)).join(" ");
+  const area = d + ` L${X(path[path.length - 1].m).toFixed(1)} ${T + ph} L${X(lo)} ${T + ph}Z`;
+  const goalLine = goal > 0 ? `<line x1="${L}" x2="${W - R}" y1="${Y(goal)}" y2="${Y(goal)}" stroke="var(--muted)" stroke-dasharray="4 4"/><text x="${W - R}" y="${Y(goal) - 4}" text-anchor="end" font-size="10" fill="var(--muted)">Ziel ${fmtv(goal)}</text>` : "";
+  const svg = `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Verlauf ${M.n} über den Tag">${yt}${xt}${goalLine}<path d="${area}" fill="${M.col}" opacity=".13"/><path d="${d}" fill="none" stroke="${M.col}" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>${pts.map(q => `<circle cx="${X(q.m).toFixed(1)}" cy="${Y(q.v).toFixed(1)}" r="3.5" fill="${M.col}" stroke="var(--card)" stroke-width="1.5"/>`).join("")}</svg>`;
+  const part = (a, b) => total > 0 ? Math.round(withT.filter(e => { const m = tMin(e.t); return m >= a && m < b; }).reduce((x, e) => x + e[M.k], 0) / total * 100) : 0;
+  const pa = part(0, 720), pb = part(720, 1080), pc = part(1080, 1441);
+  const split = `<div class="tcsplit"><div><b>${pa} %</b><span>vor 12 Uhr</span></div><div><b>${pb} %</b><span>12 bis 18 Uhr</span></div><div><b>${pc} %</b><span>nach 18 Uhr</span></div></div>`;
+  const items = pts.map(q => `<div class="tcrow" data-eid="${q.e.id}" role="button" tabindex="0"><span class="tt">${q.e.t}</span><span class="tn">${esc(q.e.name)}</span><span class="tv">+${fmtv(q.e[M.k])} ${M.u}<small>Σ ${fmtv(q.v)}</small></span></div>`).join("");
+  return chips + `<div class="muted small" style="margin:2px 2px 4px">${M.n} über den Tag: <b style="color:var(--text)">${fmtv(total)} ${M.u}</b>${goal > 0 ? ` von ${fmtv(goal)}` : ""}, Uhrzeit in Stunden</div>${svg}${split}<div class="list" style="padding:0 14px;margin-top:10px">${items}</div>${note}`;
+}
+
 /* ---------- Tages-Diagramm: Mahlzeiten und Makros ---------- */
 function dayChart() {
   const g = goals(), list = dayEntries(ui.date), t = sum(list);
@@ -1362,12 +1397,22 @@ function dayChart() {
       <div class="dleg">${leg("Eiweiß", "var(--p)", t.p, g.p, kP)}${leg("Kohlenhydrate", "var(--c)", t.c, g.c, kC)}${leg("Fett", "var(--f)", t.f, g.f, kF)}</div></div>
       <h2 style="margin:6px 2px 4px">Nach Mahlzeit</h2><div class="list" style="padding:0 16px">${rows}</div>
       <div class="muted tiny" style="margin:10px 4px 0">Die Balken zeigen, woher die Kalorien jeder Mahlzeit kommen. Tippe eine Mahlzeit an für alle Nährstoffe und Einträge. Prozentwerte beziehen sich auf die Kalorien aus Eiweiß, Kohlenhydraten und Fett.</div>
+      <h2 style="margin:18px 2px 6px">Verlauf über den Tag</h2><div id="tcBox"></div>
       <button class="btn sec block" style="margin-top:14px" id="dcNutri">Alle Nährstoffe des Tages</button>`
       : `<div class="muted center" style="padding:30px 10px">Heute ist noch nichts eingetragen. Sobald du etwas hinzufügst, siehst du hier die Verteilung.</div>`}
     <button class="btn sec block" style="margin-top:16px" id="dcClose">Schließen</button>`, s => {
     $("#dcClose", s).onclick = closeSheet;
     $$("[data-mrow]", s).forEach(el => { const go = () => mealSheet(el.dataset.mrow, ui.date); el.onclick = go; el.onkeydown = ev => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); go(); } }; });
     if ($("#dcNutri", s)) $("#dcNutri", s).onclick = () => nutrientSheet(ui.date);
+    const box = $("#tcBox", s);
+    if (box) {
+      const draw = () => {
+        box.innerHTML = timeChartHtml(list, ui.tcMetric || "kcal");
+        $$("[data-tcm]", box).forEach(b => b.onclick = () => { ui.tcMetric = b.dataset.tcm; draw(); });
+        $$("[data-eid]", box).forEach(el => { const go = () => editEntry(el.dataset.eid); el.onclick = go; el.onkeydown = ev => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); go(); } }; });
+      };
+      draw();
+    }
   });
 }
 
@@ -1393,6 +1438,7 @@ function editEntry(id) {
   const s = sheet(`<h3>${esc(e.name)}</h3><div id="eNut"></div>
     ${ings ? "" : `<label>Menge (g)</label><input type="text" inputmode="decimal" id="eg" value="${r0(e.grams)}">`}${ings ? `<label>Menge gesamt (g)</label><input type="text" inputmode="decimal" id="eg" value="${r0(e.grams)}">` : ""}
     ${ingHtml}
+    <label>Uhrzeit</label><input type="time" id="et" value="${timeOk(e.t) ? e.t : ""}">
     <label>Mahlzeit</label><select id="em">${MEALS.map(m => `<option value="${m.id}" ${m.id === e.meal ? "selected" : ""}>${m.name}</option>`).join("")}</select>
     <button class="btn block" style="margin-top:14px" id="es">Speichern</button>
     <button class="btn danger block" style="margin-top:8px" id="ed">Eintrag löschen</button>`);
@@ -1435,6 +1481,7 @@ function editEntry(id) {
       if (Array.isArray(e.ings)) e.ings = e.ings.map(i => ({ ...i, grams: i.grams * k }));
     }
     e.meal = $("#em", s).value;
+    const tv = $("#et", s).value; if (timeOk(tv)) e.t = tv; else delete e.t;
     save(); closeSheet(); render();
   };
   $("#ed", s).onclick = () => { D.entries = D.entries.filter(x => x.id !== id); save(); closeSheet(); render(); };
@@ -1659,7 +1706,7 @@ const mealName = id => (MEALS.find(m => m.id === id) || MEALS[3]).name;
 function diaryCsv() {
   const order = MEALS.map(m => m.id);
   const es = D.entries.slice().sort((a, b) => a.date.localeCompare(b.date) || order.indexOf(a.meal) - order.indexOf(b.meal));
-  return csvOf(["datum", "mahlzeit", "name", "menge_g", "kcal", "eiweiss", "kohlenhydrate", "fett", "zucker", "ballaststoffe", "gesaettigt", "salz"], es.map(e => [e.date, mealName(e.meal), e.name, csvNum(e.grams), csvNum(e.kcal), csvNum(e.p), csvNum(e.c), csvNum(e.f), ...MICRO.map(m => hasN(e[m.ek]) ? csvNum(e[m.ek]) : "")]));
+  return csvOf(["datum", "uhrzeit", "mahlzeit", "name", "menge_g", "kcal", "eiweiss", "kohlenhydrate", "fett", "zucker", "ballaststoffe", "gesaettigt", "salz"], es.map(e => [e.date, timeOk(e.t) ? e.t : "", mealName(e.meal), e.name, csvNum(e.grams), csvNum(e.kcal), csvNum(e.p), csvNum(e.c), csvNum(e.f), ...MICRO.map(m => hasN(e[m.ek]) ? csvNum(e[m.ek]) : "")]));
 }
 function weightCsv() { return csvOf(["datum", "gewicht_kg"], weightList().map(w => [w.d, csvNum(w.w)])); }
 function recipesCsv() {
@@ -1704,7 +1751,7 @@ function importAnyCsv(text) {
     return `${added} Rezepte neu, ${updated} aktualisiert`;
   }
   if (iDate >= 0 && iMeal >= 0) {
-    const iN = col("name", "lebensmittel"), iG = col("menge_g"), iK = col("kcal"), iP = col("eiweiss"), iC = col("kohlenhydrate"), iF = col("fett"), iMe = ["zucker", "ballaststoffe", "gesaettigt", "salz"].map(n => col(n));
+    const iN = col("name", "lebensmittel"), iT = col("uhrzeit"), iG = col("menge_g"), iK = col("kcal"), iP = col("eiweiss"), iC = col("kohlenhydrate"), iF = col("fett"), iMe = ["zucker", "ballaststoffe", "gesaettigt", "salz"].map(n => col(n));
     const key = e => [e.date, e.meal, e.name.toLowerCase(), Math.round(e.grams), Math.round(e.kcal)].join("|");
     const have = new Set(D.entries.map(key));
     let added = 0, skipped = 0;
@@ -1713,6 +1760,7 @@ function importAnyCsv(text) {
       const m = MEALS.find(x => x.name.toLowerCase() === get(r, iMeal).toLowerCase() || x.id === get(r, iMeal).toLowerCase());
       const e = { id: uid(), date, meal: m ? m.id : "s", name, grams: num(get(r, iG)), kcal: num(get(r, iK)), p: num(get(r, iP)), c: num(get(r, iC)), f: num(get(r, iF)) };
       MICRO.forEach((m, k) => { if (iMe[k] >= 0 && get(r, iMe[k]) !== "") e[m.ek] = num(get(r, iMe[k])); });
+      if (iT >= 0) { const tm = get(r, iT).match(/^(\d{1,2}):(\d{2})/); if (tm) { const tt = tm[1].padStart(2, "0") + ":" + tm[2]; if (timeOk(tt)) e.t = tt; } }
       if (have.has(key(e))) { skipped++; return; }
       have.add(key(e)); D.entries.push(e); added++;
     });
