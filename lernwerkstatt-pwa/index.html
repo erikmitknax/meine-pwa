@@ -924,12 +924,14 @@ async function addPdf(topic,file){
   }
   topic.pdfs=Array.isArray(topic.pdfs)?topic.pdfs:[];
   topic.pdfs.push(e);saveMeta();
+  if(typeof fbPdfSync==="function")fbPdfSync();
 }
 async function removePdfFile(e){
   try{
     if(e.kind==="asset"){const a=await getAssets();if(a)await a.delete(e.ref)}
     else await idbDel(e.id);
   }catch(err){}
+  if(typeof fbPdfDelete==="function")fbPdfDelete(e);
   const u=urlCache.get(e.id);if(u){try{URL.revokeObjectURL(u)}catch(x){}urlCache.delete(e.id)}
 }
 const urlCache=new Map();
@@ -948,7 +950,9 @@ function ensurePdfJs(){
 }
 async function pdfBytes(e){
   if(e.kind==="asset"){const r=await fetch("/_blob/"+e.ref);if(!r.ok)throw new Error("fetch");return r.arrayBuffer()}
-  const b=await idbGet(e.id);if(!b)throw new Error("missing");
+  let b=await idbGet(e.id);
+  if(!b&&e.cloud&&typeof fbPdfFetch==="function"){b=await fbPdfFetch(e);if(!b)throw new Error("handled")}
+  if(!b)throw new Error("missing");
   return b.arrayBuffer?b.arrayBuffer():new Response(b).arrayBuffer();
 }
 let viewerOpen=false;
@@ -957,7 +961,7 @@ async function openViewer(e){
   if(!(await ensurePdfJs()))return false;
   let data;
   try{data=await pdfBytes(e)}catch(err){
-    toast(err&&err.message==="missing"?"Das PDF liegt nicht auf diesem Gerät.":"Das PDF konnte nicht geladen werden.");return true;
+    if(!(err&&err.message==="handled"))toast(err&&err.message==="missing"?"Das PDF liegt nicht auf diesem Gerät.":"Das PDF konnte nicht geladen werden.");return true;
   }
   let pdf;
   try{pdf=await window.pdfjsLib.getDocument({data:new Uint8Array(data),standardFontDataUrl:"pdfjs/standard_fonts/"}).promise}
@@ -1050,6 +1054,7 @@ function linkFor(e){
     a.classList.add("off");
     idbGet(e.id).then(b=>{
       if(b){const u=URL.createObjectURL(b);urlCache.set(e.id,u);a.setAttribute("href",u);a.classList.remove("off")}
+      else if(e.cloud){a.classList.remove("off");a.title="Wird beim Öffnen aus dem Konto geladen."}
       else a.title="Nur auf dem Gerät verfügbar, auf dem sie hochgeladen wurde."
     }).catch(()=>{a.title="Nur auf dem Gerät verfügbar, auf dem sie hochgeladen wurde."});
   }
@@ -1095,7 +1100,7 @@ function pdfPanel(t){
     const ren=el("button",{class:"btn small",type:"button","aria-label":"„"+e.name+"“ umbenennen"},"Umbenennen");
     ren.addEventListener("click",()=>{renamingPdf=e.id;openPdf.add(t.id);renderLib()});
     box.append(el("div",{class:"pdfrow"+(e.done?" done":"")},
-      el("div",{style:"display:flex;gap:12px;align-items:flex-start;min-width:0"},ck,el("div",{style:"min-width:0"},linkFor(e),el("div",{class:"syncnote",text:fmtSize(e.size||0)+(e.kind==="local"?" · nur auf diesem Gerät":"")+(e.done?" · erledigt":"")}))),
+      el("div",{style:"display:flex;gap:12px;align-items:flex-start;min-width:0"},ck,el("div",{style:"min-width:0"},linkFor(e),el("div",{class:"syncnote",text:fmtSize(e.size||0)+(e.kind==="local"?(e.cloud?" · im Konto gesichert":" · nur auf diesem Gerät"):"")+(e.done?" · erledigt":"")}))),
       el("div",{class:"row",style:"gap:6px;flex-wrap:wrap;justify-content:flex-end"},ren,del)));
   });
   if(!list.length)box.append(el("p",{class:"syncnote",text:"Noch keine Unterlagen. Beim Lernen siehst du die PDFs eines Themas und seiner Oberthemen unter der Karte."}));
@@ -2010,8 +2015,8 @@ function applyRestore(plan){
 const FBK="lernwerkstatt.fb",FB_V="10.14.1";
 const FB_CFG={apiKey:"AIzaSyAlCKl6VVzqbLOoYMD1zlswFDLt47sI_2I",authDomain:"foodpro-e2a44.firebaseapp.com",projectId:"foodpro-e2a44",storageBucket:"foodpro-e2a44.firebasestorage.app",messagingSenderId:"803117480250",appId:"1:803117480250:web:0f54697c6e1ac470ae3803"};
 const FB={uid:"",meta:{},last:0,user:null,m:null,ready:false,pushing:false,again:false,unsub:[],err:"",state:"off",t:null,rt:null};
-try{const j=JSON.parse(localStorage.getItem(FBK)||"null");if(j){FB.uid=j.uid||"";FB.meta=j.meta||{};FB.last=j.last||0}}catch(e){}
-function fbSave(){try{localStorage.setItem(FBK,JSON.stringify({uid:FB.uid,meta:FB.meta,last:FB.last}))}catch(e){}}
+try{const j=JSON.parse(localStorage.getItem(FBK)||"null");if(j){FB.uid=j.uid||"";FB.meta=j.meta||{};FB.last=j.last||0;FB.pdel=j.pdel||[]}}catch(e){}
+function fbSave(){try{localStorage.setItem(FBK,JSON.stringify({uid:FB.uid,meta:FB.meta,last:FB.last,pdel:FB.pdel||[]}))}catch(e){}}
 function fbStable(v){
   if(v===null||typeof v!=="object")return JSON.stringify(v);
   if(Array.isArray(v))return "["+v.map(fbStable).join(",")+"]";
@@ -2117,6 +2122,7 @@ async function fbStart(user){
   FB.ready=true;FB.state="live";
   await fbPush();
   FB.last=Date.now();fbSave();fbRefresh();
+  fbPdfSync();
 }
 function fbChanged(){
   normalize();lsWrite();fbSave();applyTheme();
@@ -2146,6 +2152,68 @@ async function fbPush(){
 function fbOnSave(){if(!FB.ready)return;clearTimeout(FB.t);FB.t=setTimeout(fbPush,1200)}
 addEventListener("online",()=>{if(FB.uid&&!FB.m)fbInit()});
 document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="hidden"&&FB.ready){clearTimeout(FB.t);fbPush()}});
+
+
+/* ---- PDFs im Konto: in Stücken (je 600 KB) unter users/<uid>/lw_pdfs/<pdf-id>_<n> ----
+   Hochgeladen wird im Hintergrund, sobald man angemeldet ist. Auf einem anderen Gerät wird das PDF beim ersten Öffnen geladen und dort gespeichert. */
+const PDF_CHUNK=600*1024;
+const pdfDocId=(id,n)=>id+"_"+n;
+async function fbPdfSync(){
+  if(!FB.ready||FB.pdfBusy)return;
+  FB.pdfBusy=true;
+  try{
+    const {fs,dbs}=FB.m;
+    /* 1) ausstehende Löschungen */
+    while(FB.pdel&&FB.pdel.length){
+      const d=FB.pdel[0];
+      for(let i=0;i<d.n;i+=20){const b=fs.writeBatch(dbs);for(let k=i;k<Math.min(d.n,i+20);k++)b.delete(fs.doc(dbs,"users",FB.uid,"lw_pdfs",pdfDocId(d.id,k)));await b.commit()}
+      FB.pdel.shift();fbSave();
+    }
+    /* 2) neue PDFs hochladen */
+    for(const t of S.topics){
+      for(const e of (t.pdfs||[])){
+        if(e.kind!=="local"||e.cloud)continue;
+        let blob=null;try{blob=await idbGet(e.id)}catch(x){}
+        if(!blob)continue;
+        const n=Math.max(1,Math.ceil(blob.size/PDF_CHUNK));
+        for(let i=0;i<n;i+=4){
+          const b=fs.writeBatch(dbs);
+          for(let k=i;k<Math.min(n,i+4);k++)b.set(fs.doc(dbs,"users",FB.uid,"lw_pdfs",pdfDocId(e.id,k)),{pid:e.id,i:k,n,b:await blobToBase64(blob.slice(k*PDF_CHUNK,(k+1)*PDF_CHUNK)),u:Date.now()});
+          await b.commit();
+        }
+        if(!(t.pdfs||[]).includes(e)){FB.pdel=(FB.pdel||[]).concat([{id:e.id,n}]);fbSave();continue}   /* inzwischen gelöscht */
+        e.cloud=true;e.chunks=n;saveMeta();
+        if(typeof renderLib==="function"&&!$("#tab-bib").hidden)renderLib();
+      }
+    }
+  }catch(err){FB.err="PDF-Upload: "+(err&&err.message||err)}
+  FB.pdfBusy=false;
+}
+async function fbPdfDelete(e){
+  if(!e||!e.cloud)return;
+  FB.pdel=(FB.pdel||[]).concat([{id:e.id,n:e.chunks||1}]);fbSave();
+  if(FB.ready)fbPdfSync();
+}
+/* Holt ein PDF aus dem Konto (null, wenn nicht möglich) und speichert es auf diesem Gerät. */
+async function fbPdfFetch(e){
+  if(!e||!e.cloud)return null;
+  if(!FB.ready){toast(FB.uid?"Noch nicht mit dem Konto verbunden. Bitte kurz warten oder online gehen.":"Melde dich unter Einstellungen im Konto an, um dieses PDF zu laden.");return null}
+  try{
+    toast("Lade „"+e.name+"“ aus dem Konto …");
+    const {fs,dbs}=FB.m,n=e.chunks||1,parts=new Array(n);
+    for(let i=0;i<n;i+=6){
+      await Promise.all([...Array(Math.min(6,n-i)).keys()].map(async j=>{
+        const k=i+j,snap=await fs.getDoc(fs.doc(dbs,"users",FB.uid,"lw_pdfs",pdfDocId(e.id,k)));
+        if(!snap.exists())throw new Error("fehlt");
+        const bin=atob(snap.data().b),u8=new Uint8Array(bin.length);for(let q=0;q<bin.length;q++)u8[q]=bin.charCodeAt(q);
+        parts[k]=u8;
+      }));
+    }
+    const blob=new Blob(parts,{type:"application/pdf"});
+    try{await idbPut(e.id,blob)}catch(x){}
+    return blob;
+  }catch(err){toast("Das PDF konnte nicht aus dem Konto geladen werden.");return null}
+}
 
 /* ---- Oberfläche ---- */
 function fbRefresh(){
