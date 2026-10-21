@@ -1652,6 +1652,7 @@ function buildReport(from, to) {
   out.push("# FoodPro – Ernährungsprotokoll");
   out.push(from === to ? `Tag: ${dLong(from)}` : `Zeitraum: ${dLong(from)} bis ${dLong(to)} (${days.length} Tage)`);
   out.push("Nährwerte stammen aus Datenbank, Rezepten oder KI-Schätzung und sind Näherungswerte.");
+  if (D.entries.some(e => e.date >= from && e.date <= to && timeOk(e.t))) out.push("Uhrzeiten (HH:MM) geben an, wann der Eintrag erfasst wurde, also ungefähr wann gegessen wurde. Einträge ohne Uhrzeit sind ohne Angabe.");
   out.push("", "## Tagesziele");
   out.push(`- Kalorien: ${nde(g.kcal, 0)} kcal`);
   out.push(`- Eiweiß: ${nde(g.p, 0)} g (${s.pP} %) · Kohlenhydrate: ${nde(g.c, 0)} g (${s.pC} %) · Fett: ${nde(g.f, 0)} g (${s.pF} %)`);
@@ -1678,13 +1679,22 @@ function buildReport(from, to) {
     out.push(`Summe: ${nde(r.t.kcal, 0)} kcal (Ziel ${nde(g.kcal, 0)}) · Eiweiß ${nde(r.t.p, 0)} g (Ziel ${nde(g.p, 0)}) · Kohlenhydrate ${nde(r.t.c, 0)} g (Ziel ${nde(g.c, 0)}) · Fett ${nde(r.t.f, 0)} g (Ziel ${nde(g.f, 0)})`);
     { const q = microSum(r.es); out.push(`Weitere Nährstoffe: Zucker ${nde(q.s)} g · Ballaststoffe ${nde(q.fi)} g · gesättigte Fettsäuren ${nde(q.sa)} g · Salz ${nde(q.sl, 2)} g${microMissNote(q)}`); }
     if (D.weights[r.d] != null) out.push(`Gewicht: ${nde(D.weights[r.d])} kg`);
+    { // Verteilung über den Tag nach Uhrzeit
+      const te = r.es.filter(e => timeOk(e.t)).sort((a, b) => a.t.localeCompare(b.t));
+      if (te.length) {
+        const part = (k, a, b) => { const tot = te.reduce((x, e) => x + e[k], 0); return tot > 0 ? Math.round(te.filter(e => { const m = tMin(e.t); return m >= a && m < b; }).reduce((x, e) => x + e[k], 0) / tot * 100) : 0; };
+        const sp = (n, k) => `${n} ${part(k, 0, 720)} % / ${part(k, 720, 1080)} % / ${part(k, 1080, 1441)} %`;
+        out.push(`Uhrzeiten: erster Eintrag ${te[0].t}, letzter ${te[te.length - 1].t}${te.length < r.es.length ? ` (${te.length} von ${r.es.length} Einträgen mit Uhrzeit)` : ""}`);
+        out.push(`Verteilung vor 12 Uhr / 12 bis 18 Uhr / nach 18 Uhr: ${sp("Kalorien", "kcal")} · ${sp("Eiweiß", "p")} · ${sp("Kohlenhydrate", "c")} · ${sp("Fett", "f")}`);
+      }
+    }
     order.forEach(mid => {
       const es = r.es.filter(e => e.meal === mid || (!order.includes(e.meal) && mid === "s")); if (!es.length) return;
       const ms = sum(es);
       out.push("", `### ${mealName(mid)} – ${nde(ms.kcal, 0)} kcal (Eiweiß ${nde(ms.p, 0)} g · KH ${nde(ms.c, 0)} g · Fett ${nde(ms.f, 0)} g)`);
-      es.forEach(e => {
+      es.slice().sort((a, b) => (timeOk(a.t) ? a.t : "99:99").localeCompare(timeOk(b.t) ? b.t : "99:99")).forEach(e => {
         const rec = recipeFor(e);
-        out.push(`- ${rec ? "Rezept: " : ""}${e.name}${e.brand ? " (" + e.brand + ")" : ""}, ${nde(e.grams, 0)} g – ${nde(e.kcal, 0)} kcal · E ${nde(e.p)} · KH ${nde(e.c)} · F ${nde(e.f)}${hasN(e.s) ? " · Zucker " + nde(e.s) : ""}${hasN(e.fi) ? " · Ballaststoffe " + nde(e.fi) : ""}${hasN(e.sa) ? " · ges. Fettsäuren " + nde(e.sa) : ""}${hasN(e.sl) ? " · Salz " + nde(e.sl, 2) : ""}`);
+        out.push(`- ${timeOk(e.t) ? e.t + " Uhr: " : ""}${rec ? "Rezept: " : ""}${e.name}${e.brand ? " (" + e.brand + ")" : ""}, ${nde(e.grams, 0)} g – ${nde(e.kcal, 0)} kcal · E ${nde(e.p)} · KH ${nde(e.c)} · F ${nde(e.f)}${hasN(e.s) ? " · Zucker " + nde(e.s) : ""}${hasN(e.fi) ? " · Ballaststoffe " + nde(e.fi) : ""}${hasN(e.sa) ? " · ges. Fettsäuren " + nde(e.sa) : ""}${hasN(e.sl) ? " · Salz " + nde(e.sl, 2) : ""}`);
         if (Array.isArray(e.ings) && e.ings.length) {
           e.ings.filter(i => !i.off).forEach(i => { const c = calc(i, i.grams); out.push(`  - Zutat: ${i.name}, ${nde(i.grams, 0)} g – ${nde(c.kcal, 0)} kcal · E ${nde(c.p)} · KH ${nde(c.c)} · F ${nde(c.f)}`); });
         } else if (rec && rec.items && rec.items.length) {
