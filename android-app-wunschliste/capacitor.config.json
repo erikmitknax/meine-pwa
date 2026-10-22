@@ -1,0 +1,12 @@
+{
+  "appId": "io.github.erikmitknax.wunschliste",
+  "appName": "Wunschliste",
+  "webDir": "www",
+  "backgroundColor": "#0E0F14",
+  "server": {
+    "url": "https://erikmitknax.github.io/meine-pwa/wunschliste-pwa/",
+    "androidScheme": "https",
+    "errorPath": "offline.html",
+    "allowNavigation": ["erikmitknax.github.io"]
+  }
+}
