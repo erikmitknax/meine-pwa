@@ -267,6 +267,9 @@ html.pv-lock,html.pv-lock body{overflow:hidden}
 .pgroup{display:grid;gap:6px}.pgroup>.pgh{display:flex;align-items:center;gap:10px;font-weight:600}
 .prow{display:flex;gap:10px;align-items:flex-start;padding:8px 10px;border:1px solid var(--line);border-radius:10px;background:var(--surface);cursor:pointer}
 .prow .f{font-weight:600;overflow-wrap:anywhere;white-space:pre-wrap}.prow .b{color:var(--muted);font-weight:400;font-size:.9rem;overflow-wrap:anywhere;max-height:3.2em;overflow:hidden}
+#cardPause{position:relative;overflow:hidden;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;touch-action:manipulation}
+#cardPause::after{content:"";position:absolute;inset:0 auto 0 0;width:0;background:var(--accent);opacity:.3;pointer-events:none}
+#cardPause.holding::after{width:100%;transition:width 1s linear}
 </style>
 </head>
 <body>
@@ -364,7 +367,7 @@ html.pv-lock,html.pv-lock body{overflow:hidden}
     </button>
     <div class="cardmeta" id="cardMeta">
       <span class="cm-deck"><small>Stapel</small><b id="cardDeck"></b></span>
-      <button class="btn small cm-edit" id="cardPause" type="button" aria-label="Karte pausieren" title="Karte pausieren (wird nicht mehr abgefragt)">⏸</button>
+      <button class="btn small cm-edit" id="cardPause" type="button" aria-label="Karte pausieren (1 Sekunde gedrückt halten)" title="Zum Pausieren 1 Sekunde gedrückt halten">⏸</button>
       <button class="btn small cm-edit" id="cardEdit" type="button" aria-label="Karte bearbeiten" title="Karte bearbeiten">✎</button>
     </div>
     <div class="panel grid cm-editor" id="cardEditor" hidden></div>
@@ -1262,7 +1265,22 @@ function pauseCard(){
   toast("Karte pausiert. Zu finden unter Bibliothek › Pausiert.");closeCardEditor();refreshAll();
   if(!Q.queue.length){if(Q.total>0||Q.done>0)finishStudy();else leaveStudy()}else showCard();
 }
-$("#cardPause").addEventListener("click",pauseCard);
+/* Pausieren nur durch 1 Sekunde Gedrückthalten, damit eine Karte nicht aus Versehen verschwindet */
+(function(){
+  const b=$("#cardPause");let timer=0,fired=false;
+  const stop=()=>{clearTimeout(timer);timer=0;b.classList.remove("holding")};
+  const start=()=>{
+    if(timer)return;fired=false;b.classList.remove("holding");void b.offsetWidth;b.classList.add("holding");
+    timer=setTimeout(()=>{timer=0;fired=true;b.classList.remove("holding");if(navigator.vibrate)try{navigator.vibrate(30)}catch(e){}pauseCard()},1000);
+  };
+  b.addEventListener("pointerdown",e=>{if(e.button>0)return;start()});
+  ["pointerup","pointerleave","pointercancel"].forEach(t=>b.addEventListener(t,stop));
+  b.addEventListener("contextmenu",e=>e.preventDefault());
+  b.addEventListener("keydown",e=>{if((e.key==="Enter"||e.key===" ")&&!e.repeat){e.preventDefault();start()}});
+  b.addEventListener("keyup",e=>{if(e.key==="Enter"||e.key===" ")stop()});
+  b.addEventListener("blur",stop);
+  b.addEventListener("click",()=>{if(fired){fired=false;return}toast("Zum Pausieren 1 Sekunde gedrückt halten")});
+})();
 
 function flip(){
   if(!Q.active)return;
