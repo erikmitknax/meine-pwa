@@ -261,6 +261,12 @@ html.pv-lock,html.pv-lock body{overflow:hidden}
 .face .txt .cp{white-space:pre-wrap}
 .srsbox{display:grid;gap:8px;padding:12px;border:1px solid var(--line);border-radius:12px;background:var(--surface2)}
 .ivgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.cardmeta .cm-edit+.cm-edit{margin-left:-4px}
+.pausedbar{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 14px;border:1px dashed var(--line);border-radius:12px;background:var(--surface);cursor:pointer;width:100%;text-align:left;font:inherit;color:inherit}
+.pausedbar b{font-weight:600}.pausedbar small{color:var(--muted)}
+.pgroup{display:grid;gap:6px}.pgroup>.pgh{display:flex;align-items:center;gap:10px;font-weight:600}
+.prow{display:flex;gap:10px;align-items:flex-start;padding:8px 10px;border:1px solid var(--line);border-radius:10px;background:var(--surface);cursor:pointer}
+.prow .f{font-weight:600;overflow-wrap:anywhere;white-space:pre-wrap}.prow .b{color:var(--muted);font-weight:400;font-size:.9rem;overflow-wrap:anywhere;max-height:3.2em;overflow:hidden}
 </style>
 </head>
 <body>
@@ -358,6 +364,7 @@ html.pv-lock,html.pv-lock body{overflow:hidden}
     </button>
     <div class="cardmeta" id="cardMeta">
       <span class="cm-deck"><small>Stapel</small><b id="cardDeck"></b></span>
+      <button class="btn small cm-edit" id="cardPause" type="button" aria-label="Karte pausieren" title="Karte pausieren (wird nicht mehr abgefragt)">⏸</button>
       <button class="btn small cm-edit" id="cardEdit" type="button" aria-label="Karte bearbeiten" title="Karte bearbeiten">✎</button>
     </div>
     <div class="panel grid cm-editor" id="cardEditor" hidden></div>
@@ -540,7 +547,7 @@ function normalize(){
   S.topics.forEach(t=>{t.parent=(t.parent&&t.parent!==t.id&&tids.has(t.parent))?t.parent:"";t.pdfs=Array.isArray(t.pdfs)?t.pdfs.filter(e=>e&&e.id&&e.name):[]});
   S.topics.forEach(t=>{const seen=new Set([t.id]);let p=t.parent;while(p){if(seen.has(p)){t.parent="";break}seen.add(p);const pt=S.topics.find(x=>x.id===p);p=pt?pt.parent:""}});
   S.decks=Array.isArray(S.decks)?S.decks:[];
-  S.decks.forEach(d=>{d.topic=d.topic||"";d.cards=Array.isArray(d.cards)?d.cards:[];d.cards.forEach(c=>{c.box=Math.max(0,Math.min(MAXBOX,c.box|0));c.due=c.due||0;c.ok=c.ok||0;c.bad=c.bad||0})});
+  S.decks.forEach(d=>{d.topic=d.topic||"";d.cards=Array.isArray(d.cards)?d.cards:[];d.cards.forEach(c=>{if(c.p)c.p=1;else delete c.p;c.box=Math.max(0,Math.min(MAXBOX,c.box|0));c.due=c.due||0;c.ok=c.ok||0;c.bad=c.bad||0})});
   S.sets=(Array.isArray(S.sets)?S.sets:[]).filter(s=>s&&s.id).map(s=>({id:s.id,name:s.name||"Lernstapel",topics:Array.isArray(s.topics)?s.topics:[],decks:Array.isArray(s.decks)?s.decks:[]}));
   S.log=S.log||{};S.set=Object.assign({work:25,short:5,long:15},S.set||{});S.v=2;
 }
@@ -762,7 +769,9 @@ function bump(key,n){const d=String(dayNum());S.log[d]=S.log[d]||{};S.log[d][key
 
 /* ---------- Wiederholung (7 Fächer, wie in der Lernkartei) ---------- */
 const startOfToday=()=>{const d=new Date();d.setHours(0,0,0,0);return d.getTime()};
-const isDue=c=>(c.due||0)<=Date.now();
+const isDue=c=>!c.p&&(c.due||0)<=Date.now();
+const liveN=d=>d.cards.reduce((a,c)=>a+(c.p?0:1),0);   /* ohne pausierte Karten */
+const pausedCards=()=>S.decks.flatMap(d=>d.cards.filter(c=>c.p).map(c=>({c,d})));
 const dueCount=d=>d.cards.filter(isDue).length;
 /* Einstellbar: pro Knopf die Wirkung aufs Fach und ein Abstands-Faktor, dazu die Tage je Fach */
 const SRS_ACTS=[["reset","Zurück auf Neu (Fach 0)"],["back","Ein Fach zurück"],["stay","Im Fach bleiben"],["up1","Ein Fach vor"],["up2","Zwei Fächer vor"]];
@@ -1122,7 +1131,7 @@ function pdfPanel(t){
 /* ---------- Heute ---------- */
 const allDue=()=>S.decks.reduce((a,d)=>a+dueCount(d),0);
 function renderHome(){
-  const t=dayNum(),due=allDue(),total=S.decks.reduce((a,d)=>a+d.cards.length,0);
+  const t=dayNum(),due=allDue(),total=S.decks.reduce((a,d)=>a+liveN(d),0);
   $("#dueCount").textContent=due;
   $("#dueText").textContent=due
     ?`${due} ${due===1?"Karte wartet":"Karten warten"} auf dich, etwa ${Math.max(1,Math.round(due*0.4))} Min.`
@@ -1136,7 +1145,7 @@ function renderHome(){
   let s=0,x=t;if(!act(x))x--;while(act(x)){s++;x--}
   $("#streak").textContent=s;
   $("#focusWeek").textContent=days.reduce((a,x)=>a+((S.log[x]||{}).f||0),0);
-  const cnt=Array(MAXBOX+1).fill(0);S.decks.forEach(d=>d.cards.forEach(c=>{cnt[Math.min(MAXBOX,c.box||0)]++}));
+  const cnt=Array(MAXBOX+1).fill(0);S.decks.forEach(d=>d.cards.forEach(c=>{if(!c.p)cnt[Math.min(MAXBOX,c.box||0)]++}));
   $("#fach").innerHTML=cnt.map((n,i)=>`<div><b class="mono">${n}</b><small>${i?i:"Neu"}</small></div>`).join("");
 }
 /* Wer das Lernen aus einem anderen Reiter startet, landet nach „Beenden“ wieder dort. */
@@ -1154,7 +1163,7 @@ function cardsOf(src){
   else if(src.kind==="topic"){const cv=descIds(src.id);ds=S.decks.filter(d=>cv.has(d.topic))}
   else if(src.kind==="set"){const s=S.sets.find(x=>x.id===src.id);ds=s?decksOfSet(s):[]}
   else ds=S.decks.slice();
-  return ds.flatMap(d=>d.cards.map(c=>({c,d})));
+  return ds.flatMap(d=>d.cards.filter(c=>!c.p).map(c=>({c,d})));
 }
 function parseSrc(v){if(!v||v==="all")return {kind:"all"};const i=v.indexOf(":");return {kind:v.slice(0,i),id:v.slice(i+1)}}
 function fillSrc(){
@@ -1243,6 +1252,18 @@ function openCardEditor(){
   b.hidden=false;b.scrollIntoView({block:"nearest"});setTimeout(()=>f.focus(),30);
 }
 $("#cardEdit").addEventListener("click",openCardEditor);
+/* Karte pausieren: wird nicht mehr abgefragt, bleibt aber erhalten (Bibliothek › Pausiert) */
+function pauseCard(){
+  if(!Q.active)return;
+  const id=Q.queue[0],x=Q.map[id];if(!x)return;
+  x.c.p=1;x.d.updated=Date.now();saveDeck(x.d);
+  if(document.activeElement&&document.activeElement.blur)document.activeElement.blur();   /* Leertaste soll danach wieder die Karte umdrehen, nicht erneut pausieren */
+  Q.queue=Q.queue.filter(i=>i!==id);Q.total=Math.max(0,Q.total-1);
+  toast("Karte pausiert. Zu finden unter Bibliothek › Pausiert.");closeCardEditor();refreshAll();
+  if(!Q.queue.length){if(Q.total>0||Q.done>0)finishStudy();else leaveStudy()}else showCard();
+}
+$("#cardPause").addEventListener("click",pauseCard);
+
 function flip(){
   if(!Q.active)return;
   Q.flipped=!Q.flipped;$("#card").classList.toggle("flip",Q.flipped);$("#rate").hidden=!Q.flipped;
@@ -1291,7 +1312,7 @@ function rate(r){
 function undoRate(){
   if(!Q.hist||!Q.hist.length)return;
   let h,x;
-  while(Q.hist.length){h=Q.hist.pop();x=Q.map[h.id];if(x&&x.d.cards.includes(x.c))break;x=null}
+  while(Q.hist.length){h=Q.hist.pop();x=Q.map[h.id];if(x&&x.d.cards.includes(x.c)&&!x.c.p)break;x=null}
   if(!x)return;
   Object.assign(x.c,h.prev);
   if(h.again){const i=Q.queue.indexOf(h.id);if(i>=0)Q.queue.splice(i,1)}else Q.done=Math.max(0,Q.done-1);
@@ -1336,7 +1357,7 @@ function renderSets(){
   const box=$("#setList");box.replaceChildren();
   if(!S.sets.length){box.append(el("div",{class:"empty",text:"Noch kein Lernstapel. Lege einen an und wähle, welche Themen und Stapel darin gemischt werden."}));return}
   S.sets.forEach(s=>{
-    const ds=decksOfSet(s),n=ds.reduce((a,d)=>a+d.cards.length,0),due=ds.reduce((a,d)=>a+dueCount(d),0);
+    const ds=decksOfSet(s),n=ds.reduce((a,d)=>a+liveN(d),0),due=ds.reduce((a,d)=>a+dueCount(d),0);
     const names=s.topics.map(topicPath).filter(Boolean);
     const sub=names.length?"Themen: "+names.join(", "):"";
     const go=el("button",{class:"btn small primary",type:"button",onclick:()=>{studyFrom="";startStudy({kind:"set",id:s.id},"due",+$("#limSel").value)}},"Fällige lernen");
@@ -1362,7 +1383,7 @@ function renderBuilder(){
   const box=$("#builder");
   if(!B){box.hidden=true;box.replaceChildren();return}
   box.hidden=false;
-  const sel=bSel(),ds=decksOfSet(sel),count=ds.reduce((a,d)=>a+d.cards.length,0);
+  const sel=bSel(),ds=decksOfSet(sel),count=ds.reduce((a,d)=>a+liveN(d),0);
   const info=el("span",{class:"syncnote",text:`${count} Karten aus ${ds.length} Stapeln ausgewählt`});
   const save=el("button",{class:"btn primary",type:"button"},"Speichern");
   const updSave=()=>{if(B.name.trim()&&ds.length)save.removeAttribute("disabled");else save.setAttribute("disabled","")};
@@ -1373,11 +1394,11 @@ function renderBuilder(){
   const deckRow=(d,locked)=>{
     const cb=el("input",{type:"checkbox"});cb.checked=locked||B.decks.has(d.id);cb.disabled=locked;
     cb.addEventListener("change",()=>{if(cb.checked)B.decks.add(d.id);else B.decks.delete(d.id);renderBuilder()});
-    return el("label",{class:"chk"},cb,el("span",null,d.title+" ",el("em",{text:"("+d.cards.length+" Karten)"})));
+    return el("label",{class:"chk"},cb,el("span",null,d.title+" ",el("em",{text:"("+liveN(d)+" Karten)"})));
   };
   const wrap=el("div",{class:"grid",style:"gap:14px"});
   const node=(parent,t,lock)=>{
-    const ids=descIds(t.id),n=S.decks.filter(d=>ids.has(d.topic)).reduce((a,d)=>a+d.cards.length,0);
+    const ids=descIds(t.id),n=S.decks.filter(d=>ids.has(d.topic)).reduce((a,d)=>a+liveN(d),0);
     const on=B.topics.has(t.id),cb=el("input",{type:"checkbox"});cb.checked=lock||on;cb.disabled=lock;
     cb.addEventListener("change",()=>{if(cb.checked)B.topics.add(t.id);else B.topics.delete(t.id);renderBuilder()});
     const grp=el("div",{class:"bgroup"},el("label",{class:"chk head"},cb,el("span",null,t.name+" ",el("em",{text:"("+n+" Karten"+(kids(t.id).length?", inkl. Unterthemen":"")+")"}))));
@@ -1653,7 +1674,7 @@ let lib={view:"list",deckId:null};
 function renderLib(){
   const v=lib.view;
   if(v==="import")renderImport();else if(v==="topics")renderTopics();else if(v==="deck")renderDeck();
-  else if(v==="newdeck")renderNewDeck();else renderLibList();
+  else if(v==="newdeck")renderNewDeck();else if(v==="paused")renderPaused();else renderLibList();
 }
 function goLib(view,deckId){lib.view=view;lib.deckId=deckId||null;renderLib();window.scrollTo(0,0)}
 const backBtn=()=>el("div",{class:"row"},el("button",{class:"btn small",type:"button",onclick:()=>goLib("list")},"← Bibliothek"));
@@ -1664,15 +1685,15 @@ function topicSelect(id,noneLabel,allow){
 }
 
 function deckCard(parent,d){
-  const due=dueCount(d),counts=Array(MAXBOX+1).fill(0);d.cards.forEach(c=>counts[Math.min(MAXBOX,c.box||0)]++);
+  const due=dueCount(d),counts=Array(MAXBOX+1).fill(0);d.cards.forEach(c=>{if(!c.p)counts[Math.min(MAXBOX,c.box||0)]++});
   const boxes=el("div",{class:"boxes",title:"Fortschritt: Neu bis Fach 6"});
-  counts.forEach(n=>{const i=el("i"),bb=el("b");bb.style.width=(d.cards.length?n/d.cards.length*100:0)+"%";i.append(bb);boxes.append(i)});
-  const good=d.cards.filter(c=>(c.box||0)>=3).length;
+  counts.forEach(n=>{const i=el("i"),bb=el("b");bb.style.width=(liveN(d)?n/liveN(d)*100:0)+"%";i.append(bb);boxes.append(i)});
+  const good=d.cards.filter(c=>!c.p&&(c.box||0)>=3).length;
   const go=el("button",{class:"btn small primary",type:"button",onclick:()=>{startFrom("bib",{kind:"deck",id:d.id},"due",0)}},"Lernen");
   if(!due)go.setAttribute("disabled","");
   parent.append(el("article",{class:"deckc"},
     el("div",{class:"top"},
-      el("div",{style:"min-width:0"},el("h3",{text:d.title}),el("div",{class:"syncnote",text:d.cards.length+" Karten · "+good+" sitzen gut"})),
+      el("div",{style:"min-width:0"},el("h3",{text:d.title}),el("div",{class:"syncnote",text:liveN(d)+" Karten · "+good+" sitzen gut"+(d.cards.length>liveN(d)?" · "+(d.cards.length-liveN(d))+" pausiert":"")})),
       el("span",{class:"pill "+(due?"on":"off"),text:due?due+" fällig":"erledigt"})),
     boxes,
     el("div",{class:"row"},go,
@@ -1696,10 +1717,12 @@ function renderLibList(){
       el("div",{class:"row"},el("button",{class:"btn primary",type:"button",onclick:()=>goLib("import")},"Karten importieren"),el("button",{class:"btn",type:"button",onclick:()=>goLib("topics")},"Themen anlegen"))));
     return;
   }
+  const np=pausedCards().length;
+  b.append(el("button",{class:"pausedbar",type:"button",onclick:()=>goLib("paused")},el("span",null,el("b",{text:"⏸ Pausiert"}),el("br"),el("small",{text:np?np+(np===1?" Karte wird nicht abgefragt":" Karten werden nicht abgefragt"):"Keine pausierten Karten. Pausieren geht beim Lernen mit ⏸."})),el("span",{class:"chev","aria-hidden":"true",text:">"})));
   const sorted=S.decks.slice().sort((a,b)=>dueCount(b)-dueCount(a)||(b.updated||b.created||0)-(a.updated||a.created||0));
   const node=(parent,t,depth)=>{
     const ids=descIds(t.id),all=S.decks.filter(d=>ids.has(d.topic));
-    const due=all.reduce((a,d)=>a+dueCount(d),0),cards=all.reduce((a,d)=>a+d.cards.length,0);
+    const due=all.reduce((a,d)=>a+dueCount(d),0),cards=all.reduce((a,d)=>a+liveN(d),0);
     const own=sorted.filter(d=>d.topic===t.id),ch=kids(t.id);
     const learn=el("button",{class:"btn small",type:"button",onclick:()=>{startFrom("bib",{kind:"topic",id:t.id},"due",0)}},"Thema lernen");
     if(!due)learn.setAttribute("disabled","");
@@ -1911,6 +1934,47 @@ function renderTopics(){
     el("div",{class:"panel"},form),list);
 }
 
+
+/* ---------- Pausierte Karten ---------- */
+const pSel=new Set();
+function renderPaused(){
+  const b=$("#libBody");b.replaceChildren();
+  const all=pausedCards();
+  [...pSel].forEach(id=>{if(!all.some(x=>x.c.id===id))pSel.delete(id)});
+  b.append(backBtn(),el("h2",{text:"⏸ Pausiert"}),
+    el("p",{class:"syncnote",style:"margin:0",text:"Diese Karten werden nicht abgefragt und zählen nicht als fällig. Hake an, was du wieder lernen willst."}));
+  if(!all.length){b.append(el("div",{class:"empty",text:"Keine pausierten Karten. Beim Lernen pausierst du eine Karte mit dem Knopf ⏸ unter der Karte."}));return}
+  const byDeck=new Map();all.forEach(x=>{if(!byDeck.has(x.d.id))byDeck.set(x.d.id,{d:x.d,cs:[]});byDeck.get(x.d.id).cs.push(x.c)});
+  const act=el("button",{class:"btn primary",type:"button"},"Ausgewählte aktivieren");
+  const allBtn=el("button",{class:"btn",type:"button"},"Alle aktivieren");
+  const selAll=el("button",{class:"btn small",type:"button"},"Alle auswählen"),selNone=el("button",{class:"btn small",type:"button"},"Auswahl aufheben");
+  const upd=()=>{act.textContent="Ausgewählte aktivieren"+(pSel.size?" ("+pSel.size+")":"");act.disabled=!pSel.size};
+  const activate=ids=>{
+    const touched=new Set();
+    all.forEach(x=>{if(ids.has(x.c.id)){delete x.c.p;touched.add(x.d)}});
+    touched.forEach(d=>{d.updated=Date.now();saveDeck(d)});
+    pSel.clear();refreshAll();renderPaused();toast(ids.size===1?"Karte aktiviert":ids.size+" Karten aktiviert");
+  };
+  act.addEventListener("click",()=>activate(new Set(pSel)));
+  allBtn.addEventListener("click",()=>armConfirm(allBtn,"Wirklich alle "+all.length+"?",()=>activate(new Set(all.map(x=>x.c.id)))));
+  selAll.addEventListener("click",()=>{all.forEach(x=>pSel.add(x.c.id));renderPaused()});
+  selNone.addEventListener("click",()=>{pSel.clear();renderPaused()});
+  b.append(el("div",{class:"row"},selAll,selNone),el("div",{class:"row"},act,allBtn));
+  byDeck.forEach(({d,cs})=>{
+    const g=el("div",{class:"pgroup"});
+    const dcb=el("input",{type:"checkbox","aria-label":"Alle Karten aus „"+d.title+"“ auswählen"});dcb.checked=cs.every(c=>pSel.has(c.id));
+    dcb.addEventListener("change",()=>{cs.forEach(c=>{if(dcb.checked)pSel.add(c.id);else pSel.delete(c.id)});renderPaused()});
+    g.append(el("label",{class:"pgh"},dcb,el("span",null,(topicPath(d.topic)?topicPath(d.topic)+" › ":"")+d.title+" ",el("em",{style:"font-weight:400;color:var(--muted)",text:"("+cs.length+")"}))));
+    cs.forEach(c=>{
+      const cb=el("input",{type:"checkbox","aria-label":"Karte auswählen"});cb.checked=pSel.has(c.id);
+      cb.addEventListener("change",()=>{if(cb.checked)pSel.add(c.id);else pSel.delete(c.id);upd();dcb.checked=cs.every(k=>pSel.has(k.id))});
+      g.append(el("label",{class:"prow"},cb,el("div",{style:"min-width:0"},el("div",{class:"f",text:c.f}),el("div",{class:"b",text:c.b}))));
+    });
+    b.append(g);
+  });
+  upd();
+}
+
 /* ---------- Stapel-Details ---------- */
 let editCard=null;
 function renderDeck(){
@@ -1947,8 +2011,9 @@ function renderDeck(){
     x.addEventListener("click",()=>armConfirm(x,"Löschen?",()=>{d.cards=d.cards.filter(k=>k.id!==c.id);d.updated=Date.now();saveDeck(d);refreshAll();renderDeck()}));
     list.append(el("div",{class:"cardrow"},
       el("div",{style:"min-width:0;display:grid;gap:3px"},el("div",{class:"f",text:c.f}),el("div",{class:"b",text:c.b}),
-        el("div",{class:"lv",text:(c.box?"Fach "+c.box:"Neu")+(c.ok||c.bad?" · "+c.ok+"× gewusst, "+c.bad+"× nochmal":"")})),
-      el("div",{class:"row",style:"flex-wrap:nowrap"},el("button",{class:"btn small",type:"button",onclick:()=>{editCard=c.id;renderDeck()}},"Bearbeiten"),x)));
+        el("div",{class:"lv",text:(c.p?"⏸ pausiert · ":"")+(c.box?"Fach "+c.box:"Neu")+(c.ok||c.bad?" · "+c.ok+"× gewusst, "+c.bad+"× nochmal":"")})),
+      el("div",{class:"row",style:"flex-wrap:nowrap"},el("button",{class:"btn small",type:"button",onclick:()=>{editCard=c.id;renderDeck()}},"Bearbeiten"),
+        el("button",{class:"btn small",type:"button",title:c.p?"Wieder aktivieren":"Pausieren",onclick:()=>{if(c.p)delete c.p;else c.p=1;d.updated=Date.now();saveDeck(d);refreshAll();renderDeck();toast(c.p?"Karte pausiert":"Karte aktiviert")}},c.p?"▶ Aktivieren":"⏸ Pausieren"),x)));
   });
   const reset=el("button",{class:"btn small",type:"button"},"Fortschritt zurücksetzen");
   reset.addEventListener("click",()=>armConfirm(reset,"Wirklich zurücksetzen?",()=>{d.cards.forEach(c=>{c.box=0;c.due=0;c.ok=0;c.bad=0});saveDeck(d);refreshAll();renderDeck();toast("Fortschritt zurückgesetzt")}));
@@ -1978,7 +2043,7 @@ function planRestore(obj){
   for(const d of obj.decks){
     if(!d||typeof d.id!=="string"||!d.id||!Array.isArray(d.cards))continue;
     const cards=d.cards.filter(c=>c&&typeof c.f==="string"&&typeof c.b==="string"&&c.f.trim()&&c.b.trim())
-      .map(c=>({id:typeof c.id==="string"&&c.id?c.id:uidGen("c"),f:c.f,b:c.b,box:clampInt(c.box,0,MAXBOX),due:Number(c.due)||0,ok:Number(c.ok)||0,bad:Number(c.bad)||0}));
+      .map(c=>({id:typeof c.id==="string"&&c.id?c.id:uidGen("c"),f:c.f,b:c.b,box:clampInt(c.box,0,MAXBOX),due:Number(c.due)||0,ok:Number(c.ok)||0,bad:Number(c.bad)||0,...(c.p?{p:1}:{})}));
     din.push({id:d.id,title:String(d.title||"Ohne Titel").slice(0,200),topic:typeof d.topic==="string"?d.topic:"",created:Number(d.created)||Date.now(),updated:Number(d.updated)||0,cards});
   }
   if(!din.length&&!bt.length)return {error:"In dieser Sicherung sind keine Stapel enthalten."};
