@@ -33,7 +33,11 @@ function loadSettings() {
   try { return Object.assign({}, DEFAULT_SETTINGS, JSON.parse(localStorage.getItem("wl-settings") || "{}")); }
   catch (e) { return Object.assign({}, DEFAULT_SETTINGS); }
 }
-function saveSettings() { try { localStorage.setItem("wl-settings", JSON.stringify(settings)); } catch (e) { /* voll/gesperrt */ } }
+function saveSettings() { try { localStorage.setItem("wl-settings", JSON.stringify(settings)); } catch (e) { /* voll/gesperrt */ } syHook(); }
+/* Konto-Abgleich (sync.js) informieren, dass sich etwas geändert hat */
+function syHook() { if (typeof syOnSave === "function") syOnSave(); }
+let itemsReadyRes;
+window.wlItemsReady = new Promise(r => { itemsReadyRes = r; });
 
 function openDb() {
   return new Promise(res => {
@@ -65,10 +69,10 @@ function dbRun(fn) {
   });
 }
 function lsPersist() { try { localStorage.setItem("wl-items", JSON.stringify(items)); } catch (e) { toast("Speicher voll – bitte Bilder entfernen"); } }
-function persist(it) { return idb ? dbRun(s => s.put(it)) : (lsPersist(), Promise.resolve(true)); }
-function persistMany(list) { return idb ? dbRun(s => list.forEach(i => s.put(i))) : (lsPersist(), Promise.resolve(true)); }
-function removeFromDb(id) { return idb ? dbRun(s => s.delete(id)) : (lsPersist(), Promise.resolve(true)); }
-function clearDb() { return idb ? dbRun(s => s.clear()) : (lsPersist(), Promise.resolve(true)); }
+function persist(it) { syHook(); return idb ? dbRun(s => s.put(it)) : (lsPersist(), Promise.resolve(true)); }
+function persistMany(list) { syHook(); return idb ? dbRun(s => list.forEach(i => s.put(i))) : (lsPersist(), Promise.resolve(true)); }
+function removeFromDb(id) { syHook(); return idb ? dbRun(s => s.delete(id)) : (lsPersist(), Promise.resolve(true)); }
+function clearDb() { syHook(); return idb ? dbRun(s => s.clear()) : (lsPersist(), Promise.resolve(true)); }
 
 function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
 
@@ -91,7 +95,7 @@ function normItem(r) {
     note: String(r.note || "").slice(0, 3000),
     price: String(r.price || "").slice(0, 30),
     links: (Array.isArray(r.links) ? r.links : []).map(normUrl).filter(Boolean),
-    images: (Array.isArray(r.images) ? r.images : []).filter(i => i && /^data:image\//.test(i.f || "")).map(i => ({ f: i.f, t: /^data:image\//.test(i.t || "") ? i.t : i.f })),
+    images: (Array.isArray(r.images) ? r.images : []).filter(i => i && /^data:image\//.test(i.f || "")).map(i => ({ id: String(i.id || uid()), f: i.f, t: /^data:image\//.test(i.t || "") ? i.t : i.f })),
     created, wish, ratings,
     bought: r.bought ? Number(r.bought) || Date.now() : null
   };
@@ -358,7 +362,9 @@ function shrink(im, max, q) {
 }
 async function processFile(file) {
   const im = await loadImage(file);
-  return { f: shrink(im, 1280, 0.82), t: shrink(im, 220, 0.75) };
+  let max = 1280, q = 0.82, f = shrink(im, max, q);
+  while (f.length > 600000 && q > 0.45) { q -= 0.1; max = Math.round(max * 0.85); f = shrink(im, max, q); } // muss als Konto-Dokument unter 1 MB bleiben
+  return { id: uid(), f, t: shrink(im, 220, 0.75) };
 }
 
 /* ---------- Wunsch bearbeiten ---------- */
@@ -517,8 +523,9 @@ function settingsHtml() {
     <div class="set"><span class="l">Erinnern nach</span>${seg("remind", settings.remind, [[7, "1 Wo."], [14, "2 Wo."], [21, "3 Wo."], [0, "Aus"]])}</div>
     <div class="muted small" style="margin-top:4px">Wünsche, die so lange nicht bewertet wurden, werden als „Neu bewerten“ markiert.</div>
   </div>
-  <div class="panel"><h3>Daten</h3>
-    <div class="muted small" style="margin-bottom:10px">Alles liegt nur auf diesem Gerät. Sichere es ab und zu als Datei.</div>
+  ${typeof syPanel === "function" ? syPanel() : ""}
+  <div class="panel"><h3>Sicherung als Datei</h3>
+    <div class="muted small" style="margin-bottom:10px">Zusätzlich zur Konto-Sicherung kannst du alles als Datei speichern.</div>
     <div class="row" style="flex-wrap:wrap"><button type="button" class="btn" data-act="export">Sicherung speichern</button><button type="button" class="btn" data-act="import">Sicherung laden</button></div>
     <input type="file" id="sImport" accept="application/json,.json" hidden>
     <div style="height:10px"></div><button type="button" class="btn dng" data-act="wipe">${IC.trash(17)}Alles löschen</button>
@@ -527,9 +534,10 @@ function settingsHtml() {
 }
 
 function settingsSheet() {
-  const rec = openSheet(settingsHtml(), { cls: "tall" });
+  const rec = openSheet(settingsHtml(), { cls: "tall", onClose: () => { window.wlSettingsRedo = null; } });
   const sh = rec.sheet;
   const redo = () => { const top = sh.scrollTop; sh.innerHTML = settingsHtml(); sh.scrollTop = top; applyTheme(); render(); };
+  window.wlSettingsRedo = redo;
   sh.addEventListener("click", e => {
     if (e.target.closest("[data-close]")) return closeSheet();
     const b = e.target.closest("[data-act]");
@@ -543,7 +551,7 @@ function settingsSheet() {
       case "remind": settings.remind = +v; saveSettings(); redo(); break;
       case "export": exportBackup(); break;
       case "import": $("#sImport", sh).click(); break;
-      case "wipe": if (confirm("Wirklich ALLE Wünsche löschen? Das lässt sich nicht rückgängig machen.")) { items = []; clearDb(); closeSheet(); render(); toast("Alles gelöscht"); } break;
+      case "wipe": if (confirm("Wirklich ALLE Wünsche löschen? Wenn du angemeldet bist, werden sie auch im Konto und auf deinen anderen Geräten gelöscht. Das lässt sich nicht rückgängig machen.")) { items = []; clearDb(); closeSheet(); render(); toast("Alles gelöscht"); } break;
     }
   });
   sh.addEventListener("input", e => { if (e.target.id === "sAccent") { settings.accent = e.target.value; saveSettings(); applyTheme(); render(); } });
@@ -639,8 +647,11 @@ if (window.matchMedia) matchMedia("(prefers-color-scheme: light)").addEventListe
   let raw;
   if (idb) raw = await dbAll();
   else { try { raw = JSON.parse(localStorage.getItem("wl-items") || "[]"); } catch (e) { raw = []; } }
+  const needIds = raw.some(r => r && Array.isArray(r.images) && r.images.some(i => i && !i.id));
   items = raw.map(normItem).filter(Boolean);
+  if (needIds) persistMany(items);
   render();
+  itemsReadyRes();
   try { navigator.storage && navigator.storage.persist && navigator.storage.persist(); } catch (e) { /* egal */ }
   if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => { });
 })();

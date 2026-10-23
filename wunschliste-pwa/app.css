@@ -174,3 +174,12 @@ input[type=color]{width:34px;height:34px;border:0;padding:0;border-radius:50%;ba
 input[type=color]::-webkit-color-swatch-wrapper{padding:0}
 input[type=color]::-webkit-color-swatch{border:3px solid var(--card);border-radius:50%;box-shadow:0 0 0 2px var(--line)}
 input[type=color]::-moz-color-swatch{border:3px solid var(--card);border-radius:50%}
+
+/* Konto & Sync */
+.stack{display:flex;flex-direction:column;gap:8px}
+.linkbtn{background:none;border:0;color:var(--muted);font-weight:600;font-size:13.5px;padding:12px 0 0;text-decoration:underline;text-underline-offset:3px}
+.status.err{margin-top:12px;padding:10px 12px;border-radius:12px;font-size:13.5px;background:color-mix(in srgb,var(--danger) 13%,var(--card2));color:var(--danger)}
+.live{display:flex;align-items:center;gap:8px;font-weight:650;color:var(--ok)}
+.live i{width:9px;height:9px;border-radius:50%;background:var(--ok);box-shadow:0 0 0 4px color-mix(in srgb,var(--ok) 25%,transparent)}
+.spin{display:inline-block;width:13px;height:13px;border:2px solid var(--line);border-top-color:var(--accent);border-radius:50%;margin-right:8px;vertical-align:-2px;animation:rot .8s linear infinite}
+@keyframes rot{to{transform:rotate(360deg)}}
