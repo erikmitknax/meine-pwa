@@ -7,10 +7,14 @@ Einkaufslisten-App als PWA (Progressive Web App). Reines HTML/CSS/JavaScript, ke
 ```
 index.html              App-Shell mit Header und Tab-Leiste
 manifest.webmanifest    PWA-Manifest (Name, Farben, Icons)
-sw.js                   Service Worker (Offline-Cache)
+sw.js                   Service Worker (Offline-Cache, enthält VERSION)
+bump-version.mjs        Zählt die Version hoch (sw.js + js/version.js)
 css/styles.css          Design (Midnight-Blau, Off-White, Gold)
 js/app.js               Einstiegspunkt
 js/router.js            Hash-Router für die Tabs
+js/updater.js           Prüft auf neue Version, zeigt Update-Banner
+js/version.js           Aktuelle Versionsnummer
+js/store.js             Speicher für Listen (localStorage)
 js/pages/               Eine Datei pro Seite
 icons/                  App-Icons
 ```
@@ -34,7 +38,12 @@ python3 -m http.server 8080
 
 Dann `http://localhost:8080` öffnen. In VS Code geht auch die Erweiterung „Live Server“.
 
-## Hinweise
+## Updates / Versionen
 
-- Ändert sich eine Datei der App-Shell, in `sw.js` die Version `CACHE` erhöhen, sonst sehen Nutzer die alte Version.
-- Liegt im Repo `meine-pwa` im Ordner `shopwise-pwa/` (wie die anderen Apps).
+Vor jedem Push mit Änderungen: `node bump-version.mjs patch` (oder `minor`, `major`, `1.2.3`).
+Die installierte App prüft beim Start, beim Zurückkehren in die App und alle 15 Minuten, ob
+eine neue Version da ist, und zeigt dann „Neue Version verfügbar → Aktualisieren“.
+In den Einstellungen steht die Version und es gibt „Nach Updates suchen“.
+
+Updates kommen nur an, wenn die App von der gehosteten Adresse installiert wurde
+(nicht aus einem entpackten ZIP/lokal).

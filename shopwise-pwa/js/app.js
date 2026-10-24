@@ -1,12 +1,6 @@
-// Einstiegspunkt: Router starten und Service Worker registrieren.
+// Einstiegspunkt: Router starten und Update-Prüfung aktivieren.
 import { startRouter } from './router.js';
+import { initUpdater } from './updater.js';
 
 startRouter(document.getElementById('view'));
-
-if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('sw.js').catch((err) => {
-      console.warn('Service Worker konnte nicht registriert werden:', err);
-    });
-  });
-}
+initUpdater();
