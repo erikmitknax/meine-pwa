@@ -216,14 +216,6 @@ body {
 .app { position: relative; }
 .hint { color: var(--offwhite-dim); margin-bottom: 20px; }
 
-.cat-title {
-  margin: 22px 0 10px;
-  font-family: Georgia, "Times New Roman", serif;
-  font-size: 1.05rem;
-  font-weight: 600;
-  letter-spacing: 0.03em;
-  color: var(--champagne);
-}
 .stock-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
 
 .stock-card {
@@ -341,3 +333,98 @@ body {
 .dialog-hint { margin-top: 10px; font-size: 0.78rem; color: var(--midnight-600); }
 .dialog-actions { flex-wrap: wrap; }
 .btn-danger { flex-basis: 100%; background: transparent; color: #b3372a; border: 1.5px solid #b3372a; }
+
+/* ---------- Bestand: Kategorien ---------- */
+.ic { fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+
+.cat-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; margin-top: 16px; }
+.cat-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 160px;
+  padding: 16px 10px;
+  text-align: center;
+  text-decoration: none;
+  color: var(--offwhite);
+  background: linear-gradient(160deg, var(--midnight-600), var(--midnight-700));
+  border: 1.5px solid var(--gold);
+  border-radius: 20px;
+  box-shadow: 0 0 0 4px rgba(201, 162, 75, 0.10);
+}
+.cat-tile:active { background: var(--midnight-600); }
+.cat-tile.status-low { border-color: #e8943a; }
+.cat-tile.status-empty { border-color: #e5624d; }
+.cat-icon svg { width: 48px; height: 48px; color: var(--gold); }
+.cat-name { font-size: 1rem; font-weight: 700; overflow-wrap: anywhere; }
+.cat-meta { font-size: 0.78rem; color: var(--champagne); }
+.cat-alert { font-size: 0.78rem; font-weight: 700; color: #f2b169; }
+.status-empty .cat-alert { color: #f08a78; }
+
+.btn-wide {
+  display: block;
+  margin-top: 24px;
+  padding: 14px;
+  text-align: center;
+  text-decoration: none;
+  font-weight: 600;
+  color: var(--champagne);
+  border: 1.5px solid var(--gold);
+  border-radius: 14px;
+}
+.btn-wide:active { background: rgba(201, 162, 75, 0.12); }
+
+.back-link { display: inline-block; margin-bottom: 12px; font-weight: 600; text-decoration: none; color: var(--champagne); }
+.page-title { display: flex; align-items: center; gap: 10px; }
+.page-title svg { width: 30px; height: 30px; flex: none; color: var(--gold); }
+
+/* Kategorien bearbeiten */
+.cat-list { display: flex; flex-direction: column; gap: 10px; }
+.cat-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px;
+  background: rgba(246, 241, 231, 0.05);
+  border: 1px solid rgba(201, 162, 75, 0.35);
+  border-radius: 14px;
+}
+.cat-row-icon {
+  flex: none;
+  width: 46px; height: 46px;
+  display: grid; place-items: center;
+  color: var(--gold);
+  background: var(--midnight-700);
+  border: 1.5px solid var(--gold);
+  border-radius: 12px;
+  cursor: pointer;
+}
+.cat-row-icon svg { width: 26px; height: 26px; }
+.cat-row-name {
+  flex: 1;
+  min-width: 0;
+  padding: 11px 10px;
+  font: inherit;
+  color: var(--offwhite);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 10px;
+}
+.cat-row-name:focus { outline: none; border-color: var(--gold); background: var(--midnight-800); }
+.icon-btn:disabled { opacity: 0.25; cursor: default; }
+
+/* Symbol-Auswahl */
+.icon-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.icon-choice {
+  aspect-ratio: 1;
+  display: grid; place-items: center;
+  color: var(--midnight-800);
+  background: #fff;
+  border: 1.5px solid var(--midnight-600);
+  border-radius: 12px;
+  cursor: pointer;
+}
+.icon-choice svg { width: 28px; height: 28px; }
+.icon-choice.selected { background: var(--midnight-800); color: var(--champagne); border-color: var(--gold); }
