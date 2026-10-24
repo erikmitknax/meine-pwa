@@ -1,0 +1,65 @@
+name: Angebots-Radar-APK bauen
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'android-app-angebote/**'
+      - '.github/workflows/build-apk-angebote.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Abhaengigkeiten installieren
+        working-directory: android-app-angebote
+        run: npm ci --no-audit --no-fund
+
+      - name: Android-Projekt erzeugen
+        working-directory: android-app-angebote
+        run: npx cap add android
+
+      - name: Projekt anpassen (Version, Icons, Schluessel)
+        working-directory: android-app-angebote
+        env:
+          RUN_NUMBER: ${{ github.run_number }}
+        run: |
+          pip install pillow
+          python3 patch_android.py
+
+      - name: Festen Signaturschluessel verwenden
+        run: |
+          mkdir -p ~/.android
+          cp android-app/resources/debug.keystore ~/.android/debug.keystore
+
+      - name: APK bauen
+        working-directory: android-app-angebote/android
+        run: ./gradlew assembleDebug --no-daemon
+
+      - name: APK umbenennen
+        run: cp android-app-angebote/android/app/build/outputs/apk/debug/app-debug.apk angebote.apk
+
+      - name: Als Release veroeffentlichen
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: apk-angebote
+          name: Angebots-Radar (APK)
+          body: |
+            Aktuelle Android-App Angebots-Radar. Download: angebote.apk
+            Gebaut aus Commit ${{ github.sha }}, Build-Nummer ${{ github.run_number }}.
+          files: angebote.apk
+          make_latest: false
