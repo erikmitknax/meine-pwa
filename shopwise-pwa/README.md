@@ -14,7 +14,8 @@ js/app.js               Einstiegspunkt
 js/router.js            Hash-Router für die Tabs
 js/updater.js           Prüft auf neue Version, zeigt Update-Banner
 js/version.js           Aktuelle Versionsnummer
-js/store.js             Speicher für Listen (localStorage)
+js/store.js             Speicher für Listen und Bestand (localStorage)
+js/toast.js             Kurze Meldungen
 js/pages/               Eine Datei pro Seite
 icons/                  App-Icons
 ```
@@ -25,7 +26,7 @@ icons/                  App-Icons
 |---------------|------------------------------|--------------|
 | Einkaufsliste | `js/pages/einkaufsliste.js`  | Listenübersicht (Listen anlegen/löschen) |
 | Angebote      | `js/pages/angebote.js`       | Platzhalter  |
-| Bestand       | `js/pages/bestand.js`        | Platzhalter  |
+| Bestand       | `js/pages/bestand.js`        | Lebensmittel nach Kategorie, Menge/Maximum, Nachkauf-Meldung bei 20 % und 0 % |
 | Einstellungen | `js/pages/einstellungen.js`  | Platzhalter  |
 
 ## Lokal starten
