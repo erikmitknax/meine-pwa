@@ -62,7 +62,7 @@ export function matches(offer, { terms, exclude }) {
 
 /* ---------- Mengen und Grundpreise ---------- */
 const prep = (s) => String(s ?? '').toLowerCase().replace(/ß/g, 'ss').replace(/ä/g, 'a').replace(/ö/g, 'o').replace(/ü/g, 'u').replace(/,/g, '.');
-const FACTOR = { kg: ['mass', 1000], g: ['mass', 1], l: ['vol', 1000], ml: ['vol', 1], cl: ['vol', 10] };
+const FACTOR = { kg: ['mass', 1000], g: ['mass', 1], l: ['vol', 1000], ml: ['vol', 1], cl: ['vol', 10], stk: ['count', 1], stuck: ['count', 1], st: ['count', 1] };
 
 // "500 g", "1,25 l", "150-g-Schale", "6 x 0,5 l", "10 Stück", "Stück" → { dim, amt } (amt in g / ml / Stück)
 export function parseSize(unit) {
@@ -83,7 +83,7 @@ export function parsePerUnit(text) {
   const s = prep(text);
   let m = s.match(/(\d+(?:\.\d+)?)\s*(kg|ml|cl|g|l)\s*=\s*€?\s*(\d+(?:\.\d+)?)/);
   if (m) { const [dim, f] = FACTOR[m[2]]; return { dim, per: Number(m[3]) / (Number(m[1]) * f) }; }
-  m = s.match(/(\d+(?:\.\d+)?)\s*€\s*\/\s*(kg|ml|cl|g|l)\b/);
+  m = s.match(/(\d+(?:\.\d+)?)\s*€\s*\/\s*(kg|ml|cl|g|l|stuck|stk|st)\b/);
   if (m) { const [dim, f] = FACTOR[m[2]]; return { dim, per: Number(m[1]) / f }; }
   return null;
 }
