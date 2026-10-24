@@ -19,7 +19,7 @@ icons/                  App-Icons
 
 | Tab           | Datei                        | Status       |
 |---------------|------------------------------|--------------|
-| Einkaufsliste | `js/pages/einkaufsliste.js`  | Platzhalter  |
+| Einkaufsliste | `js/pages/einkaufsliste.js`  | Listenübersicht (Listen anlegen/löschen) |
 | Angebote      | `js/pages/angebote.js`       | Platzhalter  |
 | Bestand       | `js/pages/bestand.js`        | Platzhalter  |
 | Einstellungen | `js/pages/einstellungen.js`  | Platzhalter  |

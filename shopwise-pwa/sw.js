@@ -1,6 +1,6 @@
 // Service Worker: App-Shell wird gecacht, damit Shopwise offline startet.
 // Bei Änderungen an Dateien CACHE-Version erhöhen (v1 -> v2 ...).
-const CACHE = 'shopwise-v1';
+const CACHE = 'shopwise-v2';
 const ASSETS = [
   './',
   './index.html',
@@ -8,6 +8,7 @@ const ASSETS = [
   './css/styles.css',
   './js/app.js',
   './js/router.js',
+  './js/store.js',
   './js/pages/_empty.js',
   './js/pages/einkaufsliste.js',
   './js/pages/angebote.js',
