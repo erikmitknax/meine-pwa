@@ -1,5 +1,5 @@
 // Schnell-Dialog (Plus-Button in der Tab-Leiste): Lebensmittel im Bestand suchen und Verbrauch direkt buchen.
-import { loadStock, saveStockItem, stockStatus, STEP, getCategory } from './store.js';
+import { loadStock, loadCategories, saveStockItem, stockStatus, STEP, getCategory } from './store.js';
 import { showToast } from './toast.js';
 import { h } from './dom.js';
 
@@ -7,6 +7,10 @@ const fmt = (n) => String(Math.round(n * 100) / 100).replace('.', ',');
 const parse = (s) => Number(String(s).trim().replace(',', '.'));
 const round = (n) => Math.round(n * 1000) / 1000;
 const norm = (s) => s.toLocaleLowerCase('de').normalize('NFD').replace(/[̀-ͯ]/g, '');
+
+const PREF = 'shopwise.quickPref';
+const readPref = () => { try { return JSON.parse(localStorage.getItem(PREF)) || {}; } catch { return {}; } };
+const writePref = (p) => { try { localStorage.setItem(PREF, JSON.stringify(p)); } catch { /* egal */ } };
 
 export function openQuick() {
   if (document.querySelector('dialog.quick')) return;
@@ -19,6 +23,38 @@ export function openQuick() {
   search.autocomplete = 'off';
   search.setAttribute('aria-label', 'Lebensmittel suchen');
   dialog.appendChild(search);
+
+  // Filter: Kategorie wählen und Sortierung (A–Z oder nach Kategorie gruppiert)
+  const pref = readPref();
+  let sort = pref.sort === 'cat' ? 'cat' : 'az';
+  const cats = loadCategories();
+  let catId = cats.some((c) => c.id === pref.cat) ? pref.cat : '';
+
+  const bar = h('div', 'quick-filters');
+  const catSel = h('select', 'quick-select');
+  catSel.setAttribute('aria-label', 'Kategorie');
+  const all = h('option', '', 'Alle Kategorien');
+  all.value = '';
+  catSel.appendChild(all);
+  for (const c of cats) { const o = h('option', '', c.name); o.value = c.id; catSel.appendChild(o); }
+  catSel.value = catId;
+  const seg = h('div', 'quick-seg');
+  const bAz = h('button', 'quick-seg-btn', 'A–Z');
+  const bCat = h('button', 'quick-seg-btn', 'Nach Kategorie');
+  bAz.type = bCat.type = 'button';
+  const paintSeg = () => {
+    bAz.classList.toggle('active', sort === 'az');
+    bCat.classList.toggle('active', sort === 'cat');
+    bAz.setAttribute('aria-pressed', String(sort === 'az'));
+    bCat.setAttribute('aria-pressed', String(sort === 'cat'));
+  };
+  bAz.addEventListener('click', () => { sort = 'az'; writePref({ sort, cat: catId }); paintSeg(); draw(); });
+  bCat.addEventListener('click', () => { sort = 'cat'; writePref({ sort, cat: catId }); paintSeg(); draw(); });
+  catSel.addEventListener('change', () => { catId = catSel.value; writePref({ sort, cat: catId }); draw(); });
+  seg.append(bAz, bCat);
+  bar.append(catSel, seg);
+  paintSeg();
+  dialog.appendChild(bar);
 
   const results = h('div', 'quick-list');
   dialog.appendChild(results);
@@ -42,20 +78,28 @@ export function openQuick() {
   function draw() {
     results.innerHTML = '';
     const q = norm(search.value.trim());
+    const catOrder = new Map(loadCategories().map((c, n) => [c.id, n]));
     const items = loadStock()
-      .filter((i) => !q || norm(i.name).includes(q))
-      .sort((a, b) => a.name.localeCompare(b.name, 'de'));
+      .filter((i) => (!q || norm(i.name).includes(q)) && (!catId || i.categoryId === catId))
+      .sort((a, b) => (sort === 'cat' ? ((catOrder.get(a.categoryId) ?? 99) - (catOrder.get(b.categoryId) ?? 99)) : 0)
+        || a.name.localeCompare(b.name, 'de'));
     if (!items.length) {
       results.appendChild(h('p', 'hint', q ? 'Nichts gefunden.' : 'Noch keine Lebensmittel im Bestand.'));
       return;
     }
+    let lastCat = null;
     for (const item of items) {
+      if (sort === 'cat' && item.categoryId !== lastCat) {
+        lastCat = item.categoryId;
+        const c = getCategory(item.categoryId);
+        results.appendChild(h('div', 'quick-group', c ? c.name : 'Ohne Kategorie'));
+      }
       const step = STEP[item.unit] || 1;
       const row = h('div', `quick-row is-${stockStatus(item)}`);
       const info = h('div', 'quick-info');
       info.appendChild(h('div', 'quick-name', item.name));
       const cat = getCategory(item.categoryId);
-      info.appendChild(h('div', 'quick-sub', `von ${fmt(item.max)} ${item.unit}${cat ? ' · ' + cat.name : ''}`));
+      info.appendChild(h('div', 'quick-sub', `von ${fmt(item.max)} ${item.unit}${cat && sort !== 'cat' && !catId ? ' · ' + cat.name : ''}`));
       row.appendChild(info);
 
       const ctrl = h('div', 'quick-ctrl');

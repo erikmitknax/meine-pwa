@@ -664,3 +664,12 @@ html[data-theme="violett"] { --midnight-900:#0e0a22; --midnight-800:#160f33; --m
 #view > .offers > .lists + .lists { margin-top: 22px; }
 .offers > .lists { margin-bottom: 0; }
 .offer-card .list-head > .icon-btn { flex: none; }
+
+/* Schnell-Dialog: Filter */
+.quick-filters { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
+.dialog .quick-select { padding: 9px 12px; }
+.quick-seg { display: flex; border: 1.5px solid var(--midnight-600); border-radius: 12px; overflow: hidden; }
+.quick-seg-btn { flex: 1; padding: 8px 6px; font: inherit; font-size: 0.85rem; font-weight: 600; cursor: pointer; color: var(--midnight-600); background: transparent; border: 0; }
+.quick-seg-btn + .quick-seg-btn { border-left: 1.5px solid var(--midnight-600); }
+.quick-seg-btn.active { color: var(--champagne); background: var(--midnight-800); }
+.quick-group { position: sticky; top: 0; z-index: 1; padding: 8px 4px 4px; font-size: 0.75rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--midnight-600); background: var(--offwhite); }
