@@ -10,16 +10,16 @@ export const norm = (s) => String(s ?? '').toLowerCase()
 // Eigene Eingaben im Bestand ersetzen diese Standardwerte.
 export const DEFAULTS = {
   eier: { syn: ['freilandeier', 'bodenhaltung'], ex: ['waffel', 'nudel', 'likor', 'schokolade', 'salat', 'kuchen', 'pasta', 'ostereier', 'mayonnaise', 'creme', 'brot'] },
-  milch: { syn: ['vollmilch', 'h milch', 'frischmilch'], ex: ['schokolade', 'milchreis', 'kokos', 'milchshake', 'shampoo', 'lotion', 'dusch', 'pulver', 'bonbon', 'brot', 'riegel', 'creme', 'schnitte', 'buttermilch', 'kaffeesahne', 'hafer', 'mandel', 'soja'] },
-  butter: { syn: [], ex: ['butterkeks', 'buttermilch', 'butterschmalz', 'erdnuss', 'brezel', 'croissant', 'kakaobutter', 'shea', 'gebaeck', 'kekse'] },
+  milch: { syn: ['vollmilch', 'h milch', 'frischmilch'], ex: ['muller', 'milka', 'milchmause', 'adventskalender', 'alpenmilch', 'kinder', 'drink', 'shake', 'schokolade', 'milchreis', 'kokos', 'milchshake', 'shampoo', 'lotion', 'dusch', 'pulver', 'bonbon', 'brot', 'riegel', 'creme', 'schnitte', 'buttermilch', 'kaffeesahne', 'hafer', 'mandel', 'soja'] },
+  butter: { syn: [], ex: ['butterkeks', 'buttermilch', 'butterschmalz', 'erdnuss', 'brezel', 'croissant', 'kakaobutter', 'shea', 'gebaeck', 'kekse', 'laugen', 'croguette'] },
   nudeln: { syn: ['pasta', 'spaghetti', 'penne', 'fusilli', 'tagliatelle', 'spirelli', 'makkaroni'], ex: ['nudelsalat', 'nudelsuppe', 'instant', 'fertig', 'pfanne', 'sauce', 'soße'] },
-  kase: { syn: ['gouda', 'edamer', 'emmentaler', 'mozzarella', 'camembert', 'schnittkase', 'reibekase'], ex: ['kasekuchen', 'kaseschnecke', 'cracker', 'snack', 'chips'] },
+  kase: { syn: ['gouda', 'edamer', 'emmentaler', 'mozzarella', 'camembert', 'schnittkase', 'reibekase', 'landkase', 'weichkase', 'hartkase'], ex: ['pizza', 'frischkase', 'kasekuchen', 'kaseschnecke', 'cracker', 'snack', 'chips', 'piccolinis', 'laugen', 'tortellini', 'ravioli'] },
   brot: { syn: ['vollkornbrot', 'toastbrot', 'mischbrot'], ex: ['aufstrich', 'chips', 'gewurz'] },
   kartoffeln: { syn: ['kartoffel', 'speisekartoffel'], ex: ['chips', 'pommes', 'puffer', 'kloss', 'salat', 'puree', 'knodel', 'kroketten', 'gnocchi', 'rosti', 'wedges', 'pfanne'] },
   tomaten: { syn: ['cherrytomaten', 'rispentomaten', 'strauchtomaten'], ex: ['ketchup', 'sauce', 'suppe', 'mark', 'passata', 'getrocknet', 'pesto', 'saft', 'passiert', 'stuckig', 'dose', 'konserve'] },
   hahnchen: { syn: ['huhnchen', 'geflugel', 'hahnchenbrust', 'hahnchenschenkel'], ex: ['suppe', 'brühe', 'bruhe', 'nugget', 'salat'] },
   reis: { syn: ['basmati', 'langkornreis', 'jasmin'], ex: ['milchreis', 'reiswaffel', 'reiswein', 'reisnudel', 'reisbrot'] },
-  apfel: { syn: ['apfel', 'apfelsorten'], ex: ['saft', 'mus', 'schorle', 'kuchen', 'essig', 'ringe'] },
+  apfel: { syn: ['tafelapfel'], ex: ['saft', 'mus', 'schorle', 'kuchen', 'essig', 'ringe', 'hipp', 'pfirsich', 'erdbeer', 'himbeere', 'banane', 'in apfel', 'riegel'] },
   zwiebeln: { syn: ['zwiebel'], ex: ['ringe', 'suppe', 'rost'] },
   joghurt: { syn: ['jogurt'], ex: ['dressing', 'eis', 'riegel'] },
   banane: { syn: ['bananen'], ex: ['chips', 'milch', 'riegel'] },
@@ -57,7 +57,7 @@ export const defaultsFor = (name) => {
 export function matches(offer, { terms, exclude }) {
   const hay = ` ${norm(`${offer.title} ${offer.brand || ''}`)} `;
   if (exclude.some((e) => hay.includes(e))) return false;
-  return terms.some((t) => hay.includes(` ${t}`) || (t.length >= 4 && !t.includes(' ') && hay.split(' ').some((w) => w.endsWith(t))));
+  return terms.some((t) => hay.includes(` ${t}`) || (t.length >= 5 && !t.includes(' ') && hay.split(' ').some((w) => w.endsWith(t))));
 }
 
 /* ---------- Mengen und Grundpreise ---------- */
@@ -72,7 +72,7 @@ export function parseSize(unit) {
   if (m) return { dim: FACTOR[m[3]][0], amt: Number(m[1]) * Number(m[2]) * FACTOR[m[3]][1] };
   m = s.match(/(\d+(?:\.\d+)?)\s*-?\s*(kg|ml|cl|g|l)\b/);
   if (m) return { dim: FACTOR[m[2]][0], amt: Number(m[1]) * FACTOR[m[2]][1] };
-  m = s.match(/(\d+)\s*-?\s*(stuck|stk|st)\b/);
+  m = s.match(/(\d+)\s*-?\s*(stuck|stk|st|er)\b/);
   if (m) return { dim: 'count', amt: Number(m[1]) };
   if (/\b(stuck|stk)\b/.test(s)) return { dim: 'count', amt: 1 };
   return null;
@@ -123,10 +123,17 @@ export function offersFor(item, offers, now = today()) {
   const q = termsFor(item);
   const usual = itemBase(item);
   const found = [];
+  const seen = new Set();
+  const itemDim = (({ g: 'mass', kg: 'mass', ml: 'vol', l: 'vol', Stk: 'count' })[item.unit]) || null;
   for (const o of offers) {
     if (o.to && o.to < now) continue;                       // abgelaufen
     if (!matches(o, q)) continue;
+    const key = `${o.chain}|${norm(o.title)}|${o.unit}|${o.price}`;
+    if (seen.has(key)) continue;                            // gleiches Angebot mehrfach im Prospekt
+    seen.add(key);
     const base = offerBase(o);
+    // Gewicht ↔ Volumen passt nicht zusammen (z. B. 250 g Schokolade bei „Milch“ in Litern)
+    if (base && itemDim && base.dim !== itemDim && base.dim !== 'count' && itemDim !== 'count') continue;
     const comparable = base && usual && base.dim === usual.dim;
     found.push({
       ...o,
