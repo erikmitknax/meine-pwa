@@ -1,7 +1,7 @@
 // Service Worker: App-Shell wird gecacht, damit Shopwise offline startet.
 // VERSION wird von bump-version.mjs hochgezählt. Ändert sich diese Datei,
 // erkennt der Browser eine neue Version und die App zeigt das Update-Banner.
-const VERSION = '0.4.0';
+const VERSION = '0.4.1';
 const CACHE = 'shopwise-' + VERSION;
 const ASSETS = [
   './',
@@ -25,12 +25,24 @@ const ASSETS = [
   './icons/apple-touch-icon.png',
 ];
 
+// Einmalige Umstellung: Installationen vor Version 0.3 (Cache "shopwise-v1"/"shopwise-v2")
+// kennen das Update-Banner nicht und würden die neue Version ewig im Hintergrund warten lassen.
+// Diese werden automatisch umgestellt. Ab dann gilt immer: neue Version wartet auf "Aktualisieren".
+const LEGACY_CACHE = /^shopwise-v\d+$/;
+let migratingFromLegacy = false;
+
 self.addEventListener('install', (event) => {
-  // cache: 'reload' umgeht den HTTP-Cache, damit wirklich die neuen Dateien geholt werden.
-  event.waitUntil(
-    caches.open(CACHE).then((c) => c.addAll(ASSETS.map((url) => new Request(url, { cache: 'reload' }))))
-  );
-  // Kein skipWaiting hier: Die neue Version wartet, bis der Nutzer im Banner "Aktualisieren" tippt.
+  event.waitUntil((async () => {
+    // cache: 'reload' umgeht den HTTP-Cache, damit wirklich die neuen Dateien geholt werden.
+    const cache = await caches.open(CACHE);
+    await cache.addAll(ASSETS.map((url) => new Request(url, { cache: 'reload' })));
+    const keys = await caches.keys();
+    if (keys.some((k) => LEGACY_CACHE.test(k))) {
+      migratingFromLegacy = true;
+      await self.skipWaiting();
+    }
+    // Sonst kein skipWaiting: Die neue Version wartet, bis im Banner "Aktualisieren" getippt wird.
+  })());
 });
 
 self.addEventListener('message', (event) => {
@@ -38,11 +50,16 @@ self.addEventListener('message', (event) => {
 });
 
 self.addEventListener('activate', (event) => {
-  event.waitUntil(
-    caches.keys().then((keys) =>
-      Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k)))
-    ).then(() => self.clients.claim())
-  );
+  event.waitUntil((async () => {
+    const keys = await caches.keys();
+    await Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k)));
+    await self.clients.claim();
+    if (migratingFromLegacy) {
+      // Offene alte Fenster einmal neu laden, damit sie die neue Version zeigen.
+      const windows = await self.clients.matchAll({ type: 'window' });
+      windows.forEach((w) => w.navigate(w.url).catch(() => {}));
+    }
+  })());
 });
 
 // Cache zuerst, sonst Netzwerk.
