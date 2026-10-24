@@ -250,8 +250,21 @@ function periodDays(offset, n) {
   const end = addDays(today, offset * n);
   return Array.from({ length: n }, (_, i) => addDays(end, i - (n - 1)));
 }
+/* Eigener Zeitraum (Von/Bis), höchstens 366 Tage, nie in der Zukunft */
+function customRange() {
+  const today = iso(new Date());
+  let to = ui.cTo && ui.cTo <= today ? ui.cTo : today, from = ui.cFrom && ui.cFrom <= to ? ui.cFrom : addDays(to, -13);
+  if (from < addDays(to, -365)) from = addDays(to, -365);
+  ui.cFrom = from; ui.cTo = to; return { from, to };
+}
+function curDays() {
+  if (ui.period !== 0) return periodDays(ui.weekOffset, ui.period);
+  const { from, to } = customRange(), out = [];
+  for (let d = from; d <= to; d = addDays(d, 1)) out.push(d);
+  return out;
+}
 function viewWeek() {
-  const g = goals(), N = ui.period, days = periodDays(ui.weekOffset, N);
+  const g = goals(), days = curDays(), N = days.length, custom = ui.period === 0, todayIso0 = iso(new Date());
   const rows = days.map(d => ({ d, ...sum(dayEntries(d)), n: dayEntries(d).length }));
   const logged = rows.filter(r => r.n), L = logged.length || 1;
   const avg = logged.reduce((a, r) => ({ kcal: a.kcal + r.kcal, p: a.p + r.p, c: a.c + r.c, f: a.f + r.f }), { kcal: 0, p: 0, c: 0, f: 0 });
@@ -260,7 +273,7 @@ function viewWeek() {
   const W = 340, H = 190, pad = 24;
   const max = Math.max(g.kcal * 1.25, ...rows.map(r => r.kcal), 1);
   const y = v => H - pad - (v / max) * (H - pad - 16);
-  const step = (W - 12) / N, bw = N <= 7 ? 30 : Math.max(2, step * 0.62), rx = Math.min(10, bw / 2.4);
+  const step = (W - 12) / N, bw = N <= 7 ? 30 : Math.max(N > 120 ? 1 : 2, step * 0.62), rx = Math.min(10, bw / 2.4);
   const todayIso = iso(new Date());
   const bars = rows.map((r, i) => {
     const x = 6 + i * step + (step - bw) / 2, h = Math.max(H - pad - y(r.kcal), r.n ? 4 : 0);
@@ -268,6 +281,7 @@ function viewWeek() {
     let lab = "";
     if (N <= 7) lab = WD[dd.getDay()];
     else if (N <= 31) lab = (i % 5 === 0 || i === N - 1) ? String(dd.getDate()) : "";
+    else if (N > 100 && N <= 366 && custom) lab = (dd.getDate() === 1 && dd.getMonth() % (N > 200 ? 2 : 1) === 0) ? dd.toLocaleDateString("de-DE", { month: "short" }) : "";
     else lab = (dd.getDate() === 1) ? dd.toLocaleDateString("de-DE", { month: "short" }) : "";
     const val = N <= 7 && r.n ? (h > 44 ? `<text x="${x + bw / 2}" y="${H - pad - h + 15}" text-anchor="middle" style="fill:#fff;font-weight:700;font-size:10px">${fmt(r.kcal)}</text>` : `<text x="${x + bw / 2}" y="${H - pad - h - 6}" text-anchor="middle" style="fill:var(--text)">${fmt(r.kcal)}</text>`) : "";
     return `<g data-act="goDay" data-d="${r.d}" style="cursor:pointer"><rect x="${x}" y="${H - pad - (r.n ? h : (N <= 7 ? 4 : 2))}" width="${bw}" height="${r.n ? h : (N <= 7 ? 4 : 2)}" rx="${rx}" fill="${r.n ? (over ? "var(--danger)" : "var(--accent)") : "var(--card2)"}"/>
@@ -281,10 +295,13 @@ function viewWeek() {
   const wdMax = Math.max(g.kcal * 1.2, ...WD_ORDER.map(avgWd), 1);
   const wdBars = WD_ORDER.map(w => { const v = avgWd(w); return `<div class="col ${v ? "" : "none"}">${v ? `<b>${fmt(v)}</b>` : ""}<i style="height:${v ? v / wdMax * 70 : 4}px;${v > g.kcal * 1.1 ? "background:var(--danger)" : ""}"></i>${WD[w]}</div>`; }).join("");
   const dl = x => fromIso(x).toLocaleDateString("de-DE", { day: "numeric", month: "short" });
-  const label = ui.weekOffset === 0 ? "Letzte " + N + " Tage" : dl(days[0]) + " – " + dl(days[N - 1]);
+  const dly = x => fromIso(x).toLocaleDateString("de-DE", { day: "numeric", month: "short", year: "numeric" });
+  const label = custom ? (N === 1 ? dly(days[0]) : dly(days[0]) + " – " + dly(days[N - 1])) : ui.weekOffset === 0 ? "Letzte " + N + " Tage" : dl(days[0]) + " – " + dl(days[N - 1]);
   return `<h1>Zeitraum</h1>
-  <div class="seg">${[[7, "7 Tage"], [30, "30 Tage"], [90, "90 Tage"]].map(([v, l]) => `<button data-act="period" data-v="${v}" class="${N === v ? "on" : ""}">${l}</button>`).join("")}</div>
-  <div class="row between" style="margin-bottom:14px"><button class="iconbtn" data-act="wk" data-d="-1" aria-label="Vorheriger Zeitraum">${icon("left", 20)}</button><b>${label}</b><button class="iconbtn" data-act="wk" data-d="1" aria-label="Nächster Zeitraum" ${ui.weekOffset >= 0 ? "disabled" : ""}>${icon("right", 20)}</button></div>
+  <div class="seg">${[[7, "7 Tage"], [30, "30 Tage"], [90, "90 Tage"], [0, "Eigener"]].map(([v, l]) => `<button data-act="period" data-v="${v}" class="${(custom ? v === 0 : N === v) ? "on" : ""}">${l}</button>`).join("")}</div>
+  <div class="row between" style="margin-bottom:14px"><button class="iconbtn" data-act="wk" data-d="-1" aria-label="Vorheriger Zeitraum">${icon("left", 20)}</button><b>${label}</b><button class="iconbtn" data-act="wk" data-d="1" aria-label="Nächster Zeitraum" ${(custom ? ui.cTo >= todayIso0 : ui.weekOffset >= 0) ? "disabled" : ""}>${icon("right", 20)}</button></div>
+  ${custom ? `<div class="grid2" style="margin:-4px 0 14px"><div><label style="margin-top:0">Von</label><input type="date" id="cFrom" value="${ui.cFrom}" max="${todayIso0}"></div><div><label style="margin-top:0">Bis</label><input type="date" id="cTo" value="${ui.cTo}" max="${todayIso0}"></div></div>
+  <div class="row" style="gap:8px;flex-wrap:wrap;margin:-6px 0 14px">${[["Diese Woche", "w"], ["Dieser Monat", "m"], ["Letzte 14 Tage", "14"], ["Dieses Jahr", "y"]].map(([l, k]) => `<button class="tcchip" data-act="cpreset" data-k="${k}">${l}</button>`).join("")}</div>` : ""}
   ${logged.length ? `<div class="bignum"><b>${fmt(avgK)}</b><span>kcal pro Tag</span><span class="pill ${Math.abs(diff) <= g.kcal * .1 ? "good" : diff > 0 ? "bad" : ""}">${diff >= 0 ? "+" : "−"}${fmt(Math.abs(diff))} zum Ziel</span></div>` : `<div class="muted" style="margin:0 4px 14px">In diesem Zeitraum gibt es noch keine Einträge.</div>`}
   <div class="surface">${chart}</div>
   ${logged.length ? `<div class="muted small" style="margin:12px 4px 0">${hit} von ${logged.length} ${logged.length === 1 ? "Tag" : "Tagen"} im Zielbereich (±10 %)</div>
@@ -2032,9 +2049,17 @@ document.addEventListener("click", async ev => {
   else if (a === "add") openAdd(t.dataset.meal);
   else if (a === "editEntry") editEntry(t.dataset.id);
   else if (a === "period") { ui.period = +t.dataset.v; ui.weekOffset = 0; render(); }
+  else if (a === "cpreset") {
+    const td = iso(new Date()), d0 = fromIso(td), k = t.dataset.k;
+    ui.cTo = td; ui.cFrom = k === "w" ? addDays(td, -((d0.getDay() + 6) % 7)) : k === "m" ? iso(new Date(d0.getFullYear(), d0.getMonth(), 1)) : k === "y" ? iso(new Date(d0.getFullYear(), 0, 1)) : addDays(td, -13);
+    render();
+  }
   else if (a === "exportDay" || a === "copyDay") exportReport(ui.date, ui.date, a === "copyDay" ? "copy" : "file", "foodpro-tag-" + ui.date + ".txt");
-  else if (a === "exportRange" || a === "copyRange") { const dd = periodDays(ui.weekOffset, ui.period); exportReport(dd[0], dd[dd.length - 1], a === "copyRange" ? "copy" : "file", "foodpro-zeitraum-" + dd[0] + "_bis_" + dd[dd.length - 1] + ".txt"); }
-  else if (a === "wk") { ui.weekOffset = Math.min(0, ui.weekOffset + +t.dataset.d); render(); }
+  else if (a === "exportRange" || a === "copyRange") { const dd = curDays(); exportReport(dd[0], dd[dd.length - 1], a === "copyRange" ? "copy" : "file", "foodpro-zeitraum-" + dd[0] + "_bis_" + dd[dd.length - 1] + ".txt"); }
+  else if (a === "wk") {
+    if (ui.period === 0) { const { from, to } = customRange(), n = Math.round((fromIso(to) - fromIso(from)) / 864e5) + 1, td = iso(new Date()); let nt = addDays(to, n * +t.dataset.d); if (nt > td) nt = td; ui.cTo = nt; ui.cFrom = addDays(nt, -(n - 1)); render(); }
+    else { ui.weekOffset = Math.min(0, ui.weekOffset + +t.dataset.d); render(); }
+  }
   else if (a === "goDay") { ui.date = t.dataset.d; setTab("today"); render(); }
   else if (a === "wRange") { ui.wRange = +t.dataset.v; render(); }
   else if (a === "saveWeight") {
@@ -2107,6 +2132,12 @@ document.addEventListener("click", async ev => {
 });
 document.addEventListener("keydown", ev => { if ((ev.key === "Enter" || ev.key === " ") && ev.target.matches && ev.target.matches("[role=button][data-act]")) { ev.preventDefault(); ev.target.click(); } });
 document.addEventListener("change", async ev => {
+  const ct = ev.target;
+  if (ct && (ct.id === "cFrom" || ct.id === "cTo") && ct.value) {
+    let f = ct.id === "cFrom" ? ct.value : ui.cFrom, t2 = ct.id === "cTo" ? ct.value : ui.cTo;
+    if (f > t2) { if (ct.id === "cFrom") t2 = f; else f = t2; }
+    ui.cFrom = f; ui.cTo = t2; render(); return;
+  }
   const t = ev.target;
   if (t.id === "dataFile" && t.files[0]) {
     try { const m = await importFile(t.files[0]); if (m) toast(m); } catch (e) { toast(e.message || "Datei nicht lesbar"); }
