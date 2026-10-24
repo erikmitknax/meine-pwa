@@ -231,6 +231,22 @@ export function stockAlertCount() {
   return loadStock().filter((i) => stockStatus(i) !== 'ok').length;
 }
 
+/* ---------- Merkliste (Angebote): Lebensmittel beobachten, unabhängig vom Bestand ---------- */
+const WATCH_KEY = 'shopwise.watch';
+export const loadWatch = () => readJSON(WATCH_KEY, []);
+export const newWatchItem = () => ({ id: newId(), name: '', unit: 'kg', price: null, search: '', exclude: '' });
+export function saveWatchItem(item) {
+  const items = loadWatch();
+  const i = items.findIndex((x) => x.id === item.id);
+  if (i >= 0) items[i] = item; else items.push(item);
+  writeJSON(WATCH_KEY, items);
+  changed();
+}
+export function removeWatchItem(id) {
+  writeJSON(WATCH_KEY, loadWatch().filter((x) => x.id !== id));
+  changed();
+}
+
 /* ---------- Abgleich (Firebase): flache Sicht auf alle Daten ----------
    Vier Arten von Dokumenten, jedes mit eigener ID:
      lists  = Einkaufsliste (Name)            litems = Artikel einer Liste
@@ -266,11 +282,17 @@ function normDoc(type, d) {
       search: text(d.search, 120), exclude: text(d.exclude, 120),
     };
   }
+  if (type === 'watch') {
+    const name = text(d.name, 60);
+    if (!name) return null;
+    const price = d.price === null || d.price === undefined || d.price === '' ? null : Math.max(0, num(d.price));
+    return { name, unit: UNITS.includes(d.unit) ? d.unit : 'kg', price, search: text(d.search, 120), exclude: text(d.exclude, 120) };
+  }
   return null;
 }
 
 export function exportAll() {
-  const out = { lists: {}, litems: {}, cats: {}, stock: {} };
+  const out = { lists: {}, litems: {}, cats: {}, stock: {}, watch: {} };
   const { cats, items } = ensureData();
   for (const l of loadLists()) {
     const n = normDoc('lists', l);
@@ -282,6 +304,7 @@ export function exportAll() {
   }
   for (const c of cats) { const n = normDoc('cats', c); if (n) out.cats[c.id] = n; }
   for (const i of items) { const n = normDoc('stock', i); if (n) out.stock[i.id] = n; }
+  for (const w of loadWatch()) { const n = normDoc('watch', w); if (n) out.watch[w.id] = n; }
   return out;
 }
 
@@ -319,12 +342,24 @@ export function importDoc(type, id, d) {
     const it = items.find((x) => x.id === id);
     if (it) Object.assign(it, n); else items.push({ id, ...n });
     writeJSON(STOCK_KEY, items);
+  } else if (type === 'watch') {
+    const items = loadWatch();
+    const it = items.find((x) => x.id === id);
+    if (it) Object.assign(it, n); else items.push({ id, ...n });
+    writeJSON(WATCH_KEY, items);
   }
   return 'ok';
 }
 
 // Löschung von einem anderen Gerät übernehmen. Rückgabe: true, wenn lokal etwas entfernt wurde.
 export function removeDoc(type, id) {
+  if (type === 'watch') {
+    const items = loadWatch();
+    const rest = items.filter((i) => i.id !== id);
+    if (rest.length === items.length) return false;
+    writeJSON(WATCH_KEY, rest);
+    return true;
+  }
   if (type === 'lists') {
     const lists = loadLists();
     const rest = lists.filter((l) => l.id !== id);

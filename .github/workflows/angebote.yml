@@ -8,6 +8,7 @@ on:
   push:
     paths:
       - 'shopwise-pwa/tools/fetch-angebote.mjs'
+      - 'shopwise-pwa/js/angebote-logik.js'
       - 'shopwise-pwa/data/suchbegriffe.json'
       - '.github/workflows/angebote.yml'
 
@@ -29,6 +30,8 @@ jobs:
       - name: Angebote holen
         env:
           APIFY_TOKEN: ${{ secrets.APIFY_TOKEN }}
+          FIREBASE_EMAIL: ${{ secrets.FIREBASE_EMAIL }}
+          FIREBASE_PASSWORD: ${{ secrets.FIREBASE_PASSWORD }}
         run: node shopwise-pwa/tools/fetch-angebote.mjs
       - name: Speichern
         run: |

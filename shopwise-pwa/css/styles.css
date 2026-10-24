@@ -660,3 +660,7 @@ html[data-theme="violett"] { --midnight-900:#0e0a22; --midnight-800:#160f33; --m
 .offer-save { font-size: 0.75rem; font-weight: 600; margin-top: 2px; }
 .offer-save.good { color: var(--champagne); }
 .offer-save.bad { color: #f0a79d; }
+.section-title { margin: 6px 0 -4px; font-size: 0.95rem; letter-spacing: 0.04em; text-transform: uppercase; color: var(--gold); }
+#view > .offers > .lists + .lists { margin-top: 22px; }
+.offers > .lists { margin-bottom: 0; }
+.offer-card .list-head > .icon-btn { flex: none; }

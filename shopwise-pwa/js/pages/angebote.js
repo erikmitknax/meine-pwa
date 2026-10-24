@@ -1,6 +1,7 @@
 // Tab "Angebote": zeigt Wochenangebote (Daten aus data/angebote.json) zu den Lebensmitteln im Bestand
 // und vergleicht den Preis pro Einheit mit dem üblichen Preis.
-import { loadStock, stockStatus } from '../store.js';
+import { loadStock, loadWatch, stockStatus } from '../store.js';
+import { openWatchDialog } from './angebote-merken.js';
 import { offersFor } from '../angebote-logik.js';
 import { h } from '../dom.js';
 import { uiIcon } from '../icons.js';
@@ -48,40 +49,31 @@ export function render(el) {
 }
 
 function draw(body, data, offline) {
-  if (!data || !Array.isArray(data.offers) || !data.offers.length) {
-    body.appendChild(h('p', 'hint',
-      'Noch keine Angebotsdaten. Sie werden automatisch montags und donnerstags abgerufen – der erste Abruf kann einen Moment dauern.'));
-    return;
-  }
-
+  const offers = data && Array.isArray(data.offers) ? data.offers : [];
   const open = new Set(read(OPEN_KEY, []));
   let onlyCheaper = read(FILTER_KEY, false);
+  const rebuild = () => { body.innerHTML = ''; draw(body, data, offline); };
 
-  const chains = Object.keys(data.counts || {}).map((c) => CHAINS[c] || c).join(', ');
-  const upd = data.updated ? new Date(data.updated).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' }) : '';
-  body.appendChild(h('p', 'offers-meta', `Stand ${upd} · ${chains}${offline ? ' · offline, letzter Stand' : ''}`));
+  if (offers.length) {
+    const chains = Object.keys(data.counts || {}).map((c) => CHAINS[c] || c).join(', ');
+    const upd = data.updated ? new Date(data.updated).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' }) : '';
+    body.appendChild(h('p', 'offers-meta', `Stand ${upd} · ${chains}${offline ? ' · offline, letzter Stand' : ''}`));
+  } else {
+    body.appendChild(h('p', 'hint', 'Noch keine Angebotsdaten. Sie werden automatisch montags und donnerstags abgerufen.'));
+  }
 
   const chips = h('div', 'chips');
-  const list = h('div', 'lists');
-  body.append(chips, list);
+  const watchBox = h('div', 'lists');
+  const stockBox = h('div', 'lists');
+  body.append(chips, watchBox, stockBox);
 
-  function groups() {
-    const out = [];
-    const none = [];
-    for (const item of loadStock()) {
-      let offers = offersFor(item, data.offers);
-      if (!offers.length) { none.push(item.name); continue; }
-      const savings = offers.filter((o) => o.saving != null).map((o) => o.saving);
-      const best = savings.length ? Math.max(...savings) : null;
-      if (onlyCheaper) {
-        offers = offers.filter((o) => o.saving != null && o.saving > 0);
-        if (!offers.length) continue;
-      }
-      out.push({ item, offers, best, need: stockStatus(item) !== 'ok' });
-    }
-    // Erst was nachgekauft werden muss, dann nach Ersparnis
-    out.sort((a, b) => (b.need - a.need) || ((b.best ?? -9) - (a.best ?? -9)) || a.item.name.localeCompare(b.item.name, 'de'));
-    return { out, none };
+  // Treffer je Lebensmittel (aus Bestand oder Merkliste), günstigster zuerst
+  function group(item, extra) {
+    let found = offersFor(item, offers);
+    const savings = found.filter((o) => o.saving != null).map((o) => o.saving);
+    const best = savings.length ? Math.max(...savings) : null;
+    if (onlyCheaper) found = found.filter((o) => o.saving != null && o.saving > 0);
+    return { item, offers: found, best, ...extra };
   }
 
   function drawChips() {
@@ -89,7 +81,7 @@ function draw(body, data, offline) {
     for (const [label, val] of [['Alle Treffer', false], ['Günstiger als üblich', true]]) {
       const b = h('button', `chip${onlyCheaper === val ? ' active' : ''}`, label);
       b.type = 'button';
-      b.addEventListener('click', () => { onlyCheaper = val; write(FILTER_KEY, val); drawChips(); drawList(); });
+      b.addEventListener('click', () => { onlyCheaper = val; write(FILTER_KEY, val); drawChips(); drawLists(); });
       chips.appendChild(b);
     }
   }
@@ -111,52 +103,87 @@ function draw(body, data, offline) {
     return r;
   }
 
-  function drawList() {
-    list.innerHTML = '';
-    const { out, none } = groups();
-    if (!loadStock().length) {
-      list.appendChild(h('p', 'hint', 'Dein Bestand ist noch leer. Lege Lebensmittel an, dann suche ich passende Angebote.'));
-      return;
+  function card(g, container) {
+    const key = (g.watch ? 'w:' : '') + g.item.id;
+    const isOpen = open.has(key);
+    const el = h('article', `list-card offer-card${isOpen ? ' open' : ''}`);
+    const head = h('div', 'list-head');
+    const toggle = h('button', 'list-toggle');
+    toggle.type = 'button';
+    toggle.setAttribute('aria-expanded', String(isOpen));
+    const chev = h('span', 'chev');
+    chev.appendChild(uiIcon('chevron'));
+    const info = h('div', 'list-info');
+    info.appendChild(h('h2', '', g.item.name));
+    const top = g.offers[0];
+    info.appendChild(h('p', '', top
+      ? `${g.offers.length} ${g.offers.length === 1 ? 'Angebot' : 'Angebote'} · ab ${eur.format(top.price)} (${CHAINS[top.chain] || top.chain})`
+      : 'Gerade kein Angebot'));
+    toggle.append(chev, info);
+    toggle.addEventListener('click', () => {
+      if (open.has(key)) open.delete(key); else open.add(key);
+      write(OPEN_KEY, [...open]);
+      drawLists();
+    });
+    head.appendChild(toggle);
+    const tags = h('div', 'offer-tags');
+    if (g.need) tags.appendChild(h('span', 'tag tag-need', 'nachkaufen'));
+    if (g.best != null && g.best > 0.005 && g.offers.length) tags.appendChild(h('span', 'tag tag-good', `−${pct(g.best)}`));
+    if (tags.childNodes.length) head.appendChild(tags);
+    if (g.watch) {
+      const edit = h('button', 'icon-btn');
+      edit.type = 'button';
+      edit.appendChild(uiIcon('pencil'));
+      edit.setAttribute('aria-label', `${g.item.name} bearbeiten`);
+      edit.addEventListener('click', () => openWatchDialog(g.item, rebuild));
+      head.appendChild(edit);
     }
-    if (!out.length) list.appendChild(h('p', 'hint', onlyCheaper ? 'Gerade nichts, das günstiger als üblich ist.' : 'Gerade keine Angebote zu deinen Lebensmitteln.'));
+    el.appendChild(head);
+    if (isOpen) {
+      const bodyEl = h('div', 'list-body');
+      if (g.offers.length) g.offers.forEach((o) => bodyEl.appendChild(offerRow(o)));
+      else bodyEl.appendChild(h('p', 'hint', offers.length
+        ? 'Diese Woche nichts gefunden. Neue Begriffe werden beim nächsten Abruf mitgesucht.'
+        : 'Noch keine Angebotsdaten.'));
+      if (g.item.price == null && g.offers.length) bodyEl.appendChild(h('p', 'hint', 'Tipp: Hinterlege den üblichen Preis, dann zeige ich dir die Ersparnis.'));
+      el.appendChild(bodyEl);
+    }
+    container.appendChild(el);
+  }
 
-    for (const g of out) {
-      const isOpen = open.has(g.item.id);
-      const card = h('article', `list-card offer-card${isOpen ? ' open' : ''}`);
-      const head = h('div', 'list-head');
-      const toggle = h('button', 'list-toggle');
-      toggle.type = 'button';
-      toggle.setAttribute('aria-expanded', String(isOpen));
-      const chev = h('span', 'chev');
-      chev.appendChild(uiIcon('chevron'));
-      const info = h('div', 'list-info');
-      info.appendChild(h('h2', '', g.item.name));
-      const top = g.offers[0];
-      const sum = `${g.offers.length} ${g.offers.length === 1 ? 'Angebot' : 'Angebote'} · ab ${eur.format(top.price)} (${CHAINS[top.chain] || top.chain})`;
-      info.appendChild(h('p', '', sum));
-      toggle.append(chev, info);
-      toggle.addEventListener('click', () => {
-        if (open.has(g.item.id)) open.delete(g.item.id); else open.add(g.item.id);
-        write(OPEN_KEY, [...open]);
-        drawList();
-      });
-      head.appendChild(toggle);
-      const tags = h('div', 'offer-tags');
-      if (g.need) tags.appendChild(h('span', 'tag tag-need', 'nachkaufen'));
-      if (g.best != null && g.best > 0.005) tags.appendChild(h('span', 'tag tag-good', `−${pct(g.best)}`));
-      head.appendChild(tags);
-      card.appendChild(head);
-      if (isOpen) {
-        const bodyEl = h('div', 'list-body');
-        g.offers.forEach((o) => bodyEl.appendChild(offerRow(o)));
-        if (g.item.price == null) bodyEl.appendChild(h('p', 'hint', 'Tipp: Hinterlege im Bestand den üblichen Preis, dann zeige ich dir die Ersparnis.'));
-        card.appendChild(bodyEl);
-      }
-      list.appendChild(card);
+  function drawLists() {
+    watchBox.innerHTML = '';
+    stockBox.innerHTML = '';
+
+    // --- Merkliste (unabhängig vom Bestand)
+    watchBox.appendChild(h('h2', 'section-title', 'Meine Merkliste'));
+    const watch = loadWatch().map((w) => group(w, { watch: true, need: false }))
+      .filter((g) => !onlyCheaper || g.offers.length)
+      .sort((a, b) => (b.offers.length > 0) - (a.offers.length > 0) || ((b.best ?? -9) - (a.best ?? -9)) || a.item.name.localeCompare(b.item.name, 'de'));
+    if (!watch.length && !loadWatch().length) {
+      watchBox.appendChild(h('p', 'hint', 'Merke dir Lebensmittel, die dich interessieren – unabhängig von deinem Bestand. Sie erscheinen hier, sobald sie im Angebot sind.'));
     }
-    if (none.length) list.appendChild(h('p', 'hint', `Keine Treffer für: ${none.join(', ')}`));
+    watch.forEach((g) => card(g, watchBox));
+    const add = h('button', 'add-card');
+    add.type = 'button';
+    add.appendChild(h('span', 'plus', '+'));
+    add.appendChild(h('span', '', 'Lebensmittel merken'));
+    add.addEventListener('click', () => openWatchDialog(null, rebuild));
+    watchBox.appendChild(add);
+
+    // --- Aus dem Bestand
+    const stock = loadStock();
+    if (!stock.length) return;
+    stockBox.appendChild(h('h2', 'section-title', 'Aus deinem Bestand'));
+    const all = stock.map((i) => group(i, { watch: false, need: stockStatus(i) !== 'ok' }));
+    const none = all.filter((g) => !offersFor(g.item, offers).length).map((g) => g.item.name);
+    const groups = all.filter((g) => g.offers.length)
+      .sort((a, b) => (b.need - a.need) || ((b.best ?? -9) - (a.best ?? -9)) || a.item.name.localeCompare(b.item.name, 'de'));
+    if (!groups.length) stockBox.appendChild(h('p', 'hint', onlyCheaper ? 'Gerade nichts, das günstiger als üblich ist.' : 'Gerade keine Angebote zu deinen Lebensmitteln.'));
+    groups.forEach((g) => card(g, stockBox));
+    if (none.length) stockBox.appendChild(h('p', 'hint', `Keine Treffer für: ${none.join(', ')}`));
   }
 
   drawChips();
-  drawList();
+  drawLists();
 }
