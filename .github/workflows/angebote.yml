@@ -5,12 +5,6 @@ on:
     - cron: '30 6 * * 1'   # Montag früh: neue Prospektwoche
     - cron: '30 6 * * 4'   # Donnerstag früh: Aldi-Wechsel
   workflow_dispatch:
-  push:
-    paths:
-      - 'shopwise-pwa/tools/fetch-angebote.mjs'
-      - 'shopwise-pwa/js/angebote-logik.js'
-      - 'shopwise-pwa/data/suchbegriffe.json'
-      - '.github/workflows/angebote.yml'
 
 permissions:
   contents: write
