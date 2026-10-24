@@ -5,8 +5,8 @@ import { FIREBASE_CONFIG, FIREBASE_VERSION } from './firebase-config.js';
 import { exportAll, importDoc, removeDoc, isPristine, resetType } from './store.js';
 
 const LS_KEY = 'shopwise.sync';
-const COLS = { lists: 'sw_lists', cats: 'sw_cats', litems: 'sw_litems', stock: 'sw_stock', watch: 'sw_watch' };
-const TYPES = ['lists', 'cats', 'litems', 'stock', 'watch'];       // Eltern vor Kindern
+const COLS = { lists: 'sw_lists', cats: 'sw_cats', litems: 'sw_litems', stock: 'sw_stock', watch: 'sw_watch', hist: 'sw_hist' };
+const TYPES = ['lists', 'cats', 'litems', 'stock', 'watch', 'hist'];       // Eltern vor Kindern
 const RESETTABLE = { lists: 'lists', cats: 'cats', stock: 'stock' }; // litems hängen an den Listen
 
 const SY = {

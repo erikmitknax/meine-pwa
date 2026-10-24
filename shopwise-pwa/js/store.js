@@ -67,7 +67,35 @@ function updateList(id, fn) {
 }
 
 export function addItem(listId, name, qty = '') {
+  recordHistory(name, qty);
   return updateList(listId, (l) => l.items.push({ id: newId(), name, qty, checked: false, created: Date.now() }));
+}
+
+/* ---------- Verlauf: alles, was du je eingetippt hast (bleibt auch nach dem Löschen) → Vorschläge ---------- */
+const HIST_KEY = 'shopwise.history';
+const HIST_MAX = 500;
+const histId = (name) => 'h-' + String(name).toLowerCase().trim().replace(/ß/g, 'ss').replace(/ä/g, 'ae').replace(/ö/g, 'oe').replace(/ü/g, 'ue')
+  .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60);
+export const loadHistory = () => {
+  const h = readJSON(HIST_KEY, {});
+  return h && typeof h === 'object' && !Array.isArray(h) ? h : {};
+};
+export function recordHistory(name, qty = '') {
+  const id = histId(name);
+  if (id === 'h-' || id.length < 3) return;
+  const hist = loadHistory();
+  const old = hist[id];
+  hist[id] = { name: String(name).trim().slice(0, 60), qty: String(qty || (old && old.qty) || '').slice(0, 12), n: (old ? old.n : 0) + 1, last: Date.now() };
+  const ids = Object.keys(hist);
+  if (ids.length > HIST_MAX) ids.sort((a, b) => hist[a].last - hist[b].last).slice(0, ids.length - HIST_MAX).forEach((k) => delete hist[k]);
+  writeJSON(HIST_KEY, hist);
+}
+export function forgetHistory(id) {
+  const hist = loadHistory();
+  if (!(id in hist)) return;
+  delete hist[id];
+  writeJSON(HIST_KEY, hist);
+  dataChanged();
 }
 
 export function toggleItem(listId, itemId) {
@@ -282,6 +310,10 @@ function normDoc(type, d) {
       search: text(d.search, 120), exclude: text(d.exclude, 120),
     };
   }
+  if (type === 'hist') {
+    const name = text(d.name, 60);
+    return name ? { name, qty: text(d.qty, 12), n: Math.max(1, Math.round(num(d.n, 1))), last: num(d.last, 0) } : null;
+  }
   if (type === 'watch') {
     const name = text(d.name, 60);
     if (!name) return null;
@@ -292,7 +324,7 @@ function normDoc(type, d) {
 }
 
 export function exportAll() {
-  const out = { lists: {}, litems: {}, cats: {}, stock: {}, watch: {} };
+  const out = { lists: {}, litems: {}, cats: {}, stock: {}, watch: {}, hist: {} };
   const { cats, items } = ensureData();
   for (const l of loadLists()) {
     const n = normDoc('lists', l);
@@ -305,6 +337,7 @@ export function exportAll() {
   for (const c of cats) { const n = normDoc('cats', c); if (n) out.cats[c.id] = n; }
   for (const i of items) { const n = normDoc('stock', i); if (n) out.stock[i.id] = n; }
   for (const w of loadWatch()) { const n = normDoc('watch', w); if (n) out.watch[w.id] = n; }
+  for (const [id, e] of Object.entries(loadHistory())) { const n = normDoc('hist', e); if (n) out.hist[id] = n; }
   return out;
 }
 
@@ -342,6 +375,10 @@ export function importDoc(type, id, d) {
     const it = items.find((x) => x.id === id);
     if (it) Object.assign(it, n); else items.push({ id, ...n });
     writeJSON(STOCK_KEY, items);
+  } else if (type === 'hist') {
+    const hist = loadHistory();
+    hist[id] = n;
+    writeJSON(HIST_KEY, hist);
   } else if (type === 'watch') {
     const items = loadWatch();
     const it = items.find((x) => x.id === id);
@@ -353,6 +390,13 @@ export function importDoc(type, id, d) {
 
 // Löschung von einem anderen Gerät übernehmen. Rückgabe: true, wenn lokal etwas entfernt wurde.
 export function removeDoc(type, id) {
+  if (type === 'hist') {
+    const hist = loadHistory();
+    if (!(id in hist)) return false;
+    delete hist[id];
+    writeJSON(HIST_KEY, hist);
+    return true;
+  }
   if (type === 'watch') {
     const items = loadWatch();
     const rest = items.filter((i) => i.id !== id);

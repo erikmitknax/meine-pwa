@@ -674,3 +674,12 @@ html[data-theme="violett"] { --midnight-900:#0e0a22; --midnight-800:#160f33; --m
 .quick-seg-btn.active { color: var(--champagne); background: var(--midnight-800); }
 .quick-group { position: sticky; top: 0; z-index: 1; padding: 8px 4px 4px; font-size: 0.75rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--midnight-600); background: var(--offwhite); }
 .tag-next { margin-left: 8px; font-size: 0.65rem; color: var(--champagne); background: transparent; border: 1px solid rgb(var(--gold-rgb) / 0.6); vertical-align: middle; }
+
+/* Vorschläge beim Eintippen */
+.suggest { margin: -6px 0 12px; border: 1px solid rgb(var(--gold-rgb) / 0.5); border-radius: 12px; overflow: hidden; background: var(--midnight-700); }
+.suggest-row { display: flex; align-items: stretch; border-bottom: 1px solid rgb(var(--gold-rgb) / 0.2); }
+.suggest-row:last-child { border-bottom: 0; }
+.suggest-pick { flex: 1; min-width: 0; display: flex; justify-content: space-between; gap: 10px; padding: 11px 14px; text-align: left; font: inherit; color: inherit; background: transparent; border: 0; cursor: pointer; }
+.suggest-pick:active { background: rgb(var(--gold-rgb) / 0.15); }
+.suggest-qty { opacity: 0.65; font-size: 0.85rem; }
+.suggest-x { flex: none; width: 44px; font: inherit; color: var(--offwhite-dim); background: transparent; border: 0; cursor: pointer; opacity: 0.7; }

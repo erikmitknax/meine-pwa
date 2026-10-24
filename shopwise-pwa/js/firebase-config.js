@@ -1,7 +1,7 @@
 // Firebase-Projekt für die Geräte-Synchronisation.
 // Öffentliche Web-Konfiguration (kein Geheimnis): geschützt wird über Anmeldung + Firestore-Regeln.
 // Es ist dasselbe Projekt und Konto wie bei FoodPro, Lernwerkstatt und Wunschliste.
-// Die Daten liegen unter users/<uid>/sw_lists | sw_litems | sw_cats | sw_stock | sw_watch
+// Die Daten liegen unter users/<uid>/sw_lists | sw_litems | sw_cats | sw_stock | sw_watch | sw_hist
 // und fallen unter die bestehende Regel users/{uid}/**.
 export const FIREBASE_VERSION = '10.14.1';
 export const FIREBASE_CONFIG = {
