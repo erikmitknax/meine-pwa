@@ -6,6 +6,7 @@ import {
 import { showToast } from '../toast.js';
 import { h } from '../dom.js';
 import { iconSvg } from '../icons.js';
+import { defaultsFor } from '../angebote-logik.js';
 
 const nf = new Intl.NumberFormat('de-DE', { maximumFractionDigits: 2 });
 const eur = new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' });
@@ -192,6 +193,28 @@ export function render(el, categoryId) {
     form.appendChild(priceField);
     form.appendChild(h('p', 'dialog-hint', 'Damit lässt sich später prüfen, ob ein Angebot wirklich günstiger ist.'));
 
+    // Angebote-Suche (optional): Standardwerte stehen als Platzhalter da und gelten, solange das Feld leer ist
+    const search = h('input');
+    search.type = 'text';
+    search.maxLength = 120;
+    search.autocomplete = 'off';
+    search.value = item.search || '';
+    const exclude = h('input');
+    exclude.type = 'text';
+    exclude.maxLength = 120;
+    exclude.autocomplete = 'off';
+    exclude.value = item.exclude || '';
+    const updateHints = () => {
+      const d = defaultsFor(name.value);
+      search.placeholder = d.search || 'z. B. Pasta, Spaghetti';
+      exclude.placeholder = d.exclude || 'z. B. Waffel, Nudel';
+    };
+    name.addEventListener('input', updateHints);
+    updateHints();
+    form.appendChild(field('Angebote: weitere Suchbegriffe', search));
+    form.appendChild(field('Angebote: nicht anzeigen bei', exclude));
+    form.appendChild(h('p', 'dialog-hint', 'Durch Komma getrennt. Leer = Name plus Standardwerte (grau). Der Name wird immer gesucht.'));
+
     const actions = h('div', 'dialog-actions');
     if (existing) {
       const del = h('button', 'btn btn-danger', 'Löschen');
@@ -220,6 +243,8 @@ export function render(el, categoryId) {
       item.amount = round(parseFloat(amount.value));
       item.max = round(parseFloat(max.value));
       item.price = price.value === '' ? null : Math.round(parseFloat(price.value) * 100) / 100;
+      item.search = search.value.trim();
+      item.exclude = exclude.value.trim();
       if (!item.name) return;
       saveStockItem(item);
       notifyIfCrossed(item, before, stockStatus(item));

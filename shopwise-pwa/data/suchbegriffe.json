@@ -1,0 +1,14 @@
+{
+  "hinweis": "Grobe Suchbegriffe für den Abruf (Apify filtert nur Treffer, nur diese werden berechnet). Die genaue Auswahl macht die App je Lebensmittel. Neue Wörter einfach ergänzen.",
+  "begriffe": [
+    "Milch", "Butter", "Sahne", "Joghurt", "Quark", "Skyr", "Frischkäse", "Käse", "Gouda", "Mozzarella", "Parmesan", "Schmand", "Eier", "Margarine",
+    "Brot", "Brötchen", "Toast", "Mehl", "Zucker", "Salz", "Nudeln", "Pasta", "Spaghetti", "Penne", "Reis", "Haferflocken", "Müsli", "Cornflakes", "Couscous", "Kartoffel",
+    "Tomate", "Gurke", "Paprika", "Zwiebel", "Knoblauch", "Möhre", "Karotte", "Brokkoli", "Blumenkohl", "Salat", "Spinat", "Pilz", "Champignon", "Zucchini", "Kürbis", "Kohl", "Lauch", "Avocado",
+    "Apfel", "Äpfel", "Banane", "Orange", "Zitrone", "Trauben", "Birne", "Beere", "Erdbeer", "Heidelbeer", "Kiwi", "Mango", "Ananas", "Melone",
+    "Hähnchen", "Hühnchen", "Hack", "Rind", "Schwein", "Wurst", "Schinken", "Salami", "Speck", "Lachs", "Fisch", "Thunfisch", "Garnelen",
+    "Tofu", "Linsen", "Bohnen", "Kichererbsen", "Mais", "Erbsen", "Passierte", "Ketchup", "Senf", "Mayonnaise", "Öl", "Essig", "Soße", "Sauce", "Brühe", "Gewürz", "Pesto",
+    "Wasser", "Saft", "Cola", "Limonade", "Tee", "Kaffee", "Bier", "Wein",
+    "Schokolade", "Kekse", "Chips", "Nüsse", "Honig", "Marmelade", "Nutella", "Aufstrich", "Pizza", "Tiefkühl", "Eis", "Pommes",
+    "Waschmittel", "Spülmittel", "Toilettenpapier", "Küchenrolle", "Zahnpasta", "Shampoo", "Duschgel", "Seife"
+  ]
+}

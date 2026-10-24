@@ -2,6 +2,7 @@
 import { h } from '../dom.js';
 import { APP_VERSION } from '../version.js';
 import { checkForUpdate } from '../updater.js';
+import { THEMES, currentTheme, applyTheme } from '../theme.js';
 import { getSync, login, forgotPassword, logout, syncNow } from '../sync.js';
 
 const UPDATE_MESSAGES = {
@@ -119,12 +120,33 @@ export function render(el) {
     return box;
   }
 
+  function themePanel() {
+    const panel = h('section', 'panel');
+    panel.appendChild(h('h2', '', 'Design'));
+    panel.appendChild(h('p', 'panel-text', 'Wähle ein Farbschema. Es gilt für dieses Gerät.'));
+    const grid = h('div', 'theme-grid');
+    const active = currentTheme();
+    for (const t of THEMES) {
+      const b = h('button', `theme-btn${t.id === active ? ' active' : ''}`);
+      b.type = 'button';
+      b.setAttribute('aria-pressed', String(t.id === active));
+      const sw = h('div', 'theme-swatch');
+      for (const col of t.c) { const s = h('span'); s.style.background = col; sw.appendChild(s); }
+      b.append(sw, h('span', 'theme-name', t.name));
+      b.addEventListener('click', () => { applyTheme(t.id); draw(); });
+      grid.appendChild(b);
+    }
+    panel.appendChild(grid);
+    return panel;
+  }
+
   function draw() {
     const a = document.activeElement;
     if (a && el.contains(a) && a.tagName === 'INPUT') return;   // beim Tippen nicht stören
     el.innerHTML = '';
     el.appendChild(h('h1', '', 'Einstellungen'));
     el.appendChild(accountPanel());
+    el.appendChild(themePanel());
     el.appendChild(aboutBox());
   }
 

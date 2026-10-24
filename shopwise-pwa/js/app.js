@@ -4,6 +4,9 @@ import { initUpdater } from './updater.js';
 import { stockAlertCount } from './store.js';
 import { initSync } from './sync.js';
 import { openQuick } from './quick.js';
+import { applyTheme, currentTheme } from './theme.js';
+
+applyTheme(currentTheme());
 
 // Zahl am Tab "Bestand": wie viele Lebensmittel nachgekauft werden sollten.
 function updateBadge() {
