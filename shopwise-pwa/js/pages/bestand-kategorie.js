@@ -1,13 +1,14 @@
 // Unterseite einer Kategorie: Lebensmittel mit Menge, Maximum und Nachkauf-Meldung.
 import {
   loadStock, loadCategories, getCategory, saveStockItem, removeStockItem, stockStatus,
-  newStockItem, UNITS, STEP,
+  newStockItem, UNITS, STEP, priceLabel,
 } from '../store.js';
 import { showToast } from '../toast.js';
 import { h } from '../dom.js';
 import { iconSvg } from '../icons.js';
 
 const nf = new Intl.NumberFormat('de-DE', { maximumFractionDigits: 2 });
+const eur = new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' });
 const fmt = (n) => nf.format(n);
 const round = (n) => Math.round(n * 1000) / 1000;
 const percent = (item) => Math.round((item.amount / item.max) * 100);
@@ -48,6 +49,7 @@ export function render(el, categoryId) {
     main.setAttribute('aria-label', `${item.name} bearbeiten`);
     main.appendChild(h('h3', '', item.name));
     main.appendChild(h('p', 'stock-amount', `${fmt(item.amount)} / ${fmt(item.max)} ${item.unit}`));
+    if (item.price != null) main.appendChild(h('p', 'stock-price', `${eur.format(item.price)} pro ${priceLabel(item.unit)}`));
     const bar = h('div', 'bar');
     const fill = h('div', 'bar-fill');
     fill.style.width = `${Math.min(100, Math.max(0, (item.amount / item.max) * 100))}%`;
@@ -174,6 +176,22 @@ export function render(el, categoryId) {
     form.appendChild(row);
     form.appendChild(h('p', 'dialog-hint', 'Bei 20 % und bei 0 % des Maximums bekommst du die Meldung „nachkaufen“.'));
 
+    // Üblicher Preis (optional): Vergleichswert, ob ein Angebot wirklich günstiger ist
+    const price = h('input');
+    price.type = 'number';
+    price.inputMode = 'decimal';
+    price.step = '0.01';
+    price.min = '0';
+    price.placeholder = 'optional, z. B. 1,29';
+    price.value = item.price != null ? item.price : '';
+    const priceField = field('', price);
+    const priceText = priceField.querySelector('.field-label');
+    const updatePriceText = () => { priceText.textContent = `Üblicher Preis (€ pro ${priceLabel(unit.value)})`; };
+    unit.addEventListener('change', updatePriceText);
+    updatePriceText();
+    form.appendChild(priceField);
+    form.appendChild(h('p', 'dialog-hint', 'Damit lässt sich später prüfen, ob ein Angebot wirklich günstiger ist.'));
+
     const actions = h('div', 'dialog-actions');
     if (existing) {
       const del = h('button', 'btn btn-danger', 'Löschen');
@@ -201,6 +219,7 @@ export function render(el, categoryId) {
       item.unit = unit.value;
       item.amount = round(parseFloat(amount.value));
       item.max = round(parseFloat(max.value));
+      item.price = price.value === '' ? null : Math.round(parseFloat(price.value) * 100) / 100;
       if (!item.name) return;
       saveStockItem(item);
       notifyIfCrossed(item, before, stockStatus(item));

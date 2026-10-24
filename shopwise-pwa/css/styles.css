@@ -499,3 +499,9 @@ body {
 .item.done .item-check { background: var(--gold); }
 .item.done .item-name { text-decoration: line-through; color: var(--offwhite-dim); opacity: 0.7; }
 .item.done .item-qty { opacity: 0.6; }
+
+/* Stift-Symbol und Preis */
+.icon-btn svg { width: 18px; height: 18px; }
+.icon-btn { display: grid; place-items: center; }
+.stock-price { margin: -6px 0 10px; font-size: 0.78rem; color: var(--offwhite-dim); }
+.btn-danger { order: -1; }

@@ -27,6 +27,15 @@ export function addList(name) {
   return lists;
 }
 
+export function renameList(id, name) {
+  const lists = loadLists();
+  const list = lists.find((l) => l.id === id);
+  if (!list) return lists;
+  list.name = name;
+  save(lists);
+  return lists;
+}
+
 export function removeList(id) {
   const lists = loadLists().filter((l) => l.id !== id);
   save(lists);
@@ -82,6 +91,9 @@ const DEFAULT_CATEGORIES = [
   { name: 'Sonstiges', icon: 'basket' },
 ];
 export const UNITS = ['Stk', 'Packung', 'g', 'kg', 'ml', 'l'];
+// Preise gelten pro Bezugsmenge: 100 g, 100 ml, sonst pro 1 Einheit (so sind Angebote später vergleichbar).
+export const PRICE_BASE = { Stk: 1, Packung: 1, g: 100, kg: 1, ml: 100, l: 1 };
+export const priceLabel = (unit) => (PRICE_BASE[unit] > 1 ? `${PRICE_BASE[unit]} ${unit}` : unit);
 // Schrittweite der +/- Tasten je Einheit
 export const STEP = { Stk: 1, Packung: 1, g: 100, kg: 0.5, ml: 100, l: 0.5 };
 
@@ -179,7 +191,7 @@ export function removeCategory(id) {
 export const loadStock = () => ensureData().items;
 
 export function newStockItem(categoryId) {
-  return { id: newId(), name: '', categoryId, unit: 'Stk', amount: 0, max: 1 };
+  return { id: newId(), name: '', categoryId, unit: 'Stk', amount: 0, max: 1, price: null };
 }
 
 export function saveStockItem(item) {

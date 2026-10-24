@@ -20,6 +20,17 @@ const PATHS = {
   paw: '<circle cx="6" cy="11" r="1.6"/><circle cx="9.5" cy="6.5" r="1.6"/><circle cx="14.5" cy="6.5" r="1.6"/><circle cx="18" cy="11" r="1.6"/><path d="M12 12c-3 0-5.5 3-5.5 5.2 0 1.6 1.4 2.3 3 2 .9-.2 1.6-.5 2.5-.5s1.6.3 2.5.5c1.6.3 3-.4 3-2C17.5 15 15 12 12 12z"/>',
 };
 
+// Symbole der Oberfläche (nicht als Kategorie-Symbol wählbar)
+const UI_PATHS = {
+  pencil: '<path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13.5 6.5l4 4"/>',
+};
+
+export function uiIcon(key) {
+  const wrap = document.createElement('span');
+  wrap.innerHTML = `<svg class="ic" viewBox="0 0 24 24" aria-hidden="true">${UI_PATHS[key]}</svg>`;
+  return wrap.firstChild;
+}
+
 export const ICON_LABELS = {
   milk: 'Milch', apple: 'Obst & Gemüse', fish: 'Fisch', bread: 'Brot', jar: 'Vorrat',
   snow: 'Tiefkühl', bottle: 'Getränke', basket: 'Sonstiges', cheese: 'Käse', egg: 'Eier',
