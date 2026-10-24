@@ -40,7 +40,7 @@ const Benachr = (() => {
     }
     try {
       const reg = await navigator.serviceWorker.ready;
-      await reg.showNotification(titel, { body: text, icon: "icons/icon-192.png", badge: "icons/icon-192.png", tag: "angebote", data: extra || {} });
+      await reg.showNotification(titel, { body: text, icon: "icons/icon-192.png?v=2", badge: "icons/icon-192.png?v=2", tag: "angebote", data: extra || {} });
       return true;
     } catch (e) { return false; }
   }

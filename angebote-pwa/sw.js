@@ -1,9 +1,9 @@
 // Netz zuerst (Updates kommen ohne Neuinstallation), sonst Cache -> App startet auch offline.
 // VERSION nur hochzählen, wenn sich die Dateiliste ändert.
-const VERSION = 'ar-v2';
+const VERSION = 'ar-v3';
 const SHELL = ['./', './index.html', './app.css', './app.js', './logik.js', './quelle.js', './benachr.js', './sync.js', './manifest.webmanifest',
   './fonts/bricolage-grotesque-latin-wght-normal.woff2', './fonts/jetbrains-mono-latin-400-normal.woff2', './fonts/jetbrains-mono-latin-500-normal.woff2',
-  './icons/icon-192.png', './icons/icon-512.png', './icons/icon-maskable-512.png', './icons/apple-touch-icon.png'];
+  './icons/icon-192.png?v=2', './icons/icon-512.png?v=2', './icons/icon-maskable-512.png?v=2', './icons/apple-touch-icon.png?v=2'];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(VERSION).then(c => Promise.all(SHELL.map(u => c.add(u).catch(() => null)))).then(() => self.skipWaiting()));
