@@ -26,7 +26,7 @@ icons/                  App-Icons
 
 | Tab           | Datei                        | Status       |
 |---------------|------------------------------|--------------|
-| Einkaufsliste | `js/pages/einkaufsliste.js`  | Listenübersicht (Listen anlegen/löschen) |
+| Einkaufsliste | `js/pages/einkaufsliste.js`  | Listenübersicht; in jeder Liste Artikel hinzufügen, abhaken, löschen |
 | Angebote      | `js/pages/angebote.js`       | Platzhalter  |
 | Bestand       | `js/pages/bestand.js`        | Kategorie-Kacheln, darin Lebensmittel mit Menge/Maximum, Nachkauf-Meldung bei 20 % und 0 %; Kategorien bearbeitbar |
 | Einstellungen | `js/pages/einstellungen.js`  | Platzhalter  |

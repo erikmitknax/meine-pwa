@@ -1,15 +1,25 @@
-// Tab "Einkaufsliste": Übersicht aller Listen + Button für neue Liste.
+// Tab "Einkaufsliste":
+//   #/einkaufsliste        -> Übersicht aller Listen + Button für neue Liste
+//   #/einkaufsliste/<id>   -> Artikel dieser Liste (einkaufsliste-artikel.js)
 import { loadLists, addList, removeList } from '../store.js';
+import { h } from '../dom.js';
+import { render as renderItems } from './einkaufsliste-artikel.js';
 
-function h(tag, className, text) {
-  const node = document.createElement(tag);
-  if (className) node.className = className;
-  if (text !== undefined) node.textContent = text;
-  return node;
+export function render(el, params = []) {
+  const [listId] = params;
+  if (listId) return renderItems(el, listId);
+  return renderOverview(el);
 }
 
-export function render(el) {
-  el.innerHTML = '';
+function summary(list) {
+  const total = list.items.length;
+  if (!total) return 'Noch keine Artikel';
+  const done = list.items.filter((i) => i.checked).length;
+  const open = total - done;
+  return done ? `${open} offen · ${done} erledigt` : `${open} Artikel`;
+}
+
+function renderOverview(el) {
   el.appendChild(h('h1', '', 'Einkaufslisten'));
 
   const wrap = h('div', 'lists');
@@ -21,17 +31,21 @@ export function render(el) {
     for (const list of loadLists()) {
       const card = h('article', 'list-card');
 
-      const info = h('div', 'list-info');
+      const info = h('a', 'list-info');
+      info.href = `#/einkaufsliste/${list.id}`;
       info.appendChild(h('h2', '', list.name));
-      const n = list.items.length;
-      info.appendChild(h('p', '', n === 1 ? '1 Artikel' : `${n} Artikel`));
+      info.appendChild(h('p', '', summary(list)));
       card.appendChild(info);
 
       const del = h('button', 'icon-btn', '✕');
       del.type = 'button';
       del.setAttribute('aria-label', `Liste „${list.name}“ löschen`);
       del.addEventListener('click', () => {
-        if (confirm(`Liste „${list.name}“ löschen?`)) {
+        const n = list.items.length;
+        const text = n
+          ? `Liste „${list.name}“ mit ${n} Artikeln löschen?`
+          : `Liste „${list.name}“ löschen?`;
+        if (confirm(text)) {
           removeList(list.id);
           draw();
         }

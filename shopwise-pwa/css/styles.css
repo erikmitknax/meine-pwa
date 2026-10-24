@@ -428,3 +428,74 @@ body {
 }
 .icon-choice svg { width: 28px; height: 28px; }
 .icon-choice.selected { background: var(--midnight-800); color: var(--champagne); border-color: var(--gold); }
+
+/* ---------- Einkaufsliste: Artikel ---------- */
+.list-info { flex: 1; min-width: 0; align-self: stretch; display: flex; flex-direction: column; justify-content: center; text-decoration: none; color: inherit; }
+.list-info h2 { overflow-wrap: anywhere; }
+
+.add-item { display: flex; gap: 8px; margin-bottom: 18px; }
+.add-item input {
+  min-width: 0;
+  padding: 13px 14px;
+  font: inherit;
+  color: var(--offwhite);
+  background: rgba(246, 241, 231, 0.07);
+  border: 1.5px solid rgba(201, 162, 75, 0.5);
+  border-radius: 12px;
+}
+.add-item input::placeholder { color: var(--offwhite-dim); opacity: 0.8; }
+.add-item input:focus { outline: none; border-color: var(--gold); background: var(--midnight-800); }
+.add-item-name { flex: 1; }
+.add-item-qty { width: 86px; }
+.add-item-btn {
+  flex: none;
+  width: 48px;
+  font: inherit;
+  font-size: 1.6rem;
+  line-height: 1;
+  color: var(--midnight-900);
+  background: linear-gradient(160deg, var(--champagne), var(--gold));
+  border: 0;
+  border-radius: 12px;
+  cursor: pointer;
+}
+
+.items { display: flex; flex-direction: column; gap: 10px; }
+.item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px 6px 6px;
+  background: linear-gradient(160deg, var(--midnight-600), var(--midnight-700));
+  border: 1.5px solid var(--gold);
+  border-radius: 16px;
+}
+.item-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 6px;
+  font: inherit;
+  text-align: left;
+  color: var(--offwhite);
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+}
+.item-check {
+  flex: none;
+  width: 26px; height: 26px;
+  display: grid; place-items: center;
+  font-weight: 700;
+  color: var(--midnight-900);
+  border: 1.5px solid var(--gold);
+  border-radius: 50%;
+}
+.item-name { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.item-qty { flex: none; font-size: 0.82rem; color: var(--champagne); }
+.item.done { border-color: rgba(201, 162, 75, 0.3); }
+.item.done .item-check { background: var(--gold); }
+.item.done .item-name { text-decoration: line-through; color: var(--offwhite-dim); opacity: 0.7; }
+.item.done .item-qty { opacity: 0.6; }

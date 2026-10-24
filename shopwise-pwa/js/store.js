@@ -33,6 +33,39 @@ export function removeList(id) {
   return lists;
 }
 
+export function getList(id) {
+  return loadLists().find((l) => l.id === id);
+}
+
+/* Artikel einer Einkaufsliste: { id, name, qty (Text, optional), checked } */
+function updateList(id, fn) {
+  const lists = loadLists();
+  const list = lists.find((l) => l.id === id);
+  if (!list) return null;
+  fn(list);
+  save(lists);
+  return list;
+}
+
+export function addItem(listId, name, qty = '') {
+  return updateList(listId, (l) => l.items.push({ id: newId(), name, qty, checked: false }));
+}
+
+export function toggleItem(listId, itemId) {
+  return updateList(listId, (l) => {
+    const it = l.items.find((x) => x.id === itemId);
+    if (it) it.checked = !it.checked;
+  });
+}
+
+export function removeItem(listId, itemId) {
+  return updateList(listId, (l) => { l.items = l.items.filter((x) => x.id !== itemId); });
+}
+
+export function clearChecked(listId) {
+  return updateList(listId, (l) => { l.items = l.items.filter((x) => !x.checked); });
+}
+
 /* ---------- Bestand: Kategorien + Lebensmittel ---------- */
 const STOCK_KEY = 'shopwise.stock';
 const CAT_KEY = 'shopwise.categories';
