@@ -564,3 +564,27 @@ body {
 .list-body .item { background: rgba(7, 15, 38, 0.35); }
 .list-body .hint { margin-bottom: 0; }
 .list-body .btn-wide { background: transparent; color: var(--champagne); border: 1px solid var(--gold); }
+
+/* ---------- Feste Liste "Nachkaufen" ---------- */
+.restock-card { border-color: var(--gold); }
+.restock-card .list-head { padding-left: 8px; padding-right: 14px; }
+.restock-row {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px;
+  padding: 10px 12px; margin-bottom: 8px; border-radius: 12px;
+  background: rgba(7, 15, 38, 0.35); border: 1px solid rgba(201, 162, 75, 0.25);
+}
+.restock-row.is-empty { border-color: #d9776b; }
+.restock-info { min-width: 0; flex: 1 1 130px; }
+.restock-name { font-weight: 600; }
+.restock-sub { font-size: 0.8rem; opacity: 0.75; }
+.restock-row.is-empty .restock-sub { color: #f0a79d; opacity: 1; }
+.restock-buy { display: flex; align-items: center; gap: 6px; }
+.restock-qty {
+  width: 64px; padding: 8px; text-align: center; font: inherit; color: inherit;
+  background: rgba(255, 255, 255, 0.06); border: 1px solid rgba(201, 162, 75, 0.5); border-radius: 10px;
+}
+.restock-unit { font-size: 0.85rem; opacity: 0.8; min-width: 1.6em; }
+.restock-btn {
+  padding: 9px 14px; font: inherit; font-weight: 600; cursor: pointer; border: 0; border-radius: 10px;
+  color: var(--midnight-900, #070f26); background: linear-gradient(135deg, var(--champagne), var(--gold));
+}

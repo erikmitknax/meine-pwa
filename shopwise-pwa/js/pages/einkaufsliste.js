@@ -5,6 +5,7 @@ import { loadLists, getList, addList, renameList, removeList } from '../store.js
 import { h } from '../dom.js';
 import { uiIcon } from '../icons.js';
 import { mountItems } from './einkaufsliste-artikel.js';
+import { mountRestock, restockSummary } from './nachkaufen.js';
 
 // Welche Listen aufgeklappt sind, bleibt gemerkt (auch nach Neuladen und bei Änderungen von anderen Geräten).
 const OPEN_KEY = 'shopwise.openLists';
@@ -44,6 +45,36 @@ function renderOverview(el) {
 
   function draw() {
     wrap.innerHTML = '';
+
+    // Feste Liste ganz oben: Nachkaufen (aus dem Bestand), nicht löschbar, kein Stift.
+    {
+      const isOpen = !openSet.has('restock-closed');
+      const card = h('article', `list-card restock-card${isOpen ? ' open' : ''}`);
+      const head = h('div', 'list-head');
+      const toggle = h('button', 'list-toggle');
+      toggle.type = 'button';
+      toggle.setAttribute('aria-expanded', String(isOpen));
+      const chev = h('span', 'chev');
+      chev.appendChild(uiIcon('chevron'));
+      const info = h('div', 'list-info');
+      info.appendChild(h('h2', '', 'Nachkaufen'));
+      const sum = h('p', '', restockSummary());
+      info.appendChild(sum);
+      toggle.append(chev, info);
+      toggle.addEventListener('click', () => {
+        if (isOpen) openSet.add('restock-closed'); else openSet.delete('restock-closed');
+        saveOpen(openSet);
+        draw();
+      });
+      head.appendChild(toggle);
+      card.appendChild(head);
+      if (isOpen) {
+        const body = h('div', 'list-body');
+        mountRestock(body, () => { sum.textContent = restockSummary(); });
+        card.appendChild(body);
+      }
+      wrap.appendChild(card);
+    }
 
     for (const list of loadLists()) {
       const isOpen = openSet.has(list.id);
