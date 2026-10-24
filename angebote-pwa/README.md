@@ -8,6 +8,13 @@ und wie viel Prozent du sparst. Läuft ohne Server, Daten bleiben auf dem Gerät
 Die Angebote sind noch **Beispieldaten** (`quelle.js`, die sich selbst auf die aktuelle Woche datieren).
 Die echte Anbindung kommt als nächster Schritt – dafür gibt es genau eine Stelle: `Quelle.laden()` in `quelle.js`.
 
+## Konto & Sicherung
+
+Im Tab „Mehr“ kann man sich mit dem Firebase-Konto anmelden (gleiches Projekt und Konto wie bei den anderen Apps).
+Dann werden Vorrat und Einstellungen unter `users/<uid>/ar_wishes` und `ar_settings` in Firestore gesichert und live zwischen Geräten abgeglichen
+(letzte Änderung gewinnt). Ohne Anmeldung bleibt alles nur auf dem Gerät. Die bestehenden Firestore-Regeln (`users/{uid}/**`) reichen aus.
+Welche Treffer schon gemeldet wurden, bleibt pro Gerät.
+
 ## Dateien
 
 | Datei | Aufgabe |
@@ -16,6 +23,7 @@ Die echte Anbindung kommt als nächster Schritt – dafür gibt es genau eine St
 | `logik.js` | Abgleich Wunsch ↔ Angebot, Prozent, Preis pro kg/l, Limit pro Kunde, "neu?"-Prüfung (ohne Oberfläche, testbar) |
 | `quelle.js` | **Datenquelle** – heute Beispieldaten, später echte Daten |
 | `benachr.js` | Benachrichtigungen (App: lokal über Capacitor, Browser: Service Worker) |
+| `sync.js` | Konto-Sicherung über Firebase (gleiches Konto wie FoodPro, Lernwerkstatt, Wunschliste) |
 | `sw.js`, `manifest.webmanifest` | PWA / Offline |
 
 ## Wie die Schnittstelle aussehen sollte

@@ -1,7 +1,7 @@
 // Netz zuerst (Updates kommen ohne Neuinstallation), sonst Cache -> App startet auch offline.
 // VERSION nur hochzählen, wenn sich die Dateiliste ändert.
-const VERSION = 'ar-v1';
-const SHELL = ['./', './index.html', './app.css', './app.js', './logik.js', './quelle.js', './benachr.js', './manifest.webmanifest',
+const VERSION = 'ar-v2';
+const SHELL = ['./', './index.html', './app.css', './app.js', './logik.js', './quelle.js', './benachr.js', './sync.js', './manifest.webmanifest',
   './fonts/bricolage-grotesque-latin-wght-normal.woff2', './fonts/jetbrains-mono-latin-400-normal.woff2', './fonts/jetbrains-mono-latin-500-normal.woff2',
   './icons/icon-192.png', './icons/icon-512.png', './icons/icon-maskable-512.png', './icons/apple-touch-icon.png'];
 

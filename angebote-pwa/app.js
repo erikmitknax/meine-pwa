@@ -59,7 +59,10 @@ function toast(msg) {
 function berechne() {
   S.erg = Logik.treffer(S.wuensche, S.daten.angebote, Logik.heute(), aktiveLaeden());
 }
-function sichern() { speichere(K.w, S.wuensche); speichere(K.s, S.settings); speichere(K.g, S.gesehen); }
+function sichern() {
+  speichere(K.w, S.wuensche); speichere(K.s, S.settings); speichere(K.g, S.gesehen);
+  if (typeof syOnSave === "function") syOnSave(); // Konto-Abgleich (sync.js) informieren
+}
 
 /* ---------- Kopf + Tabs ---------- */
 function renderKopf() {
@@ -221,7 +224,8 @@ function sw(key, an, label, sub, aria) {
 function viewMehr() {
   const q = S.daten.quelle === "demo" ? "Beispieldaten (noch keine echte Schnittstelle)" : "Live-Daten";
   const nstat = { an: "eingeschaltet", aus: "in den Geräte-Einstellungen blockiert", offen: "noch nicht erlaubt", "nicht-moeglich": "auf diesem Gerät nicht möglich" }[S.notif];
-  return `<div class="sektion" style="margin-top:4px"><h2>Benachrichtigungen</h2></div><div class="card pad" style="padding-block:4px">
+  const konto = typeof syPanel === "function" ? `<div class="sektion" style="margin-top:4px"><h2>Konto &amp; Sicherung</h2></div><div class="card pad" id="syPanel">${syPanel()}</div>` : "";
+  return `${konto}<div class="sektion"${konto ? "" : ' style="margin-top:4px"'}><h2>Benachrichtigungen</h2></div><div class="card pad" style="padding-block:4px">
     ${sw("meldungen", S.settings.meldungen, "Bei neuem Treffer melden", "Status: " + nstat)}
     <div class="opt"><div class="grow"><b>Standard-Schwelle</b><div class="small muted">Melden ab dieser Ersparnis</div></div>
       <div class="stepper"><button data-act="minpct" data-d="-5" aria-label="weniger">${MIN}</button><span class="mono" style="min-width:52px;text-align:center;font-size:18px">${S.settings.minPct}%</span><button data-act="minpct" data-d="5" aria-label="mehr">+</button></div></div>
@@ -371,6 +375,7 @@ async function start() {
   berechne();
   S.notif = await Benachr.status();
   render();
+  if (typeof syBoot === "function") syBoot(); // Konto verbinden, falls hier schon angemeldet
   Benachr.beiKlick(extra => { gehe(extra.tab || "treffer"); });
   await pruefeNeue();
   if (S.settings.meldungen && S.settings.woche) Benachr.wochenErinnerung(true);
