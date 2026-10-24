@@ -18,7 +18,7 @@ const SY_CFG = {
   appId: "1:803117480250:web:0f54697c6e1ac470ae3803",
 };
 const SY_COLS = { items: "wl_items", images: "wl_images", settings: "wl_settings" };
-const SY_SET_KEYS = ["mode", "accent", "amoled", "dense", "remind"];
+const SY_SET_KEYS = ["mode", "accent", "amoled", "dense", "remind", "cats"];
 const SY = { uid: "", meta: {}, last: 0, user: null, fb: null, ready: false, pushing: false, again: false, unsub: [], err: "", state: "off", t: null, imgs: {}, want: {} };
 
 function syLoad() {
@@ -89,6 +89,7 @@ function syRemote(type, id, doc, dirty) {
     if (doc.del || !doc.d) return false;
     if (m && !m.del && syH(sySettings()) !== m.h) return false;
     SY_SET_KEYS.forEach(k2 => { if (doc.d[k2] !== undefined) settings[k2] = doc.d[k2]; });
+    settings.cats = normCats(settings.cats);
     SY.meta[k] = { u: doc.u, h: syH(sySettings()) };
     dirty.set = true;
     return true;

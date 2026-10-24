@@ -7,6 +7,7 @@ const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": 
 const NATIVE = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
 const DAY = 864e5;
 const ACCENTS = ["#6d5efc", "#12935f", "#ff4d2e", "#e8458b", "#0891b2", "#f59e0b"];
+const CAT_COLORS = ["#6d5efc", "#12935f", "#ff4d2e", "#e8458b", "#0891b2", "#f59e0b", "#8b5cf6", "#64748b"];
 
 /* Was die Zahlen 1–10 bedeuten */
 const SCALE = [
@@ -22,7 +23,7 @@ const SCALE = [
   [10, "Brauche ich wirklich", "Es löst ein echtes Problem oder ist mir extrem wichtig."]
 ];
 
-const DEFAULT_SETTINGS = { mode: "auto", accent: "#6d5efc", amoled: false, dense: false, remind: 14, filter: "open", sort: "new" };
+const DEFAULT_SETTINGS = { mode: "auto", accent: "#6d5efc", amoled: false, dense: false, remind: 14, filter: "open", sort: "new", cats: [], catFilter: "" };
 
 /* ---------- Zustand + Speicher ---------- */
 let settings = loadSettings();
@@ -30,8 +31,19 @@ let items = [];
 let idb = null;
 
 function loadSettings() {
-  try { return Object.assign({}, DEFAULT_SETTINGS, JSON.parse(localStorage.getItem("wl-settings") || "{}")); }
-  catch (e) { return Object.assign({}, DEFAULT_SETTINGS); }
+  let s;
+  try { s = Object.assign({}, DEFAULT_SETTINGS, JSON.parse(localStorage.getItem("wl-settings") || "{}")); }
+  catch (e) { s = Object.assign({}, DEFAULT_SETTINGS); }
+  s.cats = normCats(s.cats);
+  return s;
+}
+/* Kategorien: { id, name, color, exp } – exp = Ablaufdatum (Zeitstempel) oder null */
+function normCats(a) {
+  const seen = new Set();
+  return (Array.isArray(a) ? a : []).map((c, i) => c && typeof c === "object" ? {
+    id: String(c.id || uid()), name: String(c.name || "").trim().slice(0, 30),
+    color: /^#[0-9a-f]{6}$/i.test(c.color || "") ? c.color : CAT_COLORS[i % CAT_COLORS.length], exp: Number(c.exp) || null
+  } : null).filter(c => c && c.name && !seen.has(c.id) && seen.add(c.id));
 }
 function saveSettings() { try { localStorage.setItem("wl-settings", JSON.stringify(settings)); } catch (e) { /* voll/gesperrt */ } syHook(); }
 /* Konto-Abgleich (sync.js) informieren, dass sich etwas geändert hat */
@@ -97,8 +109,31 @@ function normItem(r) {
     links: (Array.isArray(r.links) ? r.links : []).map(normUrl).filter(Boolean),
     images: (Array.isArray(r.images) ? r.images : []).filter(i => i && /^data:image\//.test(i.f || "")).map(i => ({ id: String(i.id || uid()), f: i.f, t: /^data:image\//.test(i.t || "") ? i.t : i.f })),
     created, wish, ratings,
-    bought: r.bought ? Number(r.bought) || Date.now() : null
+    bought: r.bought ? Number(r.bought) || Date.now() : null,
+    cat: String(r.cat || "").slice(0, 40),
+    exp: Number(r.exp) || null
   };
+}
+const catById = id => (id && settings.cats.find(c => c.id === id)) || null;
+const fromInputDate = v => { const [y, m, d] = String(v).split("-").map(Number); return new Date(y, m - 1, d, 12).getTime(); };
+const reached = t => sod(t) <= sod(Date.now());
+/* Archiviert = Ablaufdatum des Wunsches oder seiner Kategorie ist erreicht (wird beim Anzeigen berechnet, nichts wird gelöscht) */
+function archReason(it) {
+  if (it.exp && reached(it.exp)) return { t: it.exp, own: true, name: "" };
+  const c = catById(it.cat);
+  if (c && c.exp && reached(c.exp)) return { t: c.exp, own: false, name: c.name };
+  return null;
+}
+const isArchived = it => !!archReason(it);
+function addCat(name) {
+  name = String(name || "").trim().slice(0, 30);
+  if (!name) return null;
+  const have = settings.cats.find(c => c.name.toLowerCase() === name.toLowerCase());
+  if (have) return have;
+  const used = settings.cats.map(c => c.color);
+  const c = { id: uid(), name, color: CAT_COLORS.find(x => !used.includes(x)) || CAT_COLORS[settings.cats.length % CAT_COLORS.length], exp: null };
+  settings.cats.push(c); saveSettings();
+  return c;
 }
 
 /* ---------- Zeit ---------- */
@@ -116,7 +151,7 @@ function ago(t) {
   return "vor " + Math.round(n / 30) + " Monaten";
 }
 const lastRating = it => it.ratings[it.ratings.length - 1];
-const isDue = it => !it.bought && settings.remind > 0 && daysSince(lastRating(it).t) >= settings.remind;
+const isDue = it => !it.bought && !isArchived(it) && settings.remind > 0 && daysSince(lastRating(it).t) >= settings.remind;
 
 /* ---------- Icons ---------- */
 const svg = (p, w = 22) => `<svg class="ic" width="${w}" height="${w}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${p}</svg>`;
@@ -197,7 +232,15 @@ function applyTheme() {
 const SORTS = [["new", "Neueste zuerst"], ["old", "Älteste zuerst"], ["wishDesc", "Wunsch: hoch → niedrig"], ["wishAsc", "Wunsch: niedrig → hoch"], ["due", "Neu bewerten zuerst"]];
 
 function visibleItems() {
-  let list = items.filter(i => settings.filter === "all" || (settings.filter === "open" ? !i.bought : !!i.bought));
+  let list = items.filter(i => {
+    const arch = isArchived(i);
+    if (settings.filter === "archive") return arch;
+    if (arch) return false;
+    return settings.filter === "all" || (settings.filter === "open" ? !i.bought : !!i.bought);
+  });
+  const cf = settings.catFilter;
+  if (cf === "_none") list = list.filter(i => !catById(i.cat));
+  else if (cf && catById(cf)) list = list.filter(i => i.cat === cf);
   const by = {
     new: (a, b) => b.created - a.created,
     old: (a, b) => a.created - b.created,
@@ -207,6 +250,7 @@ function visibleItems() {
   }[settings.sort] || ((a, b) => b.created - a.created);
   list.sort(by);
   if (settings.filter === "bought") list.sort((a, b) => (b.bought || 0) - (a.bought || 0));
+  if (settings.filter === "archive") list.sort((a, b) => archReason(b).t - archReason(a).t);
   return list;
 }
 
@@ -220,7 +264,10 @@ function trendOf(it) {
 function card(it) {
   const first = it.images[0];
   const due = isDue(it);
+  const ar = archReason(it), c = catById(it.cat);
   const meta = [
+    c ? `<span class="cat" style="--c:${c.color}"><i></i>${esc(c.name)}</span>` : "",
+    ar ? `<span class="arch">Archiviert seit ${fmtShort(ar.t)}</span>` : (it.exp ? `<span>Läuft ab ${fmtShort(it.exp)}</span>` : ""),
     `<span>${it.bought ? "Gekauft " + ago(it.bought) : "Seit " + fmtShort(it.created) + " · " + ago(it.created)}</span>`,
     it.links.length ? `<span>${IC.link(13)}${it.links.length}</span>` : "",
     it.images.length ? `<span>${IC.image(13)}${it.images.length}</span>` : "",
@@ -228,7 +275,7 @@ function card(it) {
     it.bought ? "" : trendOf(it),
     due ? `<span class="due">${IC.clock(13)}Neu bewerten</span>` : ""
   ].join("");
-  return `<article class="item ${it.bought ? "done" : ""}" data-id="${it.id}">
+  return `<article class="item ${it.bought ? "done" : ""} ${ar ? "archived" : ""}" data-id="${it.id}">
     <button type="button" class="chk ${it.bought ? "on" : ""}" data-act="toggle" aria-label="${it.bought ? "Als offen markieren" : "Als gekauft markieren"}">${IC.check(18)}</button>
     <div class="body" data-act="open">
       ${first ? `<img class="thumb" src="${first.t}" alt="" loading="lazy">` : ""}
@@ -238,8 +285,16 @@ function card(it) {
   </article>`;
 }
 
+function catBar() {
+  if (!settings.cats.length) return "";
+  const cf = catById(settings.catFilter) || settings.catFilter === "_none" ? settings.catFilter : "";
+  const chip = (v, label, col) => `<button type="button" class="chip ${cf === v ? "on" : ""}" ${col ? `style="--c:${col}"` : ""} data-act="catFilter" data-v="${v}">${col ? "<i></i>" : ""}${esc(label)}</button>`;
+  return chip("", "Alle") + settings.cats.map(c => chip(c.id, c.name, c.color)).join("") + chip("_none", "Ohne");
+}
+
 function viewMain() {
-  const open = items.filter(i => !i.bought), bought = items.length - open.length;
+  const active = items.filter(i => !isArchived(i)), archN = items.length - active.length;
+  const open = active.filter(i => !i.bought), bought = active.length - open.length;
   const avg = open.length ? (open.reduce((s, i) => s + i.wish, 0) / open.length).toFixed(1).replace(".", ",") : "–";
   const dueN = open.filter(isDue).length;
   const list = visibleItems();
@@ -247,13 +302,15 @@ function viewMain() {
   if (list.length) body = `<div class="list">${list.map(card).join("")}</div>`;
   else {
     const msg = items.length === 0 ? ["Noch nichts auf der Liste", "Schreib oben hinein, was du dir kaufen möchtest."]
+      : settings.catFilter && settings.filter !== "archive" && !items.some(i => !isArchived(i) && (settings.catFilter === "_none" ? !catById(i.cat) : i.cat === settings.catFilter)) ? ["Nichts in dieser Kategorie", "Trag oben einen Wunsch ein – er landet automatisch hier."]
+      : settings.filter === "archive" ? ["Archiv ist leer", "Wünsche und Kategorien mit erreichtem Ablaufdatum landen automatisch hier."]
       : settings.filter === "open" ? ["Alles erledigt", "Keine offenen Wünsche. Stark – oder Zeit für neue."]
         : settings.filter === "bought" ? ["Noch nichts gekauft", "Abgehakte Wünsche landen hier."] : ["Nichts gefunden", ""];
     body = `<div class="empty"><div class="big">${IC.bag(34)}</div><b>${msg[0]}</b>${msg[1]}</div>`;
   }
   return `
   <div class="top">
-    <div><h1>Wunschliste</h1><div class="muted small sub">${open.length} offen · ${bought} gekauft</div></div>
+    <div><h1>Wunschliste</h1><div class="muted small sub">${open.length} offen · ${bought} gekauft${archN ? " · " + archN + " archiviert" : ""}</div></div>
     <div class="row">
       <button type="button" class="ghost" data-act="info" aria-label="Was bedeuten die Zahlen 1 bis 10?">${IC.info(21)}</button>
       <button type="button" class="ghost" data-act="settings" aria-label="Einstellungen">${IC.gear(21)}</button>
@@ -268,10 +325,11 @@ function viewMain() {
     <input id="addIn" type="text" placeholder="Was möchtest du dir kaufen?" enterkeyhint="done" maxlength="300" aria-label="Neuer Wunsch">
     <button type="submit" class="addbtn" aria-label="Hinzufügen">${IC.plus(24)}</button>
   </form>
+  <div class="seg full" role="tablist">
+    ${[["open", "Offen"], ["bought", "Gekauft"], ["all", "Alle"], ["archive", "Archiv"]].map(([k, l]) => `<button type="button" class="${settings.filter === k ? "on" : ""}" data-act="filter" data-v="${k}">${l}${k === "archive" && archN ? " " + archN : ""}</button>`).join("")}
+  </div>
   <div class="bar">
-    <div class="seg" role="tablist">
-      ${[["open", "Offen"], ["bought", "Gekauft"], ["all", "Alle"]].map(([k, l]) => `<button type="button" class="${settings.filter === k ? "on" : ""}" data-act="filter" data-v="${k}">${l}</button>`).join("")}
-    </div>
+    <div class="chips">${catBar()}</div>
     <div class="sel"><select id="sortSel" aria-label="Sortierung">${SORTS.map(([k, l]) => `<option value="${k}" ${settings.sort === k ? "selected" : ""}>${l}</option>`).join("")}</select>${IC.chev(15)}</div>
   </div>
   ${body}`;
@@ -381,13 +439,26 @@ function imagesHtml(it) {
     <button type="button" class="im add" data-act="imgAdd">${IC.plus(22)}Bild</button></div>`;
 }
 
+function archBanner(it) {
+  const r = archReason(it);
+  if (!r) return "";
+  return `<div class="tip" style="margin-bottom:12px"><b>Archiviert</b> – ${r.own ? "das Ablaufdatum (" + fmtDate(r.t) + ") ist erreicht. Ändere oder entferne das Datum, um den Wunsch zurückzuholen." : "die Kategorie „" + esc(r.name) + "“ ist seit " + fmtDate(r.t) + " abgelaufen. Wähle eine andere Kategorie oder ändere ihr Ablaufdatum in den Einstellungen."}</div>`;
+}
+function editCatChips(it) {
+  const chip = (v, label, col) => `<button type="button" class="chip ${(it.cat || "") === v && (v || !catById(it.cat)) ? "on" : ""}" ${col ? `style="--c:${col}"` : ""} data-act="catSet" data-v="${v}">${col ? "<i></i>" : ""}${esc(label)}</button>`;
+  return chip("", "Keine") + settings.cats.map(c => chip(c.id, c.name + (c.exp && reached(c.exp) ? " (abgelaufen)" : ""), c.color)).join("");
+}
+
 function editSheet(id) {
   const it = items.find(i => i.id === id);
   if (!it) return;
   const rec = openSheet(`<div class="grab"></div>
     <div class="sh-head"><h2>Wunsch</h2><button type="button" class="x" data-close aria-label="Fertig">${IC.x(20)}</button></div>
     <input class="nm" id="eName" value="${esc(it.name)}" placeholder="Was möchtest du kaufen?" maxlength="300">
+    <div id="eArch">${archBanner(it)}</div>
     <div class="panel"><h3>Wie sehr willst du es? (1–10)</h3><div id="eRate">${ratingHtml(it)}</div></div>
+    <div class="panel"><h3>Kategorie</h3><div class="chips wrap" id="eCats">${editCatChips(it)}</div>
+      <div class="addrow" style="margin-top:10px"><input class="fld" id="eCatIn" placeholder="Neue Kategorie …" maxlength="30" autocomplete="off"><button type="button" class="btn pri" data-act="catAdd" aria-label="Kategorie hinzufügen">${IC.plus(20)}</button></div></div>
     <div class="panel"><h3>Links</h3><div id="eLinks">${linksHtml(it)}</div>
       <div class="addrow"><input class="fld" id="eLinkIn" type="url" inputmode="url" placeholder="Link einfügen (Shop, Test, Video …)" autocapitalize="off" autocomplete="off"><button type="button" class="btn pri" data-act="lnkAdd" aria-label="Link hinzufügen">${IC.plus(20)}</button></div></div>
     <div class="panel"><h3>Bilder & Screenshots</h3><div id="eImgs">${imagesHtml(it)}</div><input type="file" id="eFile" accept="image/*" multiple hidden>
@@ -395,7 +466,10 @@ function editSheet(id) {
     <div class="panel"><h3>Details</h3>
       <div class="two"><div><label for="ePrice">Preis (optional)</label><input class="fld" id="ePrice" value="${esc(it.price)}" placeholder="z. B. 129 €" maxlength="30"></div>
       <div><label for="eDate">Eingetragen am</label><input class="fld" id="eDate" type="date" value="${toInputDate(it.created)}" max="${toInputDate(Date.now())}"></div></div>
-      <div style="height:10px"></div><textarea class="fld" id="eNote" placeholder="Notiz (Farbe, Größe, wofür …)" maxlength="3000">${esc(it.note)}</textarea></div>
+      <div style="height:10px"></div><label class="lbl" for="eExp">Ablaufdatum (optional)</label>
+      <div class="addrow"><input class="fld" id="eExp" type="date" value="${it.exp ? toInputDate(it.exp) : ""}"><button type="button" class="btn" data-act="expClear" aria-label="Ablaufdatum entfernen">${IC.x(18)}</button></div>
+      <div class="muted tiny" style="margin:6px 0 10px">Ab diesem Tag wandert der Wunsch ins Archiv – dann brauchst du ihn nicht mehr.</div>
+      <textarea class="fld" id="eNote" placeholder="Notiz (Farbe, Größe, wofür …)" maxlength="3000">${esc(it.note)}</textarea></div>
     <div class="row" style="gap:10px;margin-top:4px">
       <button type="button" class="btn grow" data-act="eBought">${IC.check(18)}${it.bought ? "Wieder offen" : "Als gekauft"}</button>
       <button type="button" class="btn dng" data-act="eDelete" aria-label="Löschen">${IC.trash(18)}</button>
@@ -405,6 +479,12 @@ function editSheet(id) {
   const reRate = () => { $("#eRate", sh).innerHTML = ratingHtml(it); };
   const reLinks = () => { $("#eLinks", sh).innerHTML = linksHtml(it); };
   const reImgs = () => { $("#eImgs", sh).innerHTML = imagesHtml(it); };
+  const reCats = () => { $("#eCats", sh).innerHTML = editCatChips(it); $("#eArch", sh).innerHTML = archBanner(it); };
+  function addCatFromInput() {
+    const inp = $("#eCatIn", sh), c = addCat(inp.value);
+    if (!c) return;
+    it.cat = c.id; inp.value = ""; persist(it); reCats();
+  }
   let saveT = 0;
   const later = () => { clearTimeout(saveT); saveT = setTimeout(() => persist(it), 250); };
 
@@ -442,9 +522,11 @@ function editSheet(id) {
       it.ratings[0].t = ts;
       it.ratings.sort((a, b) => a.t - b.t);
       persist(it); reRate();
+    } else if (t.id === "eExp") {
+      it.exp = t.value ? fromInputDate(t.value) : null; persist(it); $("#eArch", sh).innerHTML = archBanner(it);
     } else if (t.id === "eFile") { addFiles(t.files).then(() => { t.value = ""; }); }
   });
-  sh.addEventListener("keydown", e => { if (e.target.id === "eLinkIn" && e.key === "Enter") { e.preventDefault(); addLink(); } });
+  sh.addEventListener("keydown", e => { if (e.key !== "Enter") return; if (e.target.id === "eLinkIn") { e.preventDefault(); addLink(); } else if (e.target.id === "eCatIn") { e.preventDefault(); addCatFromInput(); } });
   sh.addEventListener("paste", e => {
     const files = [...(e.clipboardData ? e.clipboardData.files : [])];
     if (files.some(f => /^image\//.test(f.type))) { e.preventDefault(); addFiles(files); return; }
@@ -464,6 +546,9 @@ function editSheet(id) {
       case "imgAdd": $("#eFile", sh).click(); break;
       case "imgDel": it.images.splice(i, 1); persist(it); reImgs(); break;
       case "imgView": imageViewer(it.images[i].f); break;
+      case "catSet": it.cat = b.dataset.v || ""; persist(it); reCats(); break;
+      case "catAdd": addCatFromInput(); break;
+      case "expClear": it.exp = null; $("#eExp", sh).value = ""; persist(it); reCats(); break;
       case "eBought": setBought(it, !it.bought); closeSheet(); break;
       case "eDelete": if (confirm("„" + (it.name || "Wunsch") + "“ wirklich löschen?")) { deleteItem(it); closeSheet(); } break;
     }
@@ -477,11 +562,11 @@ function imageViewer(src) {
 }
 
 /* ---------- Aktionen ---------- */
-function addItem(name) {
+function addItem(name, cat) {
   name = name.trim();
   if (!name) return null;
   const now = Date.now();
-  const it = { id: uid(), name, note: "", price: "", links: [], images: [], created: now, wish: 5, ratings: [{ t: now, v: 5 }], bought: null };
+  const it = { id: uid(), name, note: "", price: "", links: [], images: [], created: now, wish: 5, ratings: [{ t: now, v: 5 }], bought: null, cat: cat || "", exp: null };
   items.push(it);
   persist(it);
   return it;
@@ -507,6 +592,19 @@ function infoSheet() {
 }
 
 /* ---------- Einstellungen ---------- */
+function catPanelHtml() {
+  const rows = settings.cats.map(c => {
+    const n = items.filter(i => i.cat === c.id).length, gone = c.exp && reached(c.exp);
+    return `<div class="crow"><div class="ctop"><button type="button" class="cdot" style="background:${c.color}" data-act="catColor" data-id="${c.id}" aria-label="Farbe wechseln"></button>
+      <input class="fld cname" data-id="${c.id}" value="${esc(c.name)}" maxlength="30" aria-label="Name der Kategorie"><button type="button" class="mini" data-act="catDel" data-id="${c.id}" aria-label="Kategorie löschen">${IC.trash(17)}</button></div>
+      <div class="cexp"><span class="tiny muted">Läuft ab am</span><input class="fld cexpin" type="date" data-id="${c.id}" value="${c.exp ? toInputDate(c.exp) : ""}"><button type="button" class="mini" data-act="catExpClear" data-id="${c.id}" aria-label="Ablaufdatum entfernen">${IC.x(16)}</button></div>
+      <div class="muted tiny">${n} Wunsch${n === 1 ? "" : "e"}${gone ? " · archiviert seit " + fmtDate(c.exp) : ""}</div></div>`;
+  }).join("");
+  return `<div class="panel"><h3>Kategorien</h3>${rows || `<div class="muted small" style="margin-bottom:10px">Noch keine Kategorien. Lege z. B. „Technik“, „Kleidung“ oder „Haushalt“ an.</div>`}
+    <div class="addrow"><input class="fld" id="sCatIn" placeholder="Neue Kategorie …" maxlength="30" autocomplete="off"><button type="button" class="btn pri" data-act="catNew" aria-label="Kategorie hinzufügen">${IC.plus(20)}</button></div>
+    <div class="muted tiny" style="margin-top:8px">Mit Ablaufdatum landen ab diesem Tag alle Wünsche der Kategorie automatisch im Archiv.</div></div>`;
+}
+
 function settingsHtml() {
   const seg = (act, cur, opts) => `<div class="seg">${opts.map(([v, l]) => `<button type="button" class="${String(cur) === String(v) ? "on" : ""}" data-act="${act}" data-v="${v}">${l}</button>`).join("")}</div>`;
   const tg = (act, on, label) => `<div class="set"><span class="l">${label}</span><button type="button" class="tg ${on ? "on" : ""}" data-act="${act}" role="switch" aria-checked="${on}" aria-label="${label}"></button></div>`;
@@ -523,6 +621,7 @@ function settingsHtml() {
     <div class="set"><span class="l">Erinnern nach</span>${seg("remind", settings.remind, [[7, "1 Wo."], [14, "2 Wo."], [21, "3 Wo."], [0, "Aus"]])}</div>
     <div class="muted small" style="margin-top:4px">Wünsche, die so lange nicht bewertet wurden, werden als „Neu bewerten“ markiert.</div>
   </div>
+  ${catPanelHtml()}
   ${typeof syPanel === "function" ? syPanel() : ""}
   <div class="panel"><h3>Sicherung als Datei</h3>
     <div class="muted small" style="margin-bottom:10px">Zusätzlich zur Konto-Sicherung kannst du alles als Datei speichern.</div>
@@ -549,13 +648,30 @@ function settingsSheet() {
       case "amoled": settings.amoled = !settings.amoled; saveSettings(); redo(); break;
       case "dense": settings.dense = !settings.dense; saveSettings(); redo(); break;
       case "remind": settings.remind = +v; saveSettings(); redo(); break;
+      case "catNew": { const c = addCat($("#sCatIn", sh).value); if (c) redo(); break; }
+      case "catColor": { const c = catById(b.dataset.id); if (c) { c.color = CAT_COLORS[(CAT_COLORS.indexOf(c.color) + 1) % CAT_COLORS.length]; saveSettings(); redo(); } break; }
+      case "catExpClear": { const c = catById(b.dataset.id); if (c) { c.exp = null; saveSettings(); redo(); } break; }
+      case "catDel": {
+        const c = catById(b.dataset.id); if (!c) break;
+        const used = items.filter(i => i.cat === c.id);
+        if (!confirm("Kategorie „" + c.name + "“ löschen?" + (used.length ? " Die " + used.length + " Wünsche darin bleiben erhalten, haben dann aber keine Kategorie." : ""))) break;
+        used.forEach(i => { i.cat = ""; }); if (used.length) persistMany(used);
+        settings.cats = settings.cats.filter(x => x.id !== c.id);
+        if (settings.catFilter === c.id) settings.catFilter = "";
+        saveSettings(); redo(); break;
+      }
       case "export": exportBackup(); break;
       case "import": $("#sImport", sh).click(); break;
       case "wipe": if (confirm("Wirklich ALLE Wünsche löschen? Wenn du angemeldet bist, werden sie auch im Konto und auf deinen anderen Geräten gelöscht. Das lässt sich nicht rückgängig machen.")) { items = []; clearDb(); closeSheet(); render(); toast("Alles gelöscht"); } break;
     }
   });
   sh.addEventListener("input", e => { if (e.target.id === "sAccent") { settings.accent = e.target.value; saveSettings(); applyTheme(); render(); } });
-  sh.addEventListener("change", e => { if (e.target.id === "sAccent") redo(); else if (e.target.id === "sImport") importBackup(e.target.files[0], () => { e.target.value = ""; closeSheet(); }); });
+  sh.addEventListener("keydown", e => { if (e.key === "Enter" && e.target.id === "sCatIn") { e.preventDefault(); if (addCat(e.target.value)) redo(); } });
+  sh.addEventListener("change", e => {
+    const t = e.target, c = catById(t.dataset && t.dataset.id);
+    if (c && t.classList.contains("cname")) { const nm = t.value.trim().slice(0, 30); if (nm) { c.name = nm; saveSettings(); render(); } else t.value = c.name; return; }
+    if (c && t.classList.contains("cexpin")) { c.exp = t.value ? fromInputDate(t.value) : null; saveSettings(); redo(); return; }
+    if (e.target.id === "sAccent") redo(); else if (e.target.id === "sImport") importBackup(e.target.files[0], () => { e.target.value = ""; closeSheet(); }); });
 }
 
 /* ---------- Sicherung ---------- */
@@ -603,6 +719,10 @@ async function importBackup(file, done) {
       if (i >= 0) { items[i] = n; updated++; } else { items.push(n); added++; }
     }
     await persistMany(list);
+    if (data && !Array.isArray(data) && data.settings && Array.isArray(data.settings.cats)) {
+      normCats(data.settings.cats).forEach(c => { if (!catById(c.id)) settings.cats.push(c); });
+      saveSettings();
+    }
     render();
     toast(added + " neu, " + updated + " aktualisiert");
   } catch (e) { toast("Datei konnte nicht geladen werden: " + (e.message || e)); }
@@ -621,6 +741,7 @@ document.addEventListener("click", e => {
     case "settings": settingsSheet(); break;
     case "filter": settings.filter = b.dataset.v; saveSettings(); render(); break;
     case "sortDue": settings.sort = "due"; settings.filter = "open"; saveSettings(); render(); break;
+    case "catFilter": settings.catFilter = b.dataset.v; saveSettings(); render(); break;
     case "toggle": if (it) setBought(it, !it.bought); break;
     case "open": if (it) editSheet(it.id); break;
     case "rate": if (it) rateSheet(it.id); break;
@@ -630,7 +751,7 @@ document.addEventListener("submit", e => {
   if (e.target.id !== "addForm") return;
   e.preventDefault();
   const inp = $("#addIn");
-  const it = addItem(inp.value);
+  const it = addItem(inp.value, catById(settings.catFilter) ? settings.catFilter : "");
   if (!it) return inp.focus();
   inp.value = ""; render(); buzz();
   editSheet(it.id);
@@ -639,6 +760,8 @@ document.addEventListener("change", e => {
   if (e.target.id === "sortSel") { settings.sort = e.target.value; saveSettings(); render(); }
 });
 if (window.matchMedia) matchMedia("(prefers-color-scheme: light)").addEventListener?.("change", () => { if (settings.mode === "auto") applyTheme(); });
+
+document.addEventListener("visibilitychange", () => { if (!document.hidden && idb !== null) render(); });
 
 /* ---------- Start ---------- */
 (async function init() {
