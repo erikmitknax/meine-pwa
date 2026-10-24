@@ -1,0 +1,12 @@
+{
+  "appId": "io.github.erikmitknax.shopwise",
+  "appName": "Shopwise",
+  "webDir": "www",
+  "backgroundColor": "#0b1736",
+  "server": {
+    "url": "https://erikmitknax.github.io/meine-pwa/shopwise-pwa/",
+    "androidScheme": "https",
+    "errorPath": "offline.html",
+    "allowNavigation": ["erikmitknax.github.io", "*.googleapis.com", "*.firebaseapp.com"]
+  }
+}
