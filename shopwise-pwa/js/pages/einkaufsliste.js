@@ -1,14 +1,29 @@
 // Tab "Einkaufsliste":
 //   #/einkaufsliste        -> Übersicht aller Listen + Button für neue Liste
 //   #/einkaufsliste/<id>   -> Artikel dieser Liste (einkaufsliste-artikel.js)
-import { loadLists, addList, renameList, removeList } from '../store.js';
+import { loadLists, getList, addList, renameList, removeList } from '../store.js';
 import { h } from '../dom.js';
 import { uiIcon } from '../icons.js';
-import { render as renderItems } from './einkaufsliste-artikel.js';
+import { mountItems } from './einkaufsliste-artikel.js';
+
+// Welche Listen aufgeklappt sind, bleibt gemerkt (auch nach Neuladen und bei Änderungen von anderen Geräten).
+const OPEN_KEY = 'shopwise.openLists';
+function loadOpen() {
+  try { return new Set(JSON.parse(localStorage.getItem(OPEN_KEY) || '[]')); } catch { return new Set(); }
+}
+function saveOpen(set) {
+  try { localStorage.setItem(OPEN_KEY, JSON.stringify([...set])); } catch { /* egal */ }
+}
 
 export function render(el, params = []) {
   const [listId] = params;
-  if (listId) return renderItems(el, listId);
+  if (listId) {
+    // Alter Link #/einkaufsliste/<id>: Liste aufklappen und zur Übersicht
+    const open = loadOpen();
+    open.add(listId);
+    saveOpen(open);
+    history.replaceState(null, '', '#/einkaufsliste');
+  }
   return renderOverview(el);
 }
 
@@ -23,6 +38,7 @@ function summary(list) {
 function renderOverview(el) {
   el.appendChild(h('h1', '', 'Einkaufslisten'));
 
+  const openSet = loadOpen();
   const wrap = h('div', 'lists');
   el.appendChild(wrap);
 
@@ -30,20 +46,40 @@ function renderOverview(el) {
     wrap.innerHTML = '';
 
     for (const list of loadLists()) {
-      const card = h('article', 'list-card');
+      const isOpen = openSet.has(list.id);
+      const card = h('article', `list-card${isOpen ? ' open' : ''}`);
 
-      const info = h('a', 'list-info');
-      info.href = `#/einkaufsliste/${list.id}`;
+      const head = h('div', 'list-head');
+      const toggle = h('button', 'list-toggle');
+      toggle.type = 'button';
+      toggle.setAttribute('aria-expanded', String(isOpen));
+      const chev = h('span', 'chev');
+      chev.appendChild(uiIcon('chevron'));
+      const info = h('div', 'list-info');
       info.appendChild(h('h2', '', list.name));
-      info.appendChild(h('p', '', summary(list)));
-      card.appendChild(info);
+      const sum = h('p', '', summary(list));
+      info.appendChild(sum);
+      toggle.append(chev, info);
+      toggle.addEventListener('click', () => {
+        if (openSet.has(list.id)) openSet.delete(list.id); else openSet.add(list.id);
+        saveOpen(openSet);
+        draw();
+      });
+      head.appendChild(toggle);
 
       const edit = h('button', 'icon-btn');
       edit.type = 'button';
       edit.appendChild(uiIcon('pencil'));
       edit.setAttribute('aria-label', `Liste „${list.name}“ bearbeiten`);
       edit.addEventListener('click', () => openEditDialog(list));
-      card.appendChild(edit);
+      head.appendChild(edit);
+      card.appendChild(head);
+
+      if (isOpen) {
+        const body = h('div', 'list-body');
+        mountItems(body, list.id, () => { sum.textContent = summary(getList(list.id)); });
+        card.appendChild(body);
+      }
 
       wrap.appendChild(card);
     }

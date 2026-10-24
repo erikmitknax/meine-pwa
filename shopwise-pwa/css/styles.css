@@ -538,3 +538,29 @@ body {
 .sync-live { color: #7ed49a; }
 .sync-live::before { content: ''; display: inline-block; width: 9px; height: 9px; margin-right: 8px; border-radius: 50%; background: #7ed49a; }
 .sync-error { color: #f08a78; }
+
+/* ---------- Einkaufslisten: aufklappbar ---------- */
+.list-card { display: block; padding: 0; min-height: 0; }
+.list-head { display: flex; align-items: center; gap: 8px; padding: 12px 14px 12px 8px; }
+.list-toggle {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 6px;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+.chev { flex: none; display: grid; place-items: center; color: var(--gold); }
+.chev svg { width: 22px; height: 22px; transition: transform 0.2s; }
+.list-card.open .chev svg { transform: rotate(90deg); }
+.list-body { padding: 4px 14px 16px; border-top: 1px solid rgba(201, 162, 75, 0.3); }
+.list-body .add-item { margin: 14px 0; }
+.list-body .item { background: rgba(7, 15, 38, 0.35); }
+.list-body .hint { margin-bottom: 0; }
+.list-body .btn-wide { background: transparent; color: var(--champagne); border: 1px solid var(--gold); }

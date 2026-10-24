@@ -1,20 +1,10 @@
-// Unterseite einer Einkaufsliste: Artikel hinzufügen, abhaken, löschen.
+// Artikel einer Einkaufsliste (Hinzufügen, Abhaken, Löschen) – wird direkt in der aufgeklappten Liste angezeigt.
 import { getList, addItem, toggleItem, removeItem, clearChecked } from '../store.js';
 import { h } from '../dom.js';
 
-export function render(el, listId) {
-  const first = getList(listId);
-  if (!first) {               // Liste gibt es nicht (mehr)
-    location.hash = '#/einkaufsliste';
-    return;
-  }
-
-  const back = h('a', 'back-link', '← Einkaufslisten');
-  back.href = '#/einkaufsliste';
-  el.appendChild(back);
-  el.appendChild(h('h1', '', first.name));
-
-  // Eingabe bleibt beim Hinzufügen bestehen (Tastatur bleibt offen), nur die Liste darunter wird neu gezeichnet.
+// onChange wird nach jeder Änderung aufgerufen (z. B. um die Zusammenfassung in der Kopfzeile zu aktualisieren).
+export function mountItems(container, listId, onChange = () => {}) {
+  // Eingabe bleibt beim Hinzufügen bestehen (Tastatur bleibt offen), nur die Artikel darunter werden neu gezeichnet.
   const form = h('form', 'add-item');
   const name = h('input', 'add-item-name');
   name.type = 'text';
@@ -33,10 +23,10 @@ export function render(el, listId) {
   submit.type = 'submit';
   submit.setAttribute('aria-label', 'Hinzufügen');
   form.append(name, qty, submit);
-  el.appendChild(form);
+  container.appendChild(form);
 
   const listEl = h('div', 'items');
-  el.appendChild(listEl);
+  container.appendChild(listEl);
 
   form.addEventListener('submit', (e) => {
     e.preventDefault();
@@ -47,6 +37,7 @@ export function render(el, listId) {
     qty.value = '';
     name.focus();
     draw();
+    onChange();
   });
 
   function row(item) {
@@ -59,13 +50,13 @@ export function render(el, listId) {
     main.appendChild(h('span', 'item-check', item.checked ? '✓' : ''));
     main.appendChild(h('span', 'item-name', item.name));
     if (item.qty) main.appendChild(h('span', 'item-qty', item.qty));
-    main.addEventListener('click', () => { toggleItem(listId, item.id); draw(); });
+    main.addEventListener('click', () => { toggleItem(listId, item.id); draw(); onChange(); });
     li.appendChild(main);
 
     const del = h('button', 'icon-btn', '✕');
     del.type = 'button';
     del.setAttribute('aria-label', `${item.name} löschen`);
-    del.addEventListener('click', () => { removeItem(listId, item.id); draw(); });
+    del.addEventListener('click', () => { removeItem(listId, item.id); draw(); onChange(); });
     li.appendChild(del);
 
     return li;
@@ -74,6 +65,7 @@ export function render(el, listId) {
   function draw() {
     const list = getList(listId);
     listEl.innerHTML = '';
+    if (!list) return;
 
     if (!list.items.length) {
       listEl.appendChild(h('p', 'hint', 'Noch keine Artikel. Gib oben einen Artikel ein und tippe auf „+“.'));
@@ -88,7 +80,7 @@ export function render(el, listId) {
     if (done.length) {
       const clear = h('button', 'btn-wide', `Erledigte entfernen (${done.length})`);
       clear.type = 'button';
-      clear.addEventListener('click', () => { clearChecked(listId); draw(); });
+      clear.addEventListener('click', () => { clearChecked(listId); draw(); onChange(); });
       listEl.appendChild(clear);
     }
   }
