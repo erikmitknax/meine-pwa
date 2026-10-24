@@ -1,4 +1,4 @@
-import { renderEmpty } from './_empty.js';
+import { renderEmpty } from './empty.js';
 
 export function render(el) {
   renderEmpty(el, {

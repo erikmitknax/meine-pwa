@@ -1,4 +1,4 @@
-import { renderEmpty } from './_empty.js';
+import { renderEmpty } from './empty.js';
 import { APP_VERSION } from '../version.js';
 import { checkForUpdate } from '../updater.js';
 
