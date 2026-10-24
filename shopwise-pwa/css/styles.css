@@ -588,3 +588,35 @@ body {
   padding: 9px 14px; font: inherit; font-weight: 600; cursor: pointer; border: 0; border-radius: 10px;
   color: var(--midnight-900, #070f26); background: linear-gradient(135deg, var(--champagne), var(--gold));
 }
+
+/* ---------- Plus-Button in der Tab-Leiste + Schnell-Dialog ---------- */
+.tab-plus {
+  flex: none; align-self: center; width: 54px; height: 54px; margin: 0 4px; padding: 0;
+  display: grid; place-items: center; cursor: pointer; border-radius: 50%;
+  color: var(--midnight-900); background: linear-gradient(135deg, var(--champagne), var(--gold));
+  border: 2px solid var(--midnight-900); box-shadow: 0 0 0 1.5px var(--gold), 0 4px 12px rgba(0, 0, 0, 0.4);
+  transform: translateY(-8px);
+}
+.tab-plus svg { width: 28px; height: 28px; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; }
+.tab-plus:active { filter: brightness(0.92); }
+.tabbar a { min-width: 0; }
+
+.quick { width: min(94vw, 420px); }
+.quick-list { margin-top: 12px; max-height: 52dvh; overflow-y: auto; }
+.quick-row {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 10px;
+  padding: 10px 4px; border-bottom: 1px solid rgba(15, 30, 70, 0.15);
+}
+.quick-info { flex: 1 1 110px; min-width: 0; }
+.quick-name { font-weight: 600; }
+.quick-sub { font-size: 0.78rem; opacity: 0.7; }
+.quick-row.is-low .quick-sub { color: #b4640f; opacity: 1; }
+.quick-row.is-empty .quick-sub { color: #b3261e; opacity: 1; }
+.quick-ctrl { display: flex; align-items: center; gap: 6px; }
+.dialog .quick-amount { width: 64px; padding: 8px 4px; text-align: center; }
+.quick-unit { font-size: 0.8rem; min-width: 1.8em; opacity: 0.75; }
+.quick-step {
+  width: 40px; height: 40px; font: inherit; font-size: 1.3rem; cursor: pointer; border-radius: 50%;
+  color: var(--champagne); background: var(--midnight-800); border: 1.5px solid var(--gold);
+}
+.quick-step:disabled { opacity: 0.3; cursor: default; }

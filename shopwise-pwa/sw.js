@@ -1,7 +1,7 @@
 // Service Worker: App-Shell wird gecacht, damit Shopwise offline startet.
 // VERSION wird von bump-version.mjs hochgezählt. Ändert sich diese Datei,
 // erkennt der Browser eine neue Version und die App zeigt das Update-Banner.
-const VERSION = '0.10.0';
+const VERSION = '0.11.0';
 const CACHE = 'shopwise-' + VERSION;
 const ASSETS = [
   './',
@@ -16,6 +16,7 @@ const ASSETS = [
   './js/sync.js',
   './js/firebase-config.js',
   './js/icons.js',
+  './js/quick.js',
   './js/updater.js',
   './js/version.js',
   './js/pages/empty.js',
