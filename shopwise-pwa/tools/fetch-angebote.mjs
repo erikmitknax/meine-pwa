@@ -13,7 +13,7 @@ const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const token = process.env.APIFY_TOKEN;
 if (!token) { console.error('APIFY_TOKEN fehlt (GitHub: Settings → Secrets → Actions).'); process.exit(1); }
 
-const POSTAL = process.env.POSTAL_CODE || '21029';                  // Hamburg-Bergedorf
+const POSTAL = process.env.POSTAL_CODE || '21031';                  // Hamburg-Lohbrügge (REWE Am Beckerkamp)
 const MAX_USD_MG = process.env.MAX_USD_MARKTGURU || '0.35';
 const MAX_USD_SM = process.env.MAX_USD_SUPERMARKT || '0.60';
 const MG_MAX_ITEMS = Number(process.env.MG_MAX_ITEMS || 200);
@@ -86,7 +86,7 @@ try {
   const searchTerms = uniq(havePersonal ? names : staticTerms).slice(0, 80);
   const rows = await runActor('trev0n~marktguru-gazetki-scraper', {
     country: 'DE', postalCode: POSTAL, retailers: ['REWE', 'Edeka'], searchTerms,
-    outputType: 'offers', validity: 'current', maxItems: MG_MAX_ITEMS, compact: false,
+    outputType: 'offers', validity: 'currentAndUpcoming', maxItems: MG_MAX_ITEMS, compact: false,
   }, MAX_USD_MG);
   const got = rows.map(fromMarktguru).filter(Boolean).filter((o) => o.chain === 'rewe' || o.chain === 'edeka');
   offers.push(...got);

@@ -51,7 +51,10 @@ export function render(el) {
 function draw(body, data, offline) {
   const offers = data && Array.isArray(data.offers) ? data.offers : [];
   const open = new Set(read(OPEN_KEY, []));
-  let onlyCheaper = read(FILTER_KEY, false);
+  const stored = read(FILTER_KEY, 'all');
+  let filter = stored === true ? 'cheap' : (['all', 'cheap', 'next'].includes(stored) ? stored : 'all');   // all | cheap | next
+  const todayStr = new Date().toLocaleDateString('sv-SE');
+  const isNext = (o) => !!o.from && o.from > todayStr;
   const rebuild = () => { body.innerHTML = ''; draw(body, data, offline); };
 
   if (offers.length) {
@@ -72,16 +75,17 @@ function draw(body, data, offline) {
     let found = offersFor(item, offers);
     const savings = found.filter((o) => o.saving != null).map((o) => o.saving);
     const best = savings.length ? Math.max(...savings) : null;
-    if (onlyCheaper) found = found.filter((o) => o.saving != null && o.saving > 0);
+    if (filter === 'cheap') found = found.filter((o) => o.saving != null && o.saving > 0);
+    if (filter === 'next') found = found.filter(isNext);
     return { item, offers: found, best, ...extra };
   }
 
   function drawChips() {
     chips.innerHTML = '';
-    for (const [label, val] of [['Alle Treffer', false], ['Günstiger als üblich', true]]) {
-      const b = h('button', `chip${onlyCheaper === val ? ' active' : ''}`, label);
+    for (const [label, val] of [['Alle Treffer', 'all'], ['Günstiger als üblich', 'cheap'], ['Nächste Woche', 'next']]) {
+      const b = h('button', `chip${filter === val ? ' active' : ''}`, label);
       b.type = 'button';
-      b.addEventListener('click', () => { onlyCheaper = val; write(FILTER_KEY, val); drawChips(); drawLists(); });
+      b.addEventListener('click', () => { filter = val; write(FILTER_KEY, val); drawChips(); drawLists(); });
       chips.appendChild(b);
     }
   }
@@ -89,8 +93,10 @@ function draw(body, data, offline) {
   function offerRow(o) {
     const r = h('div', 'offer-row');
     const left = h('div', 'offer-info');
-    left.appendChild(h('div', 'offer-title', o.title));
-    left.appendChild(h('div', 'offer-sub', [CHAINS[o.chain] || o.chain, o.unit, o.to ? `bis ${dateText(o.to)}` : ''].filter(Boolean).join(' · ')));
+    const title = h('div', 'offer-title', o.title);
+    if (isNext(o)) title.appendChild(h('span', 'tag tag-next', 'nächste Woche'));
+    left.appendChild(title);
+    left.appendChild(h('div', 'offer-sub', [CHAINS[o.chain] || o.chain, o.unit, isNext(o) ? `ab ${dateText(o.from)}` : (o.to ? `bis ${dateText(o.to)}` : '')].filter(Boolean).join(' · ')));
     r.appendChild(left);
     const right = h('div', 'offer-price');
     right.appendChild(h('div', 'offer-eur', eur.format(o.price)));
@@ -158,7 +164,7 @@ function draw(body, data, offline) {
     // --- Merkliste (unabhängig vom Bestand)
     watchBox.appendChild(h('h2', 'section-title', 'Meine Merkliste'));
     const watch = loadWatch().map((w) => group(w, { watch: true, need: false }))
-      .filter((g) => !onlyCheaper || g.offers.length)
+      .filter((g) => filter === 'all' || g.offers.length)
       .sort((a, b) => (b.offers.length > 0) - (a.offers.length > 0) || ((b.best ?? -9) - (a.best ?? -9)) || a.item.name.localeCompare(b.item.name, 'de'));
     if (!watch.length && !loadWatch().length) {
       watchBox.appendChild(h('p', 'hint', 'Merke dir Lebensmittel, die dich interessieren – unabhängig von deinem Bestand. Sie erscheinen hier, sobald sie im Angebot sind.'));
@@ -179,7 +185,7 @@ function draw(body, data, offline) {
     const none = all.filter((g) => !offersFor(g.item, offers).length).map((g) => g.item.name);
     const groups = all.filter((g) => g.offers.length)
       .sort((a, b) => (b.need - a.need) || ((b.best ?? -9) - (a.best ?? -9)) || a.item.name.localeCompare(b.item.name, 'de'));
-    if (!groups.length) stockBox.appendChild(h('p', 'hint', onlyCheaper ? 'Gerade nichts, das günstiger als üblich ist.' : 'Gerade keine Angebote zu deinen Lebensmitteln.'));
+    if (!groups.length) stockBox.appendChild(h('p', 'hint', filter === 'cheap' ? 'Gerade nichts, das günstiger als üblich ist.' : filter === 'next' ? 'Für nächste Woche ist noch nichts bekannt.' : 'Gerade keine Angebote zu deinen Lebensmitteln.'));
     groups.forEach((g) => card(g, stockBox));
     if (none.length) stockBox.appendChild(h('p', 'hint', `Keine Treffer für: ${none.join(', ')}`));
   }

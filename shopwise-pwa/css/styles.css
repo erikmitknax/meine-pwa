@@ -673,3 +673,4 @@ html[data-theme="violett"] { --midnight-900:#0e0a22; --midnight-800:#160f33; --m
 .quick-seg-btn + .quick-seg-btn { border-left: 1.5px solid var(--midnight-600); }
 .quick-seg-btn.active { color: var(--champagne); background: var(--midnight-800); }
 .quick-group { position: sticky; top: 0; z-index: 1; padding: 8px 4px 4px; font-size: 0.75rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--midnight-600); background: var(--offwhite); }
+.tag-next { margin-left: 8px; font-size: 0.65rem; color: var(--champagne); background: transparent; border: 1px solid rgb(var(--gold-rgb) / 0.6); vertical-align: middle; }
