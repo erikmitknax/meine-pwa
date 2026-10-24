@@ -31,5 +31,19 @@ export function startRouter(viewEl) {
   }
 
   window.addEventListener('hashchange', navigate);
+
+  // Änderung von einem anderen Gerät: aktuelle Seite neu zeichnen – aber nicht mitten im Tippen oder im Dialog.
+  let retry = null;
+  function refresh() {
+    clearTimeout(retry);
+    const a = document.activeElement;
+    const typing = a && viewEl.contains(a) && /INPUT|TEXTAREA|SELECT/.test(a.tagName);
+    if (typing || document.querySelector('dialog[open]')) { retry = setTimeout(refresh, 1500); return; }
+    const top = viewEl.scrollTop;
+    navigate();
+    viewEl.scrollTop = top;
+  }
+  window.addEventListener('shopwise:remote-changed', refresh);
+
   navigate();
 }

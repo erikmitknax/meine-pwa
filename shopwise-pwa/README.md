@@ -15,6 +15,8 @@ js/router.js            Hash-Router für die Tabs
 js/updater.js           Prüft auf neue Version, zeigt Update-Banner
 js/version.js           Aktuelle Versionsnummer
 js/store.js             Speicher für Listen und Bestand (localStorage)
+js/sync.js              Geräte-Abgleich über Firebase (Anmeldung + Firestore)
+js/firebase-config.js   Firebase-Projekt (öffentliche Web-Konfiguration)
 js/toast.js             Kurze Meldungen
 js/dom.js               Helfer zum Erzeugen von Elementen
 js/icons.js             Symbole für Kategorien
@@ -40,6 +42,14 @@ python3 -m http.server 8080
 ```
 
 Dann `http://localhost:8080` öffnen. In VS Code geht auch die Erweiterung „Live Server“.
+
+## Geräte-Abgleich (Firebase)
+
+Einstellungen → „Konto & Sicherung“: mit E-Mail und Passwort anmelden (dasselbe Konto wie bei FoodPro, Lernwerkstatt, Wunschliste).
+Danach werden Listen, Artikel, Kategorien und Bestand live zwischen allen angemeldeten Geräten abgeglichen. Lokal zuerst: ohne Netz
+läuft die App weiter und gleicht später ab. Dokumente liegen unter `users/<uid>/sw_lists | sw_litems | sw_cats | sw_stock`
+(Regel `users/{uid}/**` reicht aus). Letzte Änderung gewinnt, Löschungen werden als Löschmarke abgeglichen.
+Ein neues Gerät mit unberührten Startdaten übernimmt beim ersten Anmelden einfach den vorhandenen Stand.
 
 ## Updates / Versionen
 

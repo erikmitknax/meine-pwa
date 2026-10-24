@@ -1,7 +1,7 @@
 // Service Worker: App-Shell wird gecacht, damit Shopwise offline startet.
 // VERSION wird von bump-version.mjs hochgezählt. Ändert sich diese Datei,
 // erkennt der Browser eine neue Version und die App zeigt das Update-Banner.
-const VERSION = '0.7.0';
+const VERSION = '0.8.0';
 const CACHE = 'shopwise-' + VERSION;
 const ASSETS = [
   './',
@@ -13,6 +13,8 @@ const ASSETS = [
   './js/store.js',
   './js/toast.js',
   './js/dom.js',
+  './js/sync.js',
+  './js/firebase-config.js',
   './js/icons.js',
   './js/updater.js',
   './js/version.js',
@@ -70,6 +72,7 @@ self.addEventListener('activate', (event) => {
 // Cache zuerst, sonst Netzwerk.
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
+  if (new URL(event.request.url).origin !== self.location.origin) return;   // Firebase & Co. direkt ins Netz
   event.respondWith(
     caches.match(event.request, { ignoreSearch: true }).then((hit) => hit || fetch(event.request))
   );

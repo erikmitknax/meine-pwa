@@ -2,6 +2,7 @@
 import { startRouter } from './router.js';
 import { initUpdater } from './updater.js';
 import { stockAlertCount } from './store.js';
+import { initSync } from './sync.js';
 
 // Zahl am Tab "Bestand": wie viele Lebensmittel nachgekauft werden sollten.
 function updateBadge() {
@@ -22,3 +23,4 @@ updateBadge();
 
 startRouter(document.getElementById('view'));
 initUpdater();
+initSync();

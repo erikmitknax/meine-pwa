@@ -505,3 +505,36 @@ body {
 .icon-btn { display: grid; place-items: center; }
 .stock-price { margin: -6px 0 10px; font-size: 0.78rem; color: var(--offwhite-dim); }
 .btn-danger { order: -1; }
+
+/* ---------- Einstellungen: Konto & Sicherung ---------- */
+.panel {
+  padding: 18px;
+  background: linear-gradient(160deg, var(--midnight-600), var(--midnight-700));
+  border: 1.5px solid var(--gold);
+  border-radius: 20px;
+  box-shadow: 0 0 0 4px rgba(201, 162, 75, 0.10);
+}
+.panel h2 { font-size: 1.1rem; margin-bottom: 8px; color: var(--champagne); }
+.panel-text { margin-bottom: 12px; font-size: 0.88rem; color: var(--offwhite-dim); }
+.panel input {
+  display: block;
+  width: 100%;
+  margin-bottom: 10px;
+  padding: 13px 14px;
+  font: inherit;
+  color: var(--offwhite);
+  background: rgba(246, 241, 231, 0.07);
+  border: 1.5px solid rgba(201, 162, 75, 0.5);
+  border-radius: 12px;
+}
+.panel input:focus { outline: none; border-color: var(--gold); background: var(--midnight-800); }
+.panel-row { display: flex; gap: 10px; margin-top: 4px; }
+.panel-row .btn { flex: 1; }
+.btn-ghost-light { background: transparent; color: var(--champagne); border: 1.5px solid rgba(201, 162, 75, 0.6); }
+.link-btn { margin-top: 12px; padding: 4px 0; font: inherit; font-size: 0.85rem; color: var(--champagne); background: none; border: 0; text-decoration: underline; cursor: pointer; }
+.panel-msg { margin-top: 12px; font-size: 0.88rem; color: var(--champagne); }
+.panel-msg.err { color: #f08a78; }
+.sync-label { margin-bottom: 6px; font-weight: 700; color: var(--offwhite-dim); }
+.sync-live { color: #7ed49a; }
+.sync-live::before { content: ''; display: inline-block; width: 9px; height: 9px; margin-right: 8px; border-radius: 50%; background: #7ed49a; }
+.sync-error { color: #f08a78; }
