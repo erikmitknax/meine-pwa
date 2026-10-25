@@ -1,4 +1,4 @@
-// Feste Liste "Nachkaufen": alle Lebensmittel aus dem Bestand, die unter der Schwelle (20 %) oder leer sind.
+// Feste Liste "Nachkaufen": alle Lebensmittel aus dem Bestand, die unter ihrer Schwelle (Standard 20 %, pro Lebensmittel einstellbar) oder leer sind.
 // Wird nicht gespeichert, sondern immer aus dem Bestand berechnet – deshalb nicht löschbar und überall aktuell.
 // "Gekauft" bucht die eingegebene Menge auf den Bestand; reicht er dann, verschwindet der Eintrag von selbst.
 import { loadStock, saveStockItem, stockStatus, getCategory } from '../store.js';

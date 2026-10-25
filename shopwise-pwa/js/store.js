@@ -232,7 +232,7 @@ export function removeCategory(id) {
 export const loadStock = () => ensureData().items;
 
 export function newStockItem(categoryId) {
-  return { id: newId(), name: '', categoryId, unit: 'Stk', amount: 0, max: 1, price: null, search: '', exclude: '' };
+  return { id: newId(), name: '', categoryId, unit: 'Stk', amount: 0, max: 1, price: null, warn: null, search: '', exclude: '' };
 }
 
 export function saveStockItem(item) {
@@ -248,10 +248,11 @@ export function removeStockItem(id) {
   changed();
 }
 
-// 'ok' | 'low' (höchstens 20 %) | 'empty' (0)
+// 'ok' | 'low' (höchstens die eigene Schwelle bzw. 20 %) | 'empty' (0)
 export function stockStatus(item) {
   if (item.amount <= 0) return 'empty';
-  if (item.amount / item.max <= LOW_RATIO + 1e-9) return 'low';
+  // Eigene Schwelle (Menge in der Einheit des Lebensmittels) oder Standard: 20 % vom Maximum
+  if (item.warn != null ? item.amount <= item.warn + 1e-9 : item.amount / item.max <= LOW_RATIO + 1e-9) return 'low';
   return 'ok';
 }
 
@@ -307,6 +308,7 @@ function normDoc(type, d) {
       categoryId: String(d.categoryId), name,
       unit: UNITS.includes(d.unit) ? d.unit : 'Stk',
       amount: Math.max(0, num(d.amount)), max: num(d.max) > 0 ? num(d.max) : 1, price,
+      warn: d.warn === null || d.warn === undefined || d.warn === '' ? null : Math.max(0, num(d.warn)),
       search: text(d.search, 120), exclude: text(d.exclude, 120),
     };
   }

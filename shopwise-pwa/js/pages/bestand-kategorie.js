@@ -16,7 +16,7 @@ const percent = (item) => Math.round((item.amount / item.max) * 100);
 
 function stateText(item, status) {
   if (status === 'empty') return 'Leer – nachkaufen';
-  if (status === 'low') return `${percent(item)} % – fast leer, nachkaufen`;
+  if (status === 'low') return item.warn != null ? `${percent(item)} % – unter deiner Schwelle, nachkaufen` : `${percent(item)} % – fast leer, nachkaufen`;
   return `${percent(item)} %`;
 }
 
@@ -175,7 +175,26 @@ export function render(el, categoryId) {
     const row = h('div', 'field-row');
     row.append(field('Aktuell vorhanden', amount), field('Genug (Maximum)', max));
     form.appendChild(row);
-    form.appendChild(h('p', 'dialog-hint', 'Bei 20 % und bei 0 % des Maximums bekommst du die Meldung „nachkaufen“.'));
+
+    // Eigene Nachkauf-Schwelle (optional); leer = 20 % vom Maximum
+    const warn = h('input');
+    warn.type = 'number';
+    warn.inputMode = 'decimal';
+    warn.step = 'any';
+    warn.min = '0';
+    warn.value = item.warn != null ? item.warn : '';
+    const warnField = field('', warn);
+    const warnText = warnField.querySelector('.field-label');
+    const updateWarn = () => {
+      const m = parseFloat(max.value);
+      warnText.textContent = `Nachkaufen ab (${unit.value})`;
+      warn.placeholder = m > 0 ? `leer = Standard: ${fmt(round(m * 0.2))}` : 'leer = Standard: 20 % vom Maximum';
+    };
+    unit.addEventListener('change', updateWarn);
+    max.addEventListener('input', updateWarn);
+    updateWarn();
+    form.appendChild(warnField);
+    form.appendChild(h('p', 'dialog-hint', 'Sobald die Menge diesen Wert erreicht oder darunter liegt, steht das Lebensmittel bei „Nachkaufen“. Bei 0 ist es immer „leer“.'));
 
     // Üblicher Preis (optional): Vergleichswert, ob ein Angebot wirklich günstiger ist
     const price = h('input');
@@ -242,6 +261,7 @@ export function render(el, categoryId) {
       item.unit = unit.value;
       item.amount = round(parseFloat(amount.value));
       item.max = round(parseFloat(max.value));
+      item.warn = warn.value === '' ? null : Math.max(0, round(parseFloat(warn.value)));
       item.price = price.value === '' ? null : Math.round(parseFloat(price.value) * 100) / 100;
       item.search = search.value.trim();
       item.exclude = exclude.value.trim();
