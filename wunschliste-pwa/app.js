@@ -107,6 +107,7 @@ function normItem(r) {
     note: String(r.note || "").slice(0, 3000),
     price: String(r.price || "").slice(0, 30),
     links: [...new Set((Array.isArray(r.links) ? r.links : []).map(normUrl).filter(Boolean))],
+    linkNames: normNames(r.linkNames),
     favLinks: [...new Set((Array.isArray(r.favLinks) ? r.favLinks : []).map(normUrl).filter(Boolean))],
     images: (Array.isArray(r.images) ? r.images : []).filter(i => i && /^data:image\//.test(i.f || "")).map(i => ({ id: String(i.id || uid()), f: i.f, t: /^data:image\//.test(i.t || "") ? i.t : i.f })),
     created, wish, ratings,
@@ -117,7 +118,21 @@ function normItem(r) {
   fixFavs(out);
   return out;
 }
-function fixFavs(it) { it.favLinks = (it.favLinks || []).filter(u => it.links.includes(u)); }
+function fixFavs(it) {
+  it.favLinks = (it.favLinks || []).filter(u => it.links.includes(u));
+  it.linkNames = (it.linkNames || []).filter(x => it.links.includes(x.u));
+}
+/* Eigene Beschreibung pro Link (z. B. „3er-Set mit Deckel, 12,99 €“) */
+function normNames(a) {
+  const seen = new Set();
+  return (Array.isArray(a) ? a : []).map(x => x && { u: normUrl(x.u), n: String(x.n || "").trim().slice(0, 80) }).filter(x => x && x.u && x.n && !seen.has(x.u) && seen.add(x.u));
+}
+const labelOf = (it, u) => ((it.linkNames || []).find(x => x.u === u) || {}).n || "";
+function setLabel(it, u, n) {
+  n = String(n || "").trim().slice(0, 80);
+  it.linkNames = (it.linkNames || []).filter(x => x.u !== u);
+  if (n) it.linkNames.push({ u, n });
+}
 const catById = id => (id && settings.cats.find(c => c.id === id)) || null;
 const fromInputDate = v => { const [y, m, d] = String(v).split("-").map(Number); return new Date(y, m - 1, d, 12).getTime(); };
 const reached = t => sod(t) <= sod(Date.now());
@@ -437,8 +452,10 @@ async function processFile(file) {
 function host(u) { try { const x = new URL(u); return x.hostname.replace(/^www\./, ""); } catch (e) { return u; } }
 function linkPath(u) { try { const x = new URL(u); const p = (x.pathname + x.search).replace(/\/$/, ""); return p.length > 1 ? p : ""; } catch (e) { return ""; } }
 
+const autoGrow = el => { el.style.height = "auto"; el.style.height = el.scrollHeight + "px"; };
 function linksHtml(it) {
-  return it.links.map((u, i) => { const fav = it.favLinks.includes(u); return `<div class="lnk ${fav ? "fav" : ""}"><a href="${esc(u)}" target="_blank" rel="noopener noreferrer">${esc(host(u))}<small>${esc(linkPath(u) || u)}</small></a>
+  return it.links.map((u, i) => { const fav = it.favLinks.includes(u); return `<div class="lnk ${fav ? "fav" : ""}"><div class="lbody"><textarea class="llab" rows="1" data-i="${i}" placeholder="${esc(host(u))}" maxlength="80" autocomplete="off" aria-label="Beschreibung: was bietet dieser Link?">${esc(labelOf(it, u))}</textarea>
+    <a class="lsub" href="${esc(u)}" target="_blank" rel="noopener noreferrer">${esc(host(u))}${esc(linkPath(u))}</a></div>
     <button type="button" class="mini star ${fav ? "on" : ""}" data-act="lnkFav" data-i="${i}" aria-pressed="${fav}" aria-label="${fav ? "Favorit entfernen" : "Als Favorit markieren"}">${IC.star(18, fav)}</button>
     <button type="button" class="mini" data-act="lnkOpen" data-i="${i}" aria-label="Link öffnen">${IC.ext(17)}</button>
     <button type="button" class="mini" data-act="lnkDel" data-i="${i}" aria-label="Link entfernen">${IC.trash(17)}</button></div>`; }).join("");
@@ -469,7 +486,8 @@ function editSheet(id) {
     <div class="panel"><h3>Kategorie</h3><div class="chips wrap" id="eCats">${editCatChips(it)}</div>
       <div class="addrow" style="margin-top:10px"><input class="fld" id="eCatIn" placeholder="Neue Kategorie …" maxlength="30" autocomplete="off"><button type="button" class="btn pri" data-act="catAdd" aria-label="Kategorie hinzufügen">${IC.plus(20)}</button></div></div>
     <div class="panel"><h3>Links</h3><div id="eLinks">${linksHtml(it)}</div>
-      <div class="addrow"><input class="fld" id="eLinkIn" type="url" inputmode="url" placeholder="Link einfügen (Shop, Test, Video …)" autocapitalize="off" autocomplete="off"><button type="button" class="btn pri" data-act="lnkAdd" aria-label="Link hinzufügen">${IC.plus(20)}</button></div></div>
+      <div class="addrow"><input class="fld" id="eLinkIn" type="url" inputmode="url" placeholder="Link einfügen (Shop, Test, Video …)" autocapitalize="off" autocomplete="off"><button type="button" class="btn pri" data-act="lnkAdd" aria-label="Link hinzufügen">${IC.plus(20)}</button></div>
+      <input class="fld" id="eLinkLab" placeholder="Was bietet der Link? (z. B. 3er-Set, 12,99 €)" maxlength="80" autocomplete="off" style="margin-top:8px"></div>
     <div class="panel"><h3>Bilder & Screenshots</h3><div id="eImgs">${imagesHtml(it)}</div><input type="file" id="eFile" accept="image/*" multiple hidden>
       <div class="muted tiny" style="margin-top:8px">Auch Einfügen aus der Zwischenablage funktioniert.</div></div>
     <div class="panel"><h3>Details</h3>
@@ -486,7 +504,7 @@ function editSheet(id) {
 
   const sh = rec.sheet;
   const reRate = () => { $("#eRate", sh).innerHTML = ratingHtml(it); };
-  const reLinks = () => { $("#eLinks", sh).innerHTML = linksHtml(it); };
+  const reLinks = () => { $("#eLinks", sh).innerHTML = linksHtml(it); $$(".llab", sh).forEach(autoGrow); };
   const reImgs = () => { $("#eImgs", sh).innerHTML = imagesHtml(it); };
   const reCats = () => { $("#eCats", sh).innerHTML = editCatChips(it); $("#eArch", sh).innerHTML = archBanner(it); };
   function addCatFromInput() {
@@ -495,7 +513,8 @@ function editSheet(id) {
     it.cat = c.id; inp.value = ""; persist(it); reCats();
   }
   window.wlEditRefresh = { id: it.id, fn: () => {
-    reRate(); reLinks(); reImgs(); reCats();
+    reRate(); reImgs(); reCats();
+    if (!(document.activeElement && document.activeElement.classList.contains("llab"))) reLinks();
     [["eName", it.name], ["ePrice", it.price], ["eNote", it.note]].forEach(([k, v]) => { const el = $("#" + k, sh); if (el && document.activeElement !== el) el.value = v; });
     const ex = $("#eExp", sh); if (ex) ex.value = it.exp ? toInputDate(it.exp) : "";
   } };
@@ -516,7 +535,10 @@ function editSheet(id) {
     if (!inp.value.trim()) return;
     if (!u) return toast("Das sieht nicht wie ein Link aus");
     if (it.links.includes(u)) return toast("Link ist schon drin");
-    it.links.push(u); inp.value = ""; persist(it); reLinks();
+    it.links.push(u); inp.value = "";
+    const lab = $("#eLinkLab", sh); if (lab && lab.value.trim()) setLabel(it, u, lab.value);
+    if (lab) lab.value = "";
+    persist(it); reLinks();
   }
 
   sh.addEventListener("input", e => {
@@ -524,6 +546,7 @@ function editSheet(id) {
     if (t.id === "eName") { it.name = t.value; later(); }
     else if (t.id === "ePrice") { it.price = t.value; later(); }
     else if (t.id === "eNote") { it.note = t.value; later(); }
+    else if (t.classList.contains("llab")) { t.value = t.value.replace(/\n/g, " "); autoGrow(t); setLabel(it, it.links[+t.dataset.i], t.value); later(); }
   });
   sh.addEventListener("change", e => {
     const t = e.target;
@@ -540,7 +563,7 @@ function editSheet(id) {
       it.exp = t.value ? fromInputDate(t.value) : null; persist(it); $("#eArch", sh).innerHTML = archBanner(it);
     } else if (t.id === "eFile") { addFiles(t.files).then(() => { t.value = ""; }); }
   });
-  sh.addEventListener("keydown", e => { if (e.key !== "Enter") return; if (e.target.id === "eLinkIn") { e.preventDefault(); addLink(); } else if (e.target.id === "eCatIn") { e.preventDefault(); addCatFromInput(); } });
+  sh.addEventListener("keydown", e => { if (e.key !== "Enter") return; if (e.target.id === "eLinkIn") { e.preventDefault(); addLink(); } else if (e.target.id === "eCatIn") { e.preventDefault(); addCatFromInput(); } else if (e.target.id === "eLinkLab") { e.preventDefault(); addLink(); } else if (e.target.classList.contains("llab")) { e.preventDefault(); e.target.blur(); } });
   sh.addEventListener("paste", e => {
     const files = [...(e.clipboardData ? e.clipboardData.files : [])];
     if (files.some(f => /^image\//.test(f.type))) { e.preventDefault(); addFiles(files); return; }
@@ -557,7 +580,7 @@ function editSheet(id) {
       case "lnkAdd": addLink(); break;
       case "lnkOpen": window.open(it.links[i], "_blank", "noopener"); break;
       case "lnkFav": { const u = it.links[i], k = it.favLinks.indexOf(u); if (k >= 0) it.favLinks.splice(k, 1); else it.favLinks.push(u); persist(it); reLinks(); buzz(); break; }
-      case "lnkDel": it.favLinks = it.favLinks.filter(x => x !== it.links[i]); it.links.splice(i, 1); persist(it); reLinks(); break;
+      case "lnkDel": it.links.splice(i, 1); fixFavs(it); persist(it); reLinks(); break;
       case "imgAdd": $("#eFile", sh).click(); break;
       case "imgDel": it.images.splice(i, 1); persist(it); reImgs(); break;
       case "imgView": imageViewer(it.images[i].f); break;
@@ -568,6 +591,7 @@ function editSheet(id) {
       case "eDelete": if (confirm("„" + (it.name || "Wunsch") + "“ wirklich löschen?")) { deleteItem(it); closeSheet(); } break;
     }
   });
+  setTimeout(() => $$(".llab", sh).forEach(autoGrow), 60);
   if (!it.name) setTimeout(() => $("#eName", sh).focus(), 300);
 }
 
@@ -581,7 +605,7 @@ function addItem(name, cat) {
   name = name.trim();
   if (!name) return null;
   const now = Date.now();
-  const it = { id: uid(), name, note: "", price: "", links: [], favLinks: [], images: [], created: now, wish: 5, ratings: [{ t: now, v: 5 }], bought: null, cat: cat || "", exp: null };
+  const it = { id: uid(), name, note: "", price: "", links: [], favLinks: [], linkNames: [], images: [], created: now, wish: 5, ratings: [{ t: now, v: 5 }], bought: null, cat: cat || "", exp: null };
   items.push(it);
   persist(it);
   return it;
