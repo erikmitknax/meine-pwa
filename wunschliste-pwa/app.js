@@ -101,19 +101,23 @@ function normItem(r) {
   const ratings = (Array.isArray(r.ratings) ? r.ratings : []).map(x => ({ t: Number(x && x.t) || created, v: clamp(x && x.v) })).sort((a, b) => a.t - b.t);
   const wish = clamp(r.wish != null ? r.wish : (ratings.length ? ratings[ratings.length - 1].v : 5));
   if (!ratings.length) ratings.push({ t: created, v: wish });
-  return {
+  const out = {
     id: String(r.id || uid()),
     name: String(r.name || "").slice(0, 300),
     note: String(r.note || "").slice(0, 3000),
     price: String(r.price || "").slice(0, 30),
-    links: (Array.isArray(r.links) ? r.links : []).map(normUrl).filter(Boolean),
+    links: [...new Set((Array.isArray(r.links) ? r.links : []).map(normUrl).filter(Boolean))],
+    favLinks: [...new Set((Array.isArray(r.favLinks) ? r.favLinks : []).map(normUrl).filter(Boolean))],
     images: (Array.isArray(r.images) ? r.images : []).filter(i => i && /^data:image\//.test(i.f || "")).map(i => ({ id: String(i.id || uid()), f: i.f, t: /^data:image\//.test(i.t || "") ? i.t : i.f })),
     created, wish, ratings,
     bought: r.bought ? Number(r.bought) || Date.now() : null,
     cat: String(r.cat || "").slice(0, 40),
     exp: Number(r.exp) || null
   };
+  fixFavs(out);
+  return out;
 }
+function fixFavs(it) { it.favLinks = (it.favLinks || []).filter(u => it.links.includes(u)); }
 const catById = id => (id && settings.cats.find(c => c.id === id)) || null;
 const fromInputDate = v => { const [y, m, d] = String(v).split("-").map(Number); return new Date(y, m - 1, d, 12).getTime(); };
 const reached = t => sod(t) <= sod(Date.now());
@@ -167,6 +171,7 @@ const IC = {
   chev: p => svg('<path d="M6 9l6 6 6-6"/>', p),
   clock: p => svg('<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>', p),
   bag: p => svg('<path d="M6 8h12l1 12H5L6 8z"/><path d="M9 8V6.5a3 3 0 0 1 6 0V8"/>', p),
+  star: (p, on) => svg('<path d="M12 3.5l2.6 5.3 5.9.9-4.250 4.100 1 5.800L12 16.900 6.750 19.600l1-5.800L3.500 9.700l5.900-.9z"' + (on ? ' fill="currentColor"' : '') + '/>', p),
   ext: p => svg('<path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/>', p)
 };
 
@@ -269,7 +274,7 @@ function card(it) {
     c ? `<span class="cat" style="--c:${c.color}"><i></i>${esc(c.name)}</span>` : "",
     ar ? `<span class="arch">Archiviert seit ${fmtShort(ar.t)}</span>` : (it.exp ? `<span>Läuft ab ${fmtShort(it.exp)}</span>` : ""),
     `<span>${it.bought ? "Gekauft " + ago(it.bought) : "Seit " + fmtShort(it.created) + " · " + ago(it.created)}</span>`,
-    it.links.length ? `<span>${IC.link(13)}${it.links.length}</span>` : "",
+    it.links.length ? `<span>${IC.link(13)}${it.links.length}${it.favLinks.length ? ` · <b class="favn">★ ${it.favLinks.length}</b>` : ""}</span>` : "",
     it.images.length ? `<span>${IC.image(13)}${it.images.length}</span>` : "",
     it.price ? `<span>${esc(it.price)}</span>` : "",
     it.bought ? "" : trendOf(it),
@@ -430,9 +435,10 @@ function host(u) { try { const x = new URL(u); return x.hostname.replace(/^www\.
 function linkPath(u) { try { const x = new URL(u); const p = (x.pathname + x.search).replace(/\/$/, ""); return p.length > 1 ? p : ""; } catch (e) { return ""; } }
 
 function linksHtml(it) {
-  return it.links.map((u, i) => `<div class="lnk"><a href="${esc(u)}" target="_blank" rel="noopener noreferrer">${esc(host(u))}<small>${esc(linkPath(u) || u)}</small></a>
+  return it.links.map((u, i) => { const fav = it.favLinks.includes(u); return `<div class="lnk ${fav ? "fav" : ""}"><a href="${esc(u)}" target="_blank" rel="noopener noreferrer">${esc(host(u))}<small>${esc(linkPath(u) || u)}</small></a>
+    <button type="button" class="mini star ${fav ? "on" : ""}" data-act="lnkFav" data-i="${i}" aria-pressed="${fav}" aria-label="${fav ? "Favorit entfernen" : "Als Favorit markieren"}">${IC.star(18, fav)}</button>
     <button type="button" class="mini" data-act="lnkOpen" data-i="${i}" aria-label="Link öffnen">${IC.ext(17)}</button>
-    <button type="button" class="mini" data-act="lnkDel" data-i="${i}" aria-label="Link entfernen">${IC.trash(17)}</button></div>`).join("");
+    <button type="button" class="mini" data-act="lnkDel" data-i="${i}" aria-label="Link entfernen">${IC.trash(17)}</button></div>`; }).join("");
 }
 function imagesHtml(it) {
   return `<div class="imgs">${it.images.map((im, i) => `<div class="im"><img src="${im.t}" alt="Bild ${i + 1}" data-act="imgView" data-i="${i}"><button type="button" class="rm" data-act="imgDel" data-i="${i}" aria-label="Bild entfernen">${IC.x(14)}</button></div>`).join("")}
@@ -542,7 +548,8 @@ function editSheet(id) {
     switch (b.dataset.act) {
       case "lnkAdd": addLink(); break;
       case "lnkOpen": window.open(it.links[i], "_blank", "noopener"); break;
-      case "lnkDel": it.links.splice(i, 1); persist(it); reLinks(); break;
+      case "lnkFav": { const u = it.links[i], k = it.favLinks.indexOf(u); if (k >= 0) it.favLinks.splice(k, 1); else it.favLinks.push(u); persist(it); reLinks(); buzz(); break; }
+      case "lnkDel": it.favLinks = it.favLinks.filter(x => x !== it.links[i]); it.links.splice(i, 1); persist(it); reLinks(); break;
       case "imgAdd": $("#eFile", sh).click(); break;
       case "imgDel": it.images.splice(i, 1); persist(it); reImgs(); break;
       case "imgView": imageViewer(it.images[i].f); break;
@@ -566,7 +573,7 @@ function addItem(name, cat) {
   name = name.trim();
   if (!name) return null;
   const now = Date.now();
-  const it = { id: uid(), name, note: "", price: "", links: [], images: [], created: now, wish: 5, ratings: [{ t: now, v: 5 }], bought: null, cat: cat || "", exp: null };
+  const it = { id: uid(), name, note: "", price: "", links: [], favLinks: [], images: [], created: now, wish: 5, ratings: [{ t: now, v: 5 }], bought: null, cat: cat || "", exp: null };
   items.push(it);
   persist(it);
   return it;
