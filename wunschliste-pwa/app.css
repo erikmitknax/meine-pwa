@@ -213,3 +213,5 @@ input[type=color]::-moz-color-swatch{border:3px solid var(--card);border-radius:
 .lnk.fav a small{color:color-mix(in srgb,var(--ok) 70%,var(--muted))}
 .mini.star.on{color:var(--ok);background:color-mix(in srgb,var(--ok) 18%,var(--card))}
 .meta .favn{color:var(--ok);font-weight:700}
+
+.syerr{background:none;border:0;color:var(--danger);font:inherit;font-weight:650;padding:0;cursor:pointer}

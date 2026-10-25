@@ -315,7 +315,7 @@ function viewMain() {
   }
   return `
   <div class="top">
-    <div><h1>Wunschliste</h1><div class="muted small sub">${open.length} offen · ${bought} gekauft${archN ? " · " + archN + " archiviert" : ""}</div></div>
+    <div><h1>Wunschliste</h1><div class="muted small sub">${open.length} offen · ${bought} gekauft${archN ? " · " + archN + " archiviert" : ""}${typeof SY !== "undefined" && SY.user && SY.err ? ` · <button type="button" class="syerr" data-act="settings">⚠ Sync-Problem</button>` : ""}</div></div>
     <div class="row">
       <button type="button" class="ghost" data-act="info" aria-label="Was bedeuten die Zahlen 1 bis 10?">${IC.info(21)}</button>
       <button type="button" class="ghost" data-act="settings" aria-label="Einstellungen">${IC.gear(21)}</button>
@@ -344,8 +344,11 @@ function render() {
   const v = $("#view");
   const top = v.scrollTop;
   v.classList.toggle("dense", !!settings.dense);
+  const ai = $("#addIn"), typed = ai ? ai.value : "", focused = !!ai && document.activeElement === ai;
   v.innerHTML = viewMain();
   v.scrollTop = top;
+  if (typed) $("#addIn").value = typed; // Eingabe nicht verlieren, wenn im Hintergrund etwas abgeglichen wird
+  if (focused) $("#addIn").focus();
 }
 
 /* ---------- Wunsch-Bewertung ---------- */
@@ -479,7 +482,7 @@ function editSheet(id) {
     <div class="row" style="gap:10px;margin-top:4px">
       <button type="button" class="btn grow" data-act="eBought">${IC.check(18)}${it.bought ? "Wieder offen" : "Als gekauft"}</button>
       <button type="button" class="btn dng" data-act="eDelete" aria-label="Löschen">${IC.trash(18)}</button>
-    </div>`, { cls: "tall", onClose: () => { render(); } });
+    </div>`, { cls: "tall", onClose: () => { window.wlEditRefresh = null; render(); } });
 
   const sh = rec.sheet;
   const reRate = () => { $("#eRate", sh).innerHTML = ratingHtml(it); };
@@ -491,6 +494,11 @@ function editSheet(id) {
     if (!c) return;
     it.cat = c.id; inp.value = ""; persist(it); reCats();
   }
+  window.wlEditRefresh = { id: it.id, fn: () => {
+    reRate(); reLinks(); reImgs(); reCats();
+    [["eName", it.name], ["ePrice", it.price], ["eNote", it.note]].forEach(([k, v]) => { const el = $("#" + k, sh); if (el && document.activeElement !== el) el.value = v; });
+    const ex = $("#eExp", sh); if (ex) ex.value = it.exp ? toInputDate(it.exp) : "";
+  } };
   let saveT = 0;
   const later = () => { clearTimeout(saveT); saveT = setTimeout(() => persist(it), 250); };
 

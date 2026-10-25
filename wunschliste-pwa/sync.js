@@ -55,7 +55,7 @@ function syBuildImages(id) {
 function syRemote(type, id, doc, dirty) {
   if (!doc || typeof doc.u !== "number") return false;
   const k = type + "/" + id, m = SY.meta[k];
-  if (m && m.u >= doc.u) return false;
+  if (m && m.u === doc.u) return false; // gleiche Schreibung = schon bekannt (eigene Echos); bewusst kein '>=': Geräteuhren können abweichen
   if (type === "items") {
     const i = items.findIndex(x => x.id === id);
     if (m && !m.del && i >= 0 && syH(syForm(items[i])) !== m.h) return false; // eigene, noch nicht hochgeladene Änderung hat Vorrang
@@ -66,10 +66,10 @@ function syRemote(type, id, doc, dirty) {
       return true;
     }
     SY.want[id] = Array.isArray(doc.d.images) ? doc.d.images.filter(x => typeof x === "string") : [];
-    const n = normItem({ ...doc.d, id, images: [] });
+    let n = normItem({ ...doc.d, id, images: [] });
     if (!n) return false;
     n.images = syBuildImages(id);
-    if (i >= 0) items[i] = n; else items.push(n);
+    if (i >= 0) { const o = items[i]; Object.keys(o).forEach(k => { delete o[k]; }); Object.assign(o, n); n = o; } else items.push(n);
     dirty.put.add(id);
     SY.meta[k] = { u: doc.u, h: syH(syForm(n)) };
     return true;
@@ -173,33 +173,74 @@ async function syChanged(dirty) {
   if (list.length) await persistMany(list);
   for (const id of dirty.rm) await removeFromDb(id);
   syRender();
+  if (window.wlEditRefresh && dirty.put.has(window.wlEditRefresh.id)) window.wlEditRefresh.fn();
 }
 function syRender() {
   const a = document.activeElement;
   if (a && /INPUT|TEXTAREA|SELECT/.test(a.tagName) && $("#sheetRoot") && $("#sheetRoot").contains(a)) { clearTimeout(SY.rt); SY.rt = setTimeout(syRender, 1500); return; }
   render();
 }
+/* Alte, zu große Bilder (Firestore erlaubt ~1 MB pro Dokument) vor dem Hochladen verkleinern */
+const SY_IMG_MAX = 700000;
+async function syShrinkBig() {
+  if (typeof shrink !== "function") return;
+  for (const it of items) for (const im of it.images) {
+    if (im.f.length <= SY_IMG_MAX) continue;
+    try {
+      const el = new Image();
+      await Promise.race([new Promise((res, rej) => { el.onload = res; el.onerror = () => rej(new Error("Bild nicht lesbar")); el.src = im.f; }), new Promise((_, rej) => setTimeout(() => rej(new Error("Zeitüberschreitung")), 6000))]);
+      let max = Math.min(1280, Math.max(el.naturalWidth, el.naturalHeight)), q = 0.8, f = shrink(el, max, q);
+      while (f.length > 600000 && q > 0.45) { q -= 0.1; max = Math.round(max * 0.85); f = shrink(el, max, q); }
+      if (f.length < im.f.length) { im.f = f; await persist(it); }
+    } catch (e) { /* bleibt groß und wird beim Hochladen übersprungen – blockiert aber nichts anderes */ }
+  }
+}
+const syTooBig = o => o.type === "images" && o.doc.d && ((o.doc.d.f || "").length + (o.doc.d.t || "").length) > 950000;
 async function syPush() {
   if (!SY.ready) return;
   if (SY.pushing) { SY.again = true; return; }
-  const ops = syDiff();
-  if (!ops.length) return;
   SY.pushing = true;
-  try {
-    const { fs, db } = SY.fb;
+  const fails = [];
+  const { fs, db } = SY.fb;
+  const ref = o => fs.doc(db, "users", SY.uid, SY_COLS[o.type], o.id);
+  /* schreibt Operationen in Paketen; scheitert ein Paket, wird einzeln geschrieben, damit ein Problem-Dokument nichts anderes blockiert */
+  async function run(ops) {
     for (let i = 0; i < ops.length;) {
-      const batch = fs.writeBatch(db), part = [];
-      let imgs = 0;
+      const part = []; let imgs = 0;
       while (i < ops.length && part.length < 400 && imgs < 4) { const o = ops[i++]; part.push(o); imgs += o.size; }
-      part.forEach(o => batch.set(fs.doc(db, "users", SY.uid, SY_COLS[o.type], o.id), o.doc));
-      await batch.commit();
-      part.forEach(o => { SY.meta[o.k] = o.m; });
+      let done = false;
+      if (!part.some(syTooBig)) {
+        try { const batch = fs.writeBatch(db); part.forEach(o => batch.set(ref(o), o.doc)); await batch.commit(); part.forEach(o => { SY.meta[o.k] = o.m; }); done = true; } catch (e) { /* unten einzeln versuchen */ }
+      }
+      if (!done) {
+        for (const o of part) {
+          try {
+            if (syTooBig(o)) throw Object.assign(new Error("Ein Bild ist zu groß für das Konto"), { code: "too-big" });
+            await fs.setDoc(ref(o), o.doc); SY.meta[o.k] = o.m;
+          } catch (e) { fails.push(e); }
+        }
+      }
     }
-    SY.last = Date.now(); SY.err = ""; sySave();
-  } catch (e) { SY.err = "Hochladen fehlgeschlagen: " + (e.message || e); }
+    sySave();
+  }
+  try {
+    // 1) Wünsche, Links, Einstellungen und Löschungen zuerst, dann Bilder – Text darf nie auf Bilder warten
+    let ops = syDiff().sort((a, b) => (a.type === "images") - (b.type === "images"));
+    await run(ops.filter(o => !syTooBig(o)));
+    // 2) zu große (alte) Bilder verkleinern und danach hochladen
+    if (ops.some(syTooBig)) {
+      await syShrinkBig();
+      await run(syDiff().filter(o => o.type === "images"));
+    }
+    if (fails.length) SY.err = fails.length + " Eintrag" + (fails.length === 1 ? "" : "e") + " konnte" + (fails.length === 1 ? "" : "n") + " nicht hochgeladen werden: " + (fails[0].message || fails[0]);
+    else { SY.err = ""; SY.last = Date.now(); sySave(); }
+  } catch (e) { SY.err = "Hochladen fehlgeschlagen: " + (e.message || e); fails.push(e); }
   SY.pushing = false;
+  clearTimeout(SY.retryT);
+  if (fails.length) SY.retryT = setTimeout(syPush, 60000); // nicht aufgeben: später nochmal versuchen
   if (SY.again) { SY.again = false; syOnSave(); }
   syPanelRefresh();
+  if (typeof render === "function") render(); // Warnhinweis auf der Hauptseite aktualisieren
 }
 /* wird von app.js nach jeder Speicherung aufgerufen */
 function syOnSave() {
@@ -233,7 +274,7 @@ function syPanel() {
       <button type="button" class="linkbtn" data-act="syForgot">Passwort vergessen?</button>${st}${err}</div>`;
   }
   const ago = SY.last ? new Date(SY.last).toLocaleString("de-DE", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }) : "";
-  const label = SY.state === "live" ? `<div class="live"><i></i>Gesichert &amp; live</div>` : SY.state === "sync" ? `<div class="muted"><span class="spin"></span>Gleiche ab …</div>` : `<div class="warn small">Nicht verbunden</div>`;
+  const label = SY.state === "live" && SY.err ? `<div class="warn" style="font-weight:650">⚠ Nicht vollständig gesichert</div>` : SY.state === "live" ? `<div class="live"><i></i>Gesichert &amp; live</div>` : SY.state === "sync" ? `<div class="muted"><span class="spin"></span>Gleiche ab …</div>` : `<div class="warn small">Nicht verbunden</div>`;
   return `<div class="panel"><h3>Konto &amp; Sicherung</h3>${label}
     <div class="muted small" style="margin-top:6px">Angemeldet als ${esc(SY.user.email || "")}${ago ? " · zuletzt abgeglichen " + ago : ""}</div>
     <div class="muted small" style="margin-top:6px">Änderungen erscheinen in Sekunden auf allen angemeldeten Geräten. Ohne Netz arbeitet die App weiter und gleicht später ab.</div>${err}
