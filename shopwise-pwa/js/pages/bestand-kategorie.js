@@ -220,7 +220,7 @@ export function render(el, categoryId) {
     search.value = item.search || '';
     const exclude = h('input');
     exclude.type = 'text';
-    exclude.maxLength = 120;
+    exclude.maxLength = 500;
     exclude.autocomplete = 'off';
     exclude.value = item.exclude || '';
     const updateHints = () => {

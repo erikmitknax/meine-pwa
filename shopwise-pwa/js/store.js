@@ -309,7 +309,7 @@ function normDoc(type, d) {
       unit: UNITS.includes(d.unit) ? d.unit : 'Stk',
       amount: Math.max(0, num(d.amount)), max: num(d.max) > 0 ? num(d.max) : 1, price,
       warn: d.warn === null || d.warn === undefined || d.warn === '' ? null : Math.max(0, num(d.warn)),
-      search: text(d.search, 120), exclude: text(d.exclude, 120),
+      search: text(d.search, 120), exclude: text(d.exclude, 500),
     };
   }
   if (type === 'hist') {
@@ -320,7 +320,7 @@ function normDoc(type, d) {
     const name = text(d.name, 60);
     if (!name) return null;
     const price = d.price === null || d.price === undefined || d.price === '' ? null : Math.max(0, num(d.price));
-    return { name, unit: UNITS.includes(d.unit) ? d.unit : 'kg', price, search: text(d.search, 120), exclude: text(d.exclude, 120) };
+    return { name, unit: UNITS.includes(d.unit) ? d.unit : 'kg', price, search: text(d.search, 120), exclude: text(d.exclude, 500) };
   }
   return null;
 }

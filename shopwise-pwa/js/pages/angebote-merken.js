@@ -39,7 +39,7 @@ export function openWatchDialog(existing, onDone) {
   const search = h('input');
   search.type = 'text'; search.maxLength = 120; search.autocomplete = 'off'; search.value = item.search || '';
   const exclude = h('input');
-  exclude.type = 'text'; exclude.maxLength = 120; exclude.autocomplete = 'off'; exclude.value = item.exclude || '';
+  exclude.type = 'text'; exclude.maxLength = 500; exclude.autocomplete = 'off'; exclude.value = item.exclude || '';
   const hints = () => {
     const d = defaultsFor(name.value);
     search.placeholder = d.search || 'z. B. Räucherlachs';

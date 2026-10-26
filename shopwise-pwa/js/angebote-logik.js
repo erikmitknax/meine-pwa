@@ -10,7 +10,7 @@ export const norm = (s) => String(s ?? '').toLowerCase()
 // Eigene Eingaben im Bestand ersetzen diese Standardwerte.
 export const DEFAULTS = {
   eier: { syn: ['freilandeier', 'bodenhaltung'], ex: ['waffel', 'nudel', 'likor', 'schokolade', 'salat', 'kuchen', 'pasta', 'ostereier', 'mayonnaise', 'creme', 'brot'] },
-  milch: { syn: ['vollmilch', 'h milch', 'frischmilch'], ex: ['muller', 'milka', 'milchmause', 'adventskalender', 'alpenmilch', 'kinder', 'drink', 'shake', 'schokolade', 'milchreis', 'kokos', 'milchshake', 'shampoo', 'lotion', 'dusch', 'pulver', 'bonbon', 'brot', 'riegel', 'creme', 'schnitte', 'buttermilch', 'kaffeesahne', 'hafer', 'mandel', 'soja'] },
+  milch: { syn: ['vollmilch', 'h milch', 'frischmilch'], ex: ['muller', 'milka', 'milchmause', 'milch mause', 'milchschnitte', 'adventskalender', 'alpenmilch', 'kinder', 'drink', 'shake', 'schokolade', 'milchreis', 'kokos', 'milchshake', 'shampoo', 'lotion', 'dusch', 'pulver', 'bonbon', 'brot', 'riegel', 'creme', 'schnitte', 'buttermilch', 'kaffeesahne', 'hafer', 'mandel', 'soja'] },
   butter: { syn: [], ex: ['butterkeks', 'buttermilch', 'butterschmalz', 'erdnuss', 'brezel', 'croissant', 'kakaobutter', 'shea', 'gebaeck', 'kekse', 'laugen', 'croguette'] },
   nudeln: { syn: ['pasta', 'spaghetti', 'penne', 'fusilli', 'tagliatelle', 'spirelli', 'makkaroni'], ex: ['nudelsalat', 'nudelsuppe', 'instant', 'fertig', 'pfanne', 'sauce', 'soße'] },
   kase: { syn: ['gouda', 'edamer', 'emmentaler', 'mozzarella', 'camembert', 'schnittkase', 'reibekase', 'landkase', 'weichkase', 'hartkase'], ex: ['pizza', 'frischkase', 'kasekuchen', 'kaseschnecke', 'cracker', 'snack', 'chips', 'piccolinis', 'laugen', 'tortellini', 'ravioli'] },
@@ -53,6 +53,25 @@ export const defaultsFor = (name) => {
   const d = DEFAULTS[n] || DEFAULTS[n.replace(/e$/, '')];
   return d ? { search: d.syn.join(', '), exclude: d.ex.join(', ') } : { search: '', exclude: '' };
 };
+
+// Aktuell wirksame Ausschlusswörter eines Lebensmittels (eigene Liste, sonst Standardwerte) – als Text-Liste.
+export function effectiveExclude(item) {
+  const own = String(item.exclude ?? '').split(/[,;\n]/).map((x) => x.trim()).filter(Boolean);
+  if (own.length) return own;
+  const d = defaultsFor(item.name).exclude;
+  return d ? d.split(', ') : [];
+}
+
+// Vorschlag für „Passt nicht“: das Wort im Titel, das den Treffer ausgelöst hat (z. B. „Milch-Mäuse“).
+export function suggestExclusion(offer, item) {
+  const { terms } = termsFor(item);
+  const words = String(offer.title).split(/\s+/);
+  const hit = words.find((w) => {
+    const n = ` ${norm(w)} `;
+    return terms.some((t) => n.includes(` ${t}`) || (t.length >= 5 && n.trim().split(' ').some((x) => x.endsWith(t))));
+  });
+  return (hit || offer.title).replace(/[^\p{L}\p{N}\- ]/gu, '').trim();
+}
 
 export function matches(offer, { terms, exclude }) {
   const hay = ` ${norm(`${offer.title} ${offer.brand || ''}`)} `;

@@ -1,8 +1,8 @@
 // Tab "Angebote": zeigt Wochenangebote (Daten aus data/angebote.json) zu den Lebensmitteln im Bestand
 // und vergleicht den Preis pro Einheit mit dem üblichen Preis.
-import { loadStock, loadWatch, stockStatus } from '../store.js';
+import { loadStock, loadWatch, stockStatus, saveStockItem, saveWatchItem } from '../store.js';
 import { openWatchDialog } from './angebote-merken.js';
-import { offersFor } from '../angebote-logik.js';
+import { offersFor, effectiveExclude, suggestExclusion } from '../angebote-logik.js';
 import { h } from '../dom.js';
 import { uiIcon } from '../icons.js';
 
@@ -48,6 +48,46 @@ export function render(el) {
   });
 }
 
+// „Passt nicht“: Wort wählen, das bei diesem Lebensmittel künftig nicht mehr als Treffer gilt.
+function openHideDialog(g, offer, onDone) {
+  const dialog = h('dialog', 'dialog');
+  const form = h('form');
+  form.method = 'dialog';
+  form.appendChild(h('h2', '', 'Passt nicht'));
+  form.appendChild(h('p', 'dialog-hint', `„${offer.title}“ nicht mehr als Treffer für „${g.item.name}“ anzeigen.`));
+  const word = h('input');
+  word.type = 'text'; word.required = true; word.maxLength = 40; word.autocomplete = 'off';
+  word.value = suggestExclusion(offer, g.item);
+  const label = h('label', 'field');
+  label.appendChild(h('span', 'field-label', 'Ausblenden, wenn der Titel enthält'));
+  label.appendChild(word);
+  form.appendChild(label);
+  form.appendChild(h('p', 'dialog-hint', 'Das Wort lässt sich später im Lebensmittel unter „nicht anzeigen bei“ wieder entfernen.'));
+  const actions = h('div', 'dialog-actions');
+  const cancel = h('button', 'btn btn-ghost', 'Abbrechen');
+  cancel.type = 'button';
+  cancel.addEventListener('click', () => dialog.close());
+  const ok = h('button', 'btn btn-gold', 'Ausblenden');
+  ok.type = 'submit';
+  actions.append(cancel, ok);
+  form.appendChild(actions);
+  form.addEventListener('submit', () => {
+    const w = word.value.trim();
+    if (!w) return;
+    const list = effectiveExclude(g.item);                 // bisherige (oder Standard-)Wörter bleiben erhalten
+    if (!list.some((x) => x.toLowerCase() === w.toLowerCase())) list.push(w);
+    const updated = { ...g.item, exclude: list.join(', ').slice(0, 500) };
+    if (g.watch) saveWatchItem(updated); else saveStockItem(updated);
+    onDone();
+  });
+  dialog.appendChild(form);
+  dialog.addEventListener('close', () => dialog.remove());
+  document.body.appendChild(dialog);
+  dialog.showModal();
+  word.focus();
+  word.select();
+}
+
 function draw(body, data, offline) {
   const offers = data && Array.isArray(data.offers) ? data.offers : [];
   const open = new Set(read(OPEN_KEY, []));
@@ -90,7 +130,7 @@ function draw(body, data, offline) {
     }
   }
 
-  function offerRow(o) {
+  function offerRow(o, g) {
     const r = h('div', 'offer-row');
     const left = h('div', 'offer-info');
     const title = h('div', 'offer-title', o.title);
@@ -106,6 +146,12 @@ function draw(body, data, offline) {
       right.appendChild(h('div', `offer-save ${good ? 'good' : 'bad'}`, good ? `${pct(o.saving)} günstiger als üblich` : `${pct(o.saving)} teurer als üblich`));
     }
     r.appendChild(right);
+    const hide = h('button', 'offer-hide', '✕');
+    hide.type = 'button';
+    hide.setAttribute('aria-label', `„${o.title}“ passt nicht – ausblenden`);
+    hide.title = 'Passt nicht';
+    hide.addEventListener('click', () => openHideDialog(g, o, rebuild));
+    r.appendChild(hide);
     return r;
   }
 
@@ -147,7 +193,7 @@ function draw(body, data, offline) {
     el.appendChild(head);
     if (isOpen) {
       const bodyEl = h('div', 'list-body');
-      if (g.offers.length) g.offers.forEach((o) => bodyEl.appendChild(offerRow(o)));
+      if (g.offers.length) g.offers.forEach((o) => bodyEl.appendChild(offerRow(o, g)));
       else bodyEl.appendChild(h('p', 'hint', offers.length
         ? 'Diese Woche nichts gefunden. Neue Begriffe werden beim nächsten Abruf mitgesucht.'
         : 'Noch keine Angebotsdaten.'));
