@@ -1400,7 +1400,8 @@ function dayChart() {
   let off = 0;
   const seg = (v, col) => { const len = kt > 0 ? v / kt * C : 0; const el = `<circle cx="66" cy="66" r="${R}" fill="none" stroke="${col}" stroke-width="16" stroke-dasharray="${Math.max(len - 2, 0)} ${C}" stroke-dashoffset="${-off}"/>`; off += len; return el; };
   const donut = `<svg width="132" height="132" viewBox="0 0 132 132" style="transform:rotate(-90deg)"><circle cx="66" cy="66" r="${R}" fill="none" stroke="var(--card2)" stroke-width="16"/>${kt > 0 ? seg(kP, "var(--p)") + seg(kC, "var(--c)") + seg(kF, "var(--f)") : ""}</svg>`;
-  const leg = (name, col, grams, goal, kc) => `<div class="li"><i style="background:${col}"></i><div><b>${r0(grams)} g</b><div class="muted tiny">${name}</div></div><span>${pc(kc)} %<br>Ziel ${r0(goal)} g</span></div>`;
+  const gp = (v, goal) => goal > 0 ? Math.round(v / goal * 100) : 0;
+  const leg = (name, col, grams, goal, kc) => `<div class="li"><i style="background:${col}"></i><div><b>${r0(grams)} g</b><div class="muted tiny">${name} · ${pc(kc)} %</div></div><span><b style="color:var(--text)">${gp(grams, goal)} %</b><br>von ${r0(goal)} g</span></div>`;
   const meals = MEALS.map(m => ({ m, es: list.filter(e => e.meal === m.id) })).filter(x => x.es.length).map(x => ({ ...x, s: sum(x.es) }));
   const maxK = Math.max(...meals.map(x => x.s.kcal), 1);
   const rows = meals.map(({ m, s }) => {
@@ -1409,11 +1410,11 @@ function dayChart() {
       <div class="stack"><div style="display:flex;width:${scale}%;height:100%"><i class="p" style="width:${s.p * 4 / mk * 100}%"></i><i class="c" style="width:${s.c * 4 / mk * 100}%"></i><i class="f" style="width:${s.f * 9 / mk * 100}%"></i></div></div>
       <div class="mg"><span class="cp">Eiweiß ${r0(s.p)} g</span><span class="cc">Kohlenh. ${r0(s.c)} g</span><span class="cf">Fett ${r0(s.f)} g</span></div></div>`;
   }).join("");
-  sheet(`<h3>${niceDate(ui.date)}</h3><div class="muted small" style="margin:-6px 0 14px">${fmt(t.kcal)} von ${fmt(g.kcal)} kcal</div>
+  sheet(`<h3>${niceDate(ui.date)}</h3><div class="row between" style="margin:-6px 0 14px;gap:8px"><span class="muted small">${fmt(t.kcal)} von ${fmt(g.kcal)} kcal</span><span class="pill ${g.kcal > 0 && t.kcal > g.kcal * 1.1 ? "bad" : g.kcal > 0 && t.kcal >= g.kcal * 0.9 ? "good" : ""}" style="margin:0">${gp(t.kcal, g.kcal)} % vom Ziel</span></div>
     ${list.length ? `<div class="donutwrap"><div class="donut">${donut}<div class="mid"><b>${fmt(t.kcal)}</b><span>kcal</span></div></div>
-      <div class="dleg">${leg("Eiweiß", "var(--p)", t.p, g.p, kP)}${leg("Kohlenhydrate", "var(--c)", t.c, g.c, kC)}${leg("Fett", "var(--f)", t.f, g.f, kF)}</div></div>
+      <div class="dleg">${leg("Eiweiß", "var(--p)", t.p, g.p, kP)}${leg("Kohlenh.", "var(--c)", t.c, g.c, kC)}${leg("Fett", "var(--f)", t.f, g.f, kF)}</div></div>
       <h2 style="margin:6px 2px 4px">Nach Mahlzeit</h2><div class="list" style="padding:0 16px">${rows}</div>
-      <div class="muted tiny" style="margin:10px 4px 0">Die Balken zeigen, woher die Kalorien jeder Mahlzeit kommen. Tippe eine Mahlzeit an für alle Nährstoffe und Einträge. Prozentwerte beziehen sich auf die Kalorien aus Eiweiß, Kohlenhydraten und Fett.</div>
+      <div class="muted tiny" style="margin:10px 4px 0">Die Balken zeigen, woher die Kalorien jeder Mahlzeit kommen. Tippe eine Mahlzeit an für alle Nährstoffe und Einträge. Neben dem Namen steht der Anteil an den Kalorien (Eiweiß, Kohlenhydrate, Fett), rechts wie viel Prozent deines Tagesziels in Gramm schon erreicht sind.</div>
       <h2 style="margin:18px 2px 6px">Verlauf über den Tag</h2><div id="tcBox"></div>
       <button class="btn sec block" style="margin-top:14px" id="dcNutri">Alle Nährstoffe des Tages</button>`
       : `<div class="muted center" style="padding:30px 10px">Heute ist noch nichts eingetragen. Sobald du etwas hinzufügst, siehst du hier die Verteilung.</div>`}
