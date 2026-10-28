@@ -16,7 +16,7 @@ const NATIVE = !!(window.Capacitor && window.Capacitor.isNativePlatform && windo
 
 const DEFAULTS = () => ({
   ver: 3, foods: [], recipes: [], entries: [], weights: {}, coffee: {},
-  settings: { kcal: 2200, pP: 30, pC: 40, pF: 30, mode: "auto", accent: "#12935f", geminiKey: "", geminiModel: "gemini-2.5-flash-lite", goalWeight: "", weightGate: true },
+  settings: { kcal: 2200, pP: 30, pC: 40, pF: 30, mode: "auto", accent: "#12935f", geminiKey: "", geminiModel: "gemini-2.5-flash-lite", goalWeight: "", weightGate: true, coffeeSleep: "23:00", coffeeGap: 3, coffeeMl: 200, coffeeMg100: 40, coffeeRest: 30 },
 });
 let D = load();
 let ui = { setOpen: {}, tab: "today", date: iso(new Date()), weekOffset: 0, period: 7, wRange: 90, meal: "b", open: {} };
@@ -132,15 +132,74 @@ const eurFmt = v => v.toLocaleString("de-DE", { minimumFractionDigits: 2, maximu
 const hasPrice = f => f && f.price > 0 && f.priceG > 0;
 const priceOf = (f, grams) => hasPrice(f) ? f.price * grams / f.priceG : undefined;
 
-/* ---- Kaffee-Zähler: D.coffee[datum] = Liste der Uhrzeiten ("" = ohne Uhrzeit), pro Tasse ein Eintrag ---- */
-const CAFFEINE_MG = 80; // grobe Schätzung pro Tasse Filterkaffee
-const cupsOf = d => (D.coffee && Array.isArray(D.coffee[d])) ? D.coffee[d] : [];
-function coffeeAdd(d) { D.coffee = D.coffee || {}; (D.coffee[d] = cupsOf(d).slice()).push(d === iso(new Date()) ? nowT() : ""); save(); render(); }
-function coffeeRemove(d) { const l = cupsOf(d).slice(); l.pop(); if (l.length) D.coffee[d] = l; else if (D.coffee) delete D.coffee[d]; save(); render(); }
+/* ---- Kaffee-Zähler in ml: D.coffee[datum] = Liste { t: Uhrzeit oder "", ml } (ältere Tage: Liste von Uhrzeiten = je eine Portion) ---- */
+const CF_HALF = 5, CF_DAY_MAX = 400; // Halbwertszeit Koffein ca. 5 h, Tageslimit 400 mg (EFSA)
+function cfCfg() {
+  const s = D.settings, n = (v, def, lo, hi) => { const x = num(v); return x >= lo && x <= hi ? x : def; };
+  return { sleep: timeOk(s.coffeeSleep) ? s.coffeeSleep : "23:00", gap: n(s.coffeeGap, 3, 0.5, 12), ml: n(s.coffeeMl, 200, 20, 1000), mg100: n(s.coffeeMg100, 40, 5, 300), rest: n(s.coffeeRest, 30, 5, 150) };
+}
+const cupsOf = d => (D.coffee && Array.isArray(D.coffee[d]) ? D.coffee[d] : []).map(x => typeof x === "string" ? { t: x, ml: cfCfg().ml } : { t: x.t || "", ml: num(x.ml) || cfCfg().ml });
+const mlOf = d => cupsOf(d).reduce((a, c) => a + c.ml, 0);
+const mgOfMl = ml => ml * cfCfg().mg100 / 100;
+const fmtMl = ml => ml >= 1000 ? nde(ml / 1000, 2) + " l" : r0(ml) + " ml";
+function coffeeLine(d) {
+  const cu = cupsOf(d), tt = cu.filter(x => timeOk(x.t)); if (!cu.length) return "";
+  return `Kaffee: ${r0(mlOf(d))} ml${tt.length ? " (" + tt.map(x => x.t + " " + r0(x.ml) + " ml").join(", ") + ")" : ""}, ca. ${r0(mgOfMl(mlOf(d)))} mg Koffein (Schätzung)`;
+}
+const CF_STEP = 100; // ml pro Tipp auf + / −
+function coffeeAdd(d, ml) { D.coffee = D.coffee || {}; D.coffee[d] = cupsOf(d).concat([{ t: d === iso(new Date()) ? nowT() : "", ml: ml > 0 ? ml : CF_STEP }]); save(); render(); }
+/* − nimmt 100 ml von der letzten Portion weg (ist sie kleiner, verschwindet sie) */
+function coffeeRemove(d) {
+  const l = cupsOf(d), x = l[l.length - 1]; if (!x) return;
+  if (x.ml > CF_STEP + 0.5) x.ml -= CF_STEP; else l.pop();
+  if (l.length) D.coffee[d] = l; else if (D.coffee) delete D.coffee[d]; save(); render();
+}
+function coffeeCustom(d) {
+  const el = $("#cfCustom"), v = el ? num(el.value) : 0;
+  if (!(v > 0) || v > 2000) return toast("Bitte eine Menge zwischen 1 und 2000 ml eingeben");
+  coffeeAdd(d, Math.round(v * 10) / 10);
+}
+const hm = m => { m = ((Math.round(m) % 1440) + 1440) % 1440; return String(Math.floor(m / 60)).padStart(2, "0") + ":" + String(m % 60).padStart(2, "0"); };
+/* Plan für heute: wann der nächste Kaffee okay ist, bis wann der letzte und wie viel noch passt,
+   damit zur Schlafenszeit höchstens "Rest" mg Koffein im Körper sind (Abbau mit Halbwertszeit). */
+function coffeePlan(d) {
+  const c = cfCfg(), now = tMin(nowT()), cups = cupsOf(d), timed = cups.filter(x => timeOk(x.t)).map(x => ({ m: tMin(x.t), mg: mgOfMl(x.ml) })).sort((x, y) => x.m - y.m);
+  let B = tMin(c.sleep); if (B < 360) B += 1440; // Schlafen nach Mitternacht
+  const dec = (mg, from, to) => mg * Math.pow(0.5, (to - from) / (CF_HALF * 60)), mgP = mgOfMl(c.ml);
+  let R = timed.reduce((a, x) => a + (x.m <= B ? dec(x.mg, x.m, B) : 0), 0), tot = cups.reduce((a, x) => a + mgOfMl(x.ml), 0);
+  const level = timed.reduce((a, x) => a + (x.m <= now ? dec(x.mg, x.m, now) : 0), 0);
+  const last = timed.length ? timed[timed.length - 1].m : null;
+  const nextOk = last != null ? Math.max(now, last + c.gap * 60) : now;
+  const ts = []; let t = Math.ceil(nextOk / 5) * 5;
+  const R0 = R, tot0 = tot;
+  while (t < B) { const add = dec(mgP, t, B); if (R + add > c.rest + 1e-9 || tot + mgP > CF_DAY_MAX) break; ts.push(t); R += add; tot += mgP; t += c.gap * 60; }
+  let latest = null; const budget = c.rest - R0;
+  if (tot0 + mgP <= CF_DAY_MAX && budget > 0) { latest = budget >= mgP ? B : B - CF_HALF * 60 * Math.log2(mgP / budget); if (latest < now) latest = null; }
+  const why = tot0 + mgP > CF_DAY_MAX ? "limit" : ts.length ? "" : "sleep";
+  return { c, B, level, nextOk, ts, latest, why, tot0 };
+}
 function coffeeCard(d) {
-  const c = cupsOf(d), ts = c.filter(timeOk);
-  return `<section class="coffeecard"><div class="cf-l"><span class="cf-ic" aria-hidden="true">☕</span><div><b>Kaffee</b><div class="muted tiny">${c.length ? `${c.length} ${c.length === 1 ? "Tasse" : "Tassen"} · ca. ${c.length * CAFFEINE_MG} mg Koffein${ts.length ? " · " + ts.join(", ") : ""}` : "Noch keine Tasse heute"}</div></div></div>
-    <div class="cf-r"><button class="iconbtn" data-act="coffeeDel" aria-label="Eine Tasse weniger" ${c.length ? "" : "disabled"}>−</button><b class="cf-n">${c.length}</b><button class="iconbtn" data-act="coffeeAdd" aria-label="Eine Tasse mehr">+</button></div></section>`;
+  const cups = cupsOf(d), ml = mlOf(d), ts = cups.filter(x => timeOk(x.t)).map(x => x.t), cf = cfCfg(), isToday = d === iso(new Date());
+  let plan = "";
+  if (isToday) {
+    const P = coffeePlan(d), lv = P.level >= 5 ? `<div class="muted tiny">Aktuell etwa ${r0(P.level)} mg Koffein im Körper</div>` : "";
+    if (P.ts.length) {
+      const first = P.ts[0], nowM = tMin(nowT());
+      plan = `<div class="cf-plan"><div class="cf-big ${first <= nowM + 4 ? "ok" : ""}">${first <= nowM + 4 ? "Jetzt wieder möglich" : "Nächster Kaffee ab " + hm(first)}</div>
+        <div class="muted small">${P.latest != null && P.latest < P.B ? "Letzter Kaffee spätestens um " + hm(P.latest) + " (Schlafen " + cf.sleep + "). " : ""}Noch bis zu ${fmtMl(P.ts.length * cf.ml)} heute: ${P.ts.map(hm).join(" · ")} (je ${r0(cf.ml)} ml)</div>${lv}</div>`;
+    } else plan = `<div class="cf-plan"><div class="cf-big stop">${P.why === "limit" ? "Tageslimit erreicht" : "Heute lieber kein Kaffee mehr"}</div>
+      <div class="muted small">${P.why === "limit" ? "Mit " + r0(P.tot0) + " mg Koffein bist du beim Limit von " + CF_DAY_MAX + " mg pro Tag." : "Weiterer Kaffee ließe bis " + cf.sleep + " zu viel Koffein im Körper (mehr als " + cf.rest + " mg)."}</div>${lv}</div>`;
+  }
+  return `<section class="coffeecard"><div class="cf-top"><div class="cf-l"><span class="cf-ic" aria-hidden="true">☕</span><div><b>Kaffee</b><div class="muted tiny">${cups.length ? `${r0(ml)} ml · ca. ${r0(mgOfMl(ml))} mg Koffein${ts.length ? " · " + ts.join(", ") : ""}` : "Noch kein Kaffee an diesem Tag"}</div></div></div>
+    <div class="cf-r"><button class="iconbtn" data-act="coffeeDel" aria-label="100 ml weniger" ${cups.length ? "" : "disabled"}>−</button><b class="cf-n">${r0(ml)}<small>ml</small></b><button class="iconbtn" data-act="coffeeAdd" aria-label="100 ml mehr">+</button></div></div>
+    <div class="cf-custom"><input type="text" inputmode="decimal" id="cfCustom" placeholder="Eigene Menge (ml)" autocomplete="off"><button class="btn sec" data-act="coffeeCustom">Hinzufügen</button></div>
+    <div class="muted tiny" style="margin-top:6px">+ und − ändern um ${CF_STEP} ml, mit „Hinzufügen“ trägst du eine eigene Menge ein.</div>
+    ${plan}
+    <div class="cf-sleep"><label for="cfSleep">Schlafen um</label><input type="time" id="cfSleep" value="${cf.sleep}"></div>
+    <details class="cf-set"><summary>Annahmen anpassen</summary>
+      <div class="grid2"><div><label>Typische Menge pro Kaffee für die Planung (ml)</label><input type="text" inputmode="decimal" id="cfMl" value="${r0(cf.ml)}"></div><div><label>mg Koffein pro 100 ml</label><input type="text" inputmode="decimal" id="cfMg" value="${cf.mg100}"></div></div>
+      <div class="grid2"><div><label>Pause zwischen zwei Kaffees (Std.)</label><input type="text" inputmode="decimal" id="cfGap" value="${String(cf.gap).replace(".", ",")}"></div><div><label>Erlaubter Koffein-Rest beim Einschlafen (mg)</label><input type="text" inputmode="decimal" id="cfRest" value="${cf.rest}"></div></div>
+      <div class="muted tiny" style="margin-top:8px">Rechnung: Koffein wird mit einer Halbwertszeit von ca. ${CF_HALF} Stunden abgebaut. Die App plant Portionen so, dass zur Schlafenszeit höchstens der erlaubte Rest übrig ist und du ${CF_DAY_MAX} mg pro Tag nicht überschreitest. Nur Einträge mit Uhrzeit zählen für den Abbau. Filterkaffee hat grob 40 mg pro 100 ml, Espresso etwa 200 mg. Das ist eine grobe Orientierung, keine medizinische Beratung.</div></details></section>`;
 }
 
 /* ---------- Theme ---------- */
@@ -322,7 +381,7 @@ function viewWeek() {
   ${logged.length ? `<div class="bignum"><b>${fmt(avgK)}</b><span>kcal pro Tag</span><span class="pill ${Math.abs(diff) <= g.kcal * .1 ? "good" : diff > 0 ? "bad" : ""}">${diff >= 0 ? "+" : "−"}${fmt(Math.abs(diff))} zum Ziel</span></div>` : `<div class="muted" style="margin:0 4px 14px">In diesem Zeitraum gibt es noch keine Einträge.</div>`}
   <div class="surface">${chart}</div>
   ${logged.length ? `<div class="muted small" style="margin:12px 4px 0">${hit} von ${logged.length} ${logged.length === 1 ? "Tag" : "Tagen"} im Zielbereich (±10 %)</div>
-  ${(() => { const cups = days.reduce((a, d) => a + cupsOf(d).length, 0); return cups ? `<div class="muted small" style="margin:6px 4px 0">☕ Kaffee: ${cups} ${cups === 1 ? "Tasse" : "Tassen"} im Zeitraum, Ø ${nde(cups / L, 1)} pro erfasstem Tag</div>` : ""; })()}
+  ${(() => { const tot = days.reduce((a, d) => a + mlOf(d), 0); return tot ? `<div class="muted small" style="margin:6px 4px 0">☕ Kaffee: ${fmtMl(tot)} im Zeitraum, Ø ${r0(tot / L)} ml pro erfasstem Tag</div>` : ""; })()}
   <section class="macros" style="margin-top:20px">${macroCol("Ø Eiweiß", avg.p / L, g.p, "p")}${macroCol("Ø Kohlenh.", avg.c / L, g.c, "c")}${macroCol("Ø Fett", avg.f / L, g.f, "f")}</section>` : ""}
   <section class="exportcard"><b>Zeitraum exportieren</b><div class="muted small">${label}: alle Tage mit Mahlzeiten, Nährwerten und Rezept-Zutaten als Textdatei, z. B. für eine KI-Analyse.</div>
     <div class="grid2"><button class="btn" data-act="exportRange">Als Datei</button><button class="btn sec" data-act="copyRange">Kopieren</button></div></section>
@@ -1727,11 +1786,11 @@ function buildReport(from, to) {
   const order = MEALS.map(m => m.id);
   rows.forEach(r => {
     out.push("", `## ${dLong(r.d)}`);
-    if (!r.es.length) { out.push("Keine Einträge."); if (D.weights[r.d] != null) out.push(`Gewicht: ${nde(D.weights[r.d])} kg`); if (cupsOf(r.d).length) out.push(`Kaffee: ${cupsOf(r.d).length} Tassen`); return; }
+    if (!r.es.length) { out.push("Keine Einträge."); if (D.weights[r.d] != null) out.push(`Gewicht: ${nde(D.weights[r.d])} kg`); { const cl = coffeeLine(r.d); if (cl) out.push(cl); } return; }
     out.push(`Summe: ${nde(r.t.kcal, 0)} kcal (Ziel ${nde(g.kcal, 0)}) · Eiweiß ${nde(r.t.p, 0)} g (Ziel ${nde(g.p, 0)}) · Kohlenhydrate ${nde(r.t.c, 0)} g (Ziel ${nde(g.c, 0)}) · Fett ${nde(r.t.f, 0)} g (Ziel ${nde(g.f, 0)})`);
     { const q = microSum(r.es); out.push(`Weitere Nährstoffe: Zucker ${nde(q.s)} g · Ballaststoffe ${nde(q.fi)} g · gesättigte Fettsäuren ${nde(q.sa)} g · Salz ${nde(q.sl, 2)} g${microMissNote(q)}`); }
     if (D.weights[r.d] != null) out.push(`Gewicht: ${nde(D.weights[r.d])} kg`);
-    { const cu = cupsOf(r.d); if (cu.length) out.push(`Kaffee: ${cu.length} ${cu.length === 1 ? "Tasse" : "Tassen"}${cu.filter(timeOk).length ? " (" + cu.filter(timeOk).join(", ") + " Uhr)" : ""}, ca. ${cu.length * CAFFEINE_MG} mg Koffein (Schätzung)`); }
+    { const cl = coffeeLine(r.d); if (cl) out.push(cl); }
     { // Verteilung über den Tag nach Uhrzeit
       const te = r.es.filter(e => timeOk(e.t)).sort((a, b) => a.t.localeCompare(b.t));
       if (te.length) {
@@ -2084,7 +2143,8 @@ document.addEventListener("click", async ev => {
   else if (a === "toggleMeal") { ui.open[t.dataset.meal] = !ui.open[t.dataset.meal]; render(); }
   else if (a === "add") openAdd(t.dataset.meal);
   else if (a === "editEntry") editEntry(t.dataset.id);
-  else if (a === "coffeeAdd") coffeeAdd(ui.date);
+  else if (a === "coffeeAdd") coffeeAdd(ui.date, CF_STEP);
+  else if (a === "coffeeCustom") coffeeCustom(ui.date);
   else if (a === "coffeeDel") coffeeRemove(ui.date);
   else if (a === "period") { ui.period = +t.dataset.v; ui.weekOffset = 0; render(); }
   else if (a === "cpreset") {
@@ -2171,6 +2231,11 @@ document.addEventListener("click", async ev => {
 document.addEventListener("keydown", ev => { if ((ev.key === "Enter" || ev.key === " ") && ev.target.matches && ev.target.matches("[role=button][data-act]")) { ev.preventDefault(); ev.target.click(); } });
 document.addEventListener("change", async ev => {
   const ct = ev.target;
+  if (ct && ["cfSleep", "cfMl", "cfMg", "cfGap", "cfRest"].includes(ct.id)) {
+    const k = { cfSleep: "coffeeSleep", cfMl: "coffeeMl", cfMg: "coffeeMg100", cfGap: "coffeeGap", cfRest: "coffeeRest" }[ct.id];
+    if (ct.id === "cfSleep") { if (timeOk(ct.value)) D.settings.coffeeSleep = ct.value; } else D.settings[k] = num(ct.value);
+    save(); render(); return;
+  }
   if (ct && (ct.id === "cFrom" || ct.id === "cTo") && ct.value) {
     let f = ct.id === "cFrom" ? ct.value : ui.cFrom, t2 = ct.id === "cTo" ? ct.value : ui.cTo;
     if (f > t2) { if (ct.id === "cFrom") t2 = f; else f = t2; }
@@ -2184,6 +2249,7 @@ document.addEventListener("change", async ev => {
   } else if (t.id === "wGateOn") { D.settings.weightGate = t.checked; save(); weightGate(); toast(t.checked ? "Gewichts-Abfrage an" : "Gewichts-Abfrage aus");
   } else if (t.id === "sAccent") { D.settings.accent = t.value; save(); applyTheme(); render(); }
 });
+document.addEventListener("keydown", ev => { if (ev.key === "Enter" && ev.target && ev.target.id === "cfCustom") { ev.preventDefault(); coffeeCustom(ui.date); } });
 document.addEventListener("input", ev => {
   if (["sP", "sC", "sF", "sKcal"].includes(ev.target.id)) {
     const p = num($("#sP").value), c = num($("#sC").value), f = num($("#sF").value), k = num($("#sKcal").value);

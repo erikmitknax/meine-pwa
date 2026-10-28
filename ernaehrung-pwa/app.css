@@ -295,3 +295,13 @@ textarea::placeholder{color:var(--muted);opacity:.8}
 .coffeecard .cf-r{display:flex;align-items:center;gap:10px;flex:none}
 .coffeecard .cf-n{min-width:22px;text-align:center;font-size:20px}
 .coffeecard .iconbtn{width:42px;height:42px;font-size:22px;font-weight:700}
+
+.coffeecard{display:block}
+.coffeecard .cf-top{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.cf-plan{margin-top:12px;padding:12px 14px;border-radius:14px;background:var(--card2)}
+.cf-big{font-weight:700;font-size:17px;margin-bottom:2px}.cf-big.ok{color:var(--c)}.cf-big.stop{color:var(--danger)}
+.cf-sleep{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:12px}
+.cf-sleep label{margin:0;font-size:14px}.cf-sleep input{width:150px;flex:none}
+.cf-set{margin-top:10px}.cf-set summary{cursor:pointer;color:var(--muted);font-weight:600;font-size:13.5px;padding:4px 0}
+.coffeecard .cf-n small{font-size:12px;color:var(--muted);margin-left:2px;font-weight:600}.coffeecard .cf-n{min-width:56px}
+.cf-custom{display:flex;gap:8px;margin-top:12px}.cf-custom input{flex:1;min-width:0}.cf-custom .btn{flex:none;padding:0 16px}
