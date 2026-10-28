@@ -15,7 +15,7 @@ const WD_ORDER = [1, 2, 3, 4, 5, 6, 0];
 const NATIVE = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
 
 const DEFAULTS = () => ({
-  ver: 3, foods: [], recipes: [], entries: [], weights: {},
+  ver: 3, foods: [], recipes: [], entries: [], weights: {}, coffee: {},
   settings: { kcal: 2200, pP: 30, pC: 40, pF: 30, mode: "auto", accent: "#12935f", geminiKey: "", geminiModel: "gemini-2.5-flash-lite", goalWeight: "", weightGate: true },
 });
 let D = load();
@@ -125,6 +125,22 @@ function fillMissingMicro(list) {
 function calc(food, grams) {
   const k = grams / 100;
   return { kcal: food.kcal * k, p: food.protein * k, c: food.carbs * k, f: food.fat * k };
+}
+
+/* Preis: food.price (€) gilt für food.priceG (g/ml) */
+const eurFmt = v => v.toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " €";
+const hasPrice = f => f && f.price > 0 && f.priceG > 0;
+const priceOf = (f, grams) => hasPrice(f) ? f.price * grams / f.priceG : undefined;
+
+/* ---- Kaffee-Zähler: D.coffee[datum] = Liste der Uhrzeiten ("" = ohne Uhrzeit), pro Tasse ein Eintrag ---- */
+const CAFFEINE_MG = 80; // grobe Schätzung pro Tasse Filterkaffee
+const cupsOf = d => (D.coffee && Array.isArray(D.coffee[d])) ? D.coffee[d] : [];
+function coffeeAdd(d) { D.coffee = D.coffee || {}; (D.coffee[d] = cupsOf(d).slice()).push(d === iso(new Date()) ? nowT() : ""); save(); render(); }
+function coffeeRemove(d) { const l = cupsOf(d).slice(); l.pop(); if (l.length) D.coffee[d] = l; else if (D.coffee) delete D.coffee[d]; save(); render(); }
+function coffeeCard(d) {
+  const c = cupsOf(d), ts = c.filter(timeOk);
+  return `<section class="coffeecard"><div class="cf-l"><span class="cf-ic" aria-hidden="true">☕</span><div><b>Kaffee</b><div class="muted tiny">${c.length ? `${c.length} ${c.length === 1 ? "Tasse" : "Tassen"} · ca. ${c.length * CAFFEINE_MG} mg Koffein${ts.length ? " · " + ts.join(", ") : ""}` : "Noch keine Tasse heute"}</div></div></div>
+    <div class="cf-r"><button class="iconbtn" data-act="coffeeDel" aria-label="Eine Tasse weniger" ${c.length ? "" : "disabled"}>−</button><b class="cf-n">${c.length}</b><button class="iconbtn" data-act="coffeeAdd" aria-label="Eine Tasse mehr">+</button></div></section>`;
 }
 
 /* ---------- Theme ---------- */
@@ -238,6 +254,7 @@ function viewToday() {
     <div class="hbar"><i style="width:${pct}%"></i></div><div class="hf">${fmt(t.kcal)} kcal gegessen</div></section>
   <section class="macros" data-act="dayChart" role="button" tabindex="0" aria-label="Tagesübersicht öffnen">${macroCol("Eiweiß", t.p, g.p, "p")}${macroCol("Kohlenhydrate", t.c, g.c, "c")}${macroCol("Fett", t.f, g.f, "f")}</section>
   ${meals}
+  ${coffeeCard(ui.date)}
   <button class="btn sec block gapbtn" data-act="nutri">Nährstoffe im Detail</button>
   <button class="btn block gapbtn" data-act="gaps">${icon("plus", 18, 2.4)}KI-Vorschläge für eine Mahlzeit</button>
   <section class="exportcard"><b>Tag exportieren</b><div class="muted small">Alles, was du an diesem Tag gegessen hast, inkl. Rezept-Zutaten, als Textdatei – z. B. für eine KI-Analyse.</div>
@@ -305,6 +322,7 @@ function viewWeek() {
   ${logged.length ? `<div class="bignum"><b>${fmt(avgK)}</b><span>kcal pro Tag</span><span class="pill ${Math.abs(diff) <= g.kcal * .1 ? "good" : diff > 0 ? "bad" : ""}">${diff >= 0 ? "+" : "−"}${fmt(Math.abs(diff))} zum Ziel</span></div>` : `<div class="muted" style="margin:0 4px 14px">In diesem Zeitraum gibt es noch keine Einträge.</div>`}
   <div class="surface">${chart}</div>
   ${logged.length ? `<div class="muted small" style="margin:12px 4px 0">${hit} von ${logged.length} ${logged.length === 1 ? "Tag" : "Tagen"} im Zielbereich (±10 %)</div>
+  ${(() => { const cups = days.reduce((a, d) => a + cupsOf(d).length, 0); return cups ? `<div class="muted small" style="margin:6px 4px 0">☕ Kaffee: ${cups} ${cups === 1 ? "Tasse" : "Tassen"} im Zeitraum, Ø ${nde(cups / L, 1)} pro erfasstem Tag</div>` : ""; })()}
   <section class="macros" style="margin-top:20px">${macroCol("Ø Eiweiß", avg.p / L, g.p, "p")}${macroCol("Ø Kohlenh.", avg.c / L, g.c, "c")}${macroCol("Ø Fett", avg.f / L, g.f, "f")}</section>` : ""}
   <section class="exportcard"><b>Zeitraum exportieren</b><div class="muted small">${label}: alle Tage mit Mahlzeiten, Nährwerten und Rezept-Zutaten als Textdatei, z. B. für eine KI-Analyse.</div>
     <div class="grid2"><button class="btn" data-act="exportRange">Als Datei</button><button class="btn sec" data-act="copyRange">Kopieren</button></div></section>
@@ -546,13 +564,15 @@ function pickFood(f, fromOnline) {
     <button class="chip" data-m="0.5">½</button><button class="chip" data-m="1">1×</button><button class="chip" data-m="2">2×</button></div>
     <div class="muted tiny">1× = Portion ${r0(serving)} g</div>
     <div class="card" style="margin-top:12px" id="pv"></div>
+    <div class="muted small" id="ppv" style="margin:6px 2px 0"></div>
     <label>Mahlzeit</label><select id="pm">${MEALS.map(m => `<option value="${m.id}" ${m.id === ui.meal ? "selected" : ""}>${m.name}</option>`).join("")}</select>
     <button class="btn block" style="margin-top:14px" id="pgo">Zum Tagebuch hinzufügen</button>
     <button class="btn sec block" style="margin-top:8px" id="pback">Zurück</button>`);
   const gr = $("#gr", s);
   const upd = () => { const c = calc(f, num(gr.value)); $("#pv", s).innerHTML = `<div class="row between"><b style="font-size:22px">${r0(c.kcal)} kcal</b><span class="small"><span class="dot" style="background:var(--p)"></span>E ${r1(c.p)} <span class="dot" style="background:var(--c)"></span>KH ${r1(c.c)} <span class="dot" style="background:var(--f)"></span>F ${r1(c.f)}</span></div>`; };
-  gr.oninput = upd; upd();
-  $$("[data-m]", s).forEach(b => b.onclick = () => { gr.value = r0(serving * +b.dataset.m); upd(); });
+  const updP = () => { const pv = priceOf(f, num(gr.value)); $("#ppv", s).textContent = pv != null ? "≈ " + eurFmt(pv) + " für diese Menge" : ""; };
+  gr.oninput = () => { upd(); updP(); }; upd(); updP();
+  $$("[data-m]", s).forEach(b => b.onclick = () => { gr.value = r0(serving * +b.dataset.m); upd(); updP(); });
   $("#pback", s).onclick = () => openAdd();
   $("#pgo", s).onclick = () => {
     const grams = num(gr.value);
@@ -918,14 +938,17 @@ function foodForm(f) {
     <div><label>Kohlenhydrate (g)</label><input type="text" inputmode="decimal" id="fC" value="${v("carbs")}"></div><div><label>Fett (g)</label><input type="text" inputmode="decimal" id="fF" value="${v("fat")}"></div>
     <div><label>davon Zucker (g)</label><input type="text" inputmode="decimal" id="fS" value="${v("sugar")}"></div><div><label>Ballaststoffe (g)</label><input type="text" inputmode="decimal" id="fFi" value="${v("fiber")}"></div>
     <div><label>davon gesättigte Fettsäuren (g)</label><input type="text" inputmode="decimal" id="fSat" value="${v("sat")}"></div><div><label>Salz (g)</label><input type="text" inputmode="decimal" id="fSalt" value="${v("salt")}"></div></div>
-    <label>Portionsgröße (g)</label><input type="text" inputmode="decimal" id="fServ" value="${v("serving") || 100}">`;
+    <label>Portionsgröße (g)</label><input type="text" inputmode="decimal" id="fServ" value="${v("serving") || 100}">
+    <div class="muted small" style="margin-top:14px">Preis (optional)</div>
+    <div class="grid2"><div><label>Preis (€)</label><input type="text" inputmode="decimal" id="fPrice" placeholder="z. B. 1,29" value="${f.price > 0 ? String(f.price).replace(".", ",") : ""}"></div><div><label>für Menge (g oder ml)</label><input type="text" inputmode="decimal" id="fPriceG" placeholder="z. B. 500" value="${f.priceG > 0 ? String(f.priceG).replace(".", ",") : ""}"></div></div>
+    <div class="muted tiny" id="fPriceHint" style="margin-top:6px">${hasPrice(f) ? "≈ " + eurFmt(f.price / f.priceG * 100) + " pro 100 g" : "Was kostet die Packung und wie viel ist drin? Daraus rechnet die App den Preis pro Menge aus."}</div>`;
 }
 /* Lebensmittel aus eingefügtem Text (CSV, Tab, JSON) */
 const FOOD_KEYS = { name: "name", bezeichnung: "name", lebensmittel: "name", produkt: "name", marke: "brand", brand: "brand", barcode: "barcode", ean: "barcode",
   kcal: "kcal", kalorien: "kcal", calories: "kcal", energie: "kcal", fett: "fat", fat: "fat", kohlenhydrate: "carbs", carbs: "carbs", kh: "carbs",
   zucker: "sugar", sugar: "sugar", eiweiss: "protein", "eiweiß": "protein", protein: "protein", ballaststoffe: "fiber", fiber: "fiber",
   gesaettigt: "sat", "gesättigt": "sat", gesaettigte_fettsaeuren: "sat", "gesättigte_fettsäuren": "sat", gesaettigte_fettsaeure: "sat", saturated_fat: "sat", saturates: "sat", sat: "sat", davon_gesaettigt: "sat", "davon_gesättigt": "sat",
-  salz: "salt", salt: "salt",
+  salz: "salt", salt: "salt", preis: "price", preis_eur: "price", "preis_€": "price", price: "price", preis_menge_g: "priceG", preis_fuer_g: "priceG", "preis_für_g": "priceG", price_g: "priceG",
   portion_g: "serving", portion: "serving", portionsgroesse: "serving", serving: "serving" };
 const foodKey = h => FOOD_KEYS[String(h).trim().toLowerCase().replace(/[\s-]+/g, "_").replace(/_100g$/, "")];
 function normFood(o) {
@@ -967,6 +990,7 @@ async function copyText(text) {
   try { const ta = document.createElement("textarea"); ta.value = text; ta.style.cssText = "position:fixed;opacity:0;top:0"; document.body.append(ta); ta.select(); const ok = document.execCommand("copy"); ta.remove(); return ok; } catch (e) { return false; }
 }
 function bindPaste(root, onMulti) {
+  bindPriceHint(root);
   const ta = $("#fPaste", root); if (!ta) return;
   const go = () => {
     if (!ta.value.trim()) return toast("Füge zuerst Text ein");
@@ -978,7 +1002,7 @@ function bindPaste(root, onMulti) {
       const n = (v, keep) => v || keep ? String(v).replace(".", ",") : "";
       set("#fName", f.name); set("#fBrand", f.brand); if (f.barcode) set("#fBar", f.barcode);
       set("#fKcal", n(f.kcal, true)); set("#fP", n(f.protein, true)); set("#fC", n(f.carbs, true)); set("#fF", n(f.fat, true));
-      set("#fS", n(f.sugar)); set("#fFi", n(f.fiber)); set("#fSat", n(f.sat)); set("#fSalt", n(f.salt)); set("#fServ", n(f.serving, true));
+      set("#fS", n(f.sugar)); set("#fFi", n(f.fiber)); set("#fSat", n(f.sat)); set("#fSalt", n(f.salt)); if (f.price > 0 && f.priceG > 0) { set("#fPrice", n(f.price)); set("#fPriceG", n(f.priceG)); } set("#fServ", n(f.serving, true));
       ta.value = ""; toast("Felder ausgefüllt. Bitte kurz prüfen und speichern.");
     } else {
       list.forEach(upsertFood); save(); toast(list.length + " Lebensmittel gespeichert"); onMulti();
@@ -988,12 +1012,21 @@ function bindPaste(root, onMulti) {
   ta.onpaste = () => setTimeout(go, 60);
   $("#fPasteCopy", root).onclick = async () => toast(await copyText(FOOD_PROMPT) ? "Auftrag kopiert. Schicke ihn an Claude oder eine andere KI und füge die Antwort hier ein." : "Kopieren nicht möglich");
 }
+/* Live-Hinweis zum Preis im Lebensmittelformular */
+function bindPriceHint(root) {
+  const a = $("#fPrice", root), b = $("#fPriceG", root), h = $("#fPriceHint", root); if (!a || !b || !h) return;
+  const upd = () => { const p = num(a.value), g = num(b.value); if (p > 0 && g > 0) h.textContent = "≈ " + eurFmt(p / g * 100) + " pro 100 g"; else if (p > 0 || g > 0) h.textContent = "Bitte Preis und Menge angeben."; };
+  a.oninput = b.oninput = upd;
+}
 function readFoodForm(root, base) {
   const name = $("#fName", root).value.trim();
   if (!name) { toast("Bitte einen Namen eingeben"); return null; }
-  return { ...(base || {}), id: (base && base.id) || uid(), name, brand: $("#fBrand", root).value.trim(), barcode: $("#fBar", root).value.replace(/\D/g, ""),
+  const pr = $("#fPrice", root) ? num($("#fPrice", root).value) : 0, pg = $("#fPriceG", root) ? num($("#fPriceG", root).value) : 0;
+  const out = { ...(base || {}), id: (base && base.id) || uid(), name, brand: $("#fBrand", root).value.trim(), barcode: $("#fBar", root).value.replace(/\D/g, ""),
     kcal: num($("#fKcal", root).value), protein: num($("#fP", root).value), carbs: num($("#fC", root).value), fat: num($("#fF", root).value),
     sugar: num($("#fS", root).value), fiber: num($("#fFi", root).value), sat: num($("#fSat", root).value), salt: num($("#fSalt", root).value), serving: num($("#fServ", root).value) || 100, used: (base && base.used) || 0 };
+  if (pr > 0 && pg > 0) { out.price = pr; out.priceG = pg; } else { delete out.price; delete out.priceG; }
+  return out;
 }
 /* Mehrere Gerichte auf einmal (z. B. Buffet): CSV einfügen -> jede Zeile ein Tagebucheintrag, nichts landet in „Meine Lebensmittel“ */
 const MULTI_PROMPT = "Ich habe folgendes gegessen (siehe Fotos/Beschreibung):\n(HIER BESCHREIBEN, z. B. Buffet-Teller mit …)\n\nSchätze pro Gericht die Nährwerte pro 100 g und das Gewicht, das ich tatsächlich gegessen habe. Antworte nur mit CSV, ohne weiteren Text: erste Zeile die Kopfzeile, danach eine Zeile pro Gericht, Trennzeichen Semikolon, Dezimalpunkt.\nname;marke;barcode;kcal;fett;gesaettigt;kohlenhydrate;zucker;eiweiss;ballaststoffe;salz;portion_g\ngesaettigt = davon gesättigte Fettsäuren in g, salz = Salz in g (nicht Natrium).\nIn den Zahlenfeldern nur Zahlen ohne <, ca., g oder Einheiten (bei „weniger als 0,1“ bitte 0,05 schreiben, bei „Spuren“ 0).\nBei portion_g das Gewicht der gegessenen Menge in Gramm angeben (die Nährwerte beziehen sich auf 100 g).";
@@ -1568,7 +1601,7 @@ function foodEdit(f) {
   $("#fs", s).onclick = () => {
     const n = readFoodForm(s, f); if (!n) return;
     const oldName = f ? String(f.name).toLowerCase() : "";
-    if (f) Object.assign(f, n); else D.foods.push(n);
+    if (f) { Object.assign(f, n); if (!(n.price > 0)) { delete f.price; delete f.priceG; } } else D.foods.push(n);
     save();
     const hits = f ? D.recipes.filter(r => (r.items || []).some(i => String(i.name).toLowerCase() === oldName)) : [];
     if (hits.length) return recipeSyncSheet(f, oldName, hits);
@@ -1579,8 +1612,8 @@ function foodEdit(f) {
 }
 
 /* ---------- CSV ---------- */
-const CSV_COLS = ["name", "brand", "barcode", "kcal", "fat", "sat", "carbs", "sugar", "protein", "fiber", "salt", "serving"];
-const CSV_HEAD = ["name", "marke", "barcode", "kcal", "fett", "gesaettigt", "kohlenhydrate", "zucker", "eiweiss", "ballaststoffe", "salz", "portion_g"];
+const CSV_COLS = ["name", "brand", "barcode", "kcal", "fat", "sat", "carbs", "sugar", "protein", "fiber", "salt", "serving", "price", "priceG"];
+const CSV_HEAD = ["name", "marke", "barcode", "kcal", "fett", "gesaettigt", "kohlenhydrate", "zucker", "eiweiss", "ballaststoffe", "salz", "portion_g", "preis_eur", "preis_menge_g"];
 const csvCell = v => { const s = String(v ?? ""); return /[";\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
 function foodsToCsv(foods) {
   return "﻿" + [CSV_HEAD.join(";")].concat(foods.map(f => CSV_COLS.map(c => csvCell(typeof f[c] === "number" ? String(f[c]).replace(".", ",") : f[c])).join(";"))).join("\r\n") + "\r\n";
@@ -1604,7 +1637,7 @@ function parseCsv(text) {
 function importCsv(text) {
   const rows = parseCsv(text); if (rows.length < 2) return { added: 0, updated: 0 };
   const alias = { name: "name", bezeichnung: "name", lebensmittel: "name", marke: "brand", brand: "brand", barcode: "barcode", ean: "barcode", kcal: "kcal", kalorien: "kcal", fett: "fat", fat: "fat",
-    kohlenhydrate: "carbs", carbs: "carbs", kh: "carbs", zucker: "sugar", sugar: "sugar", eiweiss: "protein", "eiweiß": "protein", protein: "protein", ballaststoffe: "fiber", fiber: "fiber", gesaettigt: "sat", "gesättigt": "sat", gesaettigte_fettsaeuren: "sat", "gesättigte_fettsäuren": "sat", sat: "sat", salz: "salt", salt: "salt", portion_g: "serving", portion: "serving", serving: "serving" };
+    kohlenhydrate: "carbs", carbs: "carbs", kh: "carbs", zucker: "sugar", sugar: "sugar", eiweiss: "protein", "eiweiß": "protein", protein: "protein", ballaststoffe: "fiber", fiber: "fiber", gesaettigt: "sat", "gesättigt": "sat", gesaettigte_fettsaeuren: "sat", "gesättigte_fettsäuren": "sat", sat: "sat", salz: "salt", salt: "salt", portion_g: "serving", portion: "serving", serving: "serving", preis_eur: "price", preis: "price", price: "price", preis_menge_g: "priceG", preis_fuer_g: "priceG", price_g: "priceG" };
   const idx = {};
   rows[0].forEach((h, i) => { const k = alias[h.trim().toLowerCase()]; if (k && idx[k] == null) idx[k] = i; });
   if (idx.name == null) throw new Error("Spalte „name“ fehlt in der CSV");
@@ -1614,6 +1647,7 @@ function importCsv(text) {
     const name = g("name"); if (!name) return;
     const f = { name, brand: g("brand"), barcode: g("barcode").replace(/\D/g, ""), kcal: num(g("kcal")), protein: num(g("protein")), carbs: num(g("carbs")), fat: num(g("fat")), sugar: num(g("sugar")), fiber: num(g("fiber")), sat: num(g("sat")), salt: num(g("salt")), serving: num(g("serving")) || 100 };
     if (idx.sat == null) delete f.sat; if (idx.salt == null) delete f.salt;
+    { const pr = num(g("price")), pg = num(g("priceG")); if (pr > 0 && pg > 0) { f.price = pr; f.priceG = pg; } }
     const ex = D.foods.find(x => (f.barcode && x.barcode === f.barcode) || (!f.barcode && !x.barcode && x.name.toLowerCase() === f.name.toLowerCase() && x.brand === f.brand));
     if (ex) { Object.assign(ex, f); updated++; } else { D.foods.push({ ...f, id: uid(), used: 0 }); added++; }
   });
@@ -1693,10 +1727,11 @@ function buildReport(from, to) {
   const order = MEALS.map(m => m.id);
   rows.forEach(r => {
     out.push("", `## ${dLong(r.d)}`);
-    if (!r.es.length) { out.push("Keine Einträge."); if (D.weights[r.d] != null) out.push(`Gewicht: ${nde(D.weights[r.d])} kg`); return; }
+    if (!r.es.length) { out.push("Keine Einträge."); if (D.weights[r.d] != null) out.push(`Gewicht: ${nde(D.weights[r.d])} kg`); if (cupsOf(r.d).length) out.push(`Kaffee: ${cupsOf(r.d).length} Tassen`); return; }
     out.push(`Summe: ${nde(r.t.kcal, 0)} kcal (Ziel ${nde(g.kcal, 0)}) · Eiweiß ${nde(r.t.p, 0)} g (Ziel ${nde(g.p, 0)}) · Kohlenhydrate ${nde(r.t.c, 0)} g (Ziel ${nde(g.c, 0)}) · Fett ${nde(r.t.f, 0)} g (Ziel ${nde(g.f, 0)})`);
     { const q = microSum(r.es); out.push(`Weitere Nährstoffe: Zucker ${nde(q.s)} g · Ballaststoffe ${nde(q.fi)} g · gesättigte Fettsäuren ${nde(q.sa)} g · Salz ${nde(q.sl, 2)} g${microMissNote(q)}`); }
     if (D.weights[r.d] != null) out.push(`Gewicht: ${nde(D.weights[r.d])} kg`);
+    { const cu = cupsOf(r.d); if (cu.length) out.push(`Kaffee: ${cu.length} ${cu.length === 1 ? "Tasse" : "Tassen"}${cu.filter(timeOk).length ? " (" + cu.filter(timeOk).join(", ") + " Uhr)" : ""}, ca. ${cu.length * CAFFEINE_MG} mg Koffein (Schätzung)`); }
     { // Verteilung über den Tag nach Uhrzeit
       const te = r.es.filter(e => timeOk(e.t)).sort((a, b) => a.t.localeCompare(b.t));
       if (te.length) {
@@ -2049,6 +2084,8 @@ document.addEventListener("click", async ev => {
   else if (a === "toggleMeal") { ui.open[t.dataset.meal] = !ui.open[t.dataset.meal]; render(); }
   else if (a === "add") openAdd(t.dataset.meal);
   else if (a === "editEntry") editEntry(t.dataset.id);
+  else if (a === "coffeeAdd") coffeeAdd(ui.date);
+  else if (a === "coffeeDel") coffeeRemove(ui.date);
   else if (a === "period") { ui.period = +t.dataset.v; ui.weekOffset = 0; render(); }
   else if (a === "cpreset") {
     const td = iso(new Date()), d0 = fromIso(td), k = t.dataset.k;

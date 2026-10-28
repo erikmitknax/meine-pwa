@@ -19,6 +19,7 @@ const SYT = {
   recipes: () => D.recipes.map(r => [r.id, r]),
   entries: () => D.entries.map(e => [e.id, e]),
   weights: () => Object.entries(D.weights),
+  coffee: () => Object.entries(D.coffee || {}),
 };
 const SY_RULES = `rules_version = '2';
 service cloud.firestore {
@@ -55,6 +56,7 @@ function syApply(type, id, doc) {
     return;
   }
   if (type === "weights") { if (doc.del) delete D.weights[id]; else D.weights[id] = doc.d; return; }
+  if (type === "coffee") { D.coffee = D.coffee || {}; if (doc.del) delete D.coffee[id]; else D.coffee[id] = doc.d; return; }
   const arr = D[type], i = arr.findIndex(x => x.id === id);
   if (doc.del) { if (i >= 0) arr.splice(i, 1); }
   else if (i >= 0) arr[i] = doc.d; else arr.push(doc.d);
@@ -62,6 +64,7 @@ function syApply(type, id, doc) {
 function syLocalHash(type, id) {
   if (type === "settings") return syH(sySettings());
   if (type === "weights") return D.weights[id] === undefined ? undefined : syH(D.weights[id]);
+  if (type === "coffee") return !D.coffee || D.coffee[id] === undefined ? undefined : syH(D.coffee[id]);
   const it = D[type].find(x => x.id === id); return it ? syH(it) : undefined;
 }
 /* Dokument von einem anderen Gerät übernehmen. true = lokale Daten haben sich geändert. */
