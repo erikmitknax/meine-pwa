@@ -49,6 +49,7 @@ const num = v => { const m = String(v ?? "").replace(",", ".").match(/-?\d*\.?\d
 const r0 = n => Math.round(n);
 const r1 = n => Math.round(n * 10) / 10;
 const r2 = n => Math.round(n * 100) / 100;
+const gS = g => String(Math.round((+g || 0) * 100) / 100).replace(".", ","); // Menge als Eingabewert, bis 2 Nachkommastellen
 function iso(d) { const z = n => String(n).padStart(2, "0"); return d.getFullYear() + "-" + z(d.getMonth() + 1) + "-" + z(d.getDate()); }
 function fromIso(s) { const [y, m, d] = s.split("-").map(Number); return new Date(y, m - 1, d); }
 function addDays(s, n) { const d = fromIso(s); d.setDate(d.getDate() + n); return iso(d); }
@@ -363,7 +364,7 @@ function viewToday() {
     const op = !!ui.open[m.id] && es.length > 0;
     return `<section class="meal ${op ? "open" : ""}"><div class="mh ${es.length ? "tg" : ""}" ${es.length ? `data-act="toggleMeal" data-meal="${m.id}" role="button" tabindex="0" aria-expanded="${op}"` : ""}><h3>${m.name}${es.length ? `<span class="cnt">${es.length}</span>` : ""}</h3>${es.length ? `<span class="kc">${fmt(s.kcal)} kcal</span><span class="chev">${icon("right", 16, 2.4)}</span>` : ""}<button class="addbtn" data-act="add" data-meal="${m.id}" aria-label="${m.name} hinzufügen">${icon("plus", 18, 2.6)}</button></div>` +
       (es.length ? (op ? `<div class="list">${es.map(e => `<div class="entry" data-act="editEntry" data-id="${e.id}"><div class="nm"><div class="t">${esc(e.name)}</div>
-        <div class="s"><span class="g">${r0(e.grams)} g</span><span class="cp">E ${r0(e.p)}</span><span class="cc">KH ${r0(e.c)}</span><span class="cf">F ${r0(e.f)}</span></div></div>
+        <div class="s"><span class="g">${nde(e.grams, 2)} g</span><span class="cp">E ${r0(e.p)}</span><span class="cc">KH ${r0(e.c)}</span><span class="cf">F ${r0(e.f)}</span></div></div>
         <div class="kcal">${fmt(e.kcal)}<small>kcal</small></div></div>`).join("")}</div><div class="mealtools">${es.length > 1 ? `<button class="linkbtn" data-act="mealToRecipe" data-meal="${m.id}">Als Rezept speichern</button>` : ""}<button class="linkbtn del" data-act="clearMeal" data-meal="${m.id}">${es.length > 1 ? "Alle " + es.length + " Einträge löschen" : "Eintrag löschen"}</button></div>` : "")
         : `<button class="empty" data-act="add" data-meal="${m.id}">${icon("plus", 18, 2.4)}${m.name} eintragen</button>`) + `</section>`;
   }).join("");
@@ -683,9 +684,9 @@ function pickFood(f, fromOnline) {
   if (!f) return;
   const serving = f.serving || 100;
   const s = sheet(`<h3>${esc(f.name)}</h3><div class="muted small">${f.brand ? esc(f.brand) + " · " : ""}pro 100 g: ${r0(f.kcal)} kcal · E ${r1(f.protein)} · KH ${r1(f.carbs)} · F ${r1(f.fat)}</div>
-    <label>Menge (g oder ml)</label><div class="row"><input type="text" inputmode="decimal" id="gr" value="${r0(serving)}">
+    <label>Menge (g oder ml)</label><div class="row"><input type="text" inputmode="decimal" id="gr" value="${gS(serving)}">
     <button class="chip" data-m="0.5">½</button><button class="chip" data-m="1">1×</button><button class="chip" data-m="2">2×</button></div>
-    <div class="muted tiny">1× = Portion ${r0(serving)} g</div>
+    <div class="muted tiny">1× = Portion ${gS(serving)} g</div>
     <div class="card" style="margin-top:12px" id="pv"></div>
     <div class="muted small" id="ppv" style="margin:6px 2px 0"></div>
     <label>Mahlzeit</label><select id="pm">${MEALS.map(m => `<option value="${m.id}" ${m.id === ui.meal ? "selected" : ""}>${m.name}</option>`).join("")}</select>
@@ -695,7 +696,7 @@ function pickFood(f, fromOnline) {
   const upd = () => { const c = calc(f, num(gr.value)); $("#pv", s).innerHTML = `<div class="row between"><b style="font-size:22px">${r0(c.kcal)} kcal</b><span class="small"><span class="dot" style="background:var(--p)"></span>E ${r1(c.p)} <span class="dot" style="background:var(--c)"></span>KH ${r1(c.c)} <span class="dot" style="background:var(--f)"></span>F ${r1(c.f)}</span></div>`; };
   const updP = () => { const pv = priceOf(f, num(gr.value)); $("#ppv", s).textContent = pv == null ? "" : pv === 0 ? "Kostenlos" : "≈ " + eurFmt(pv) + " für diese Menge"; };
   gr.oninput = () => { upd(); updP(); }; upd(); updP();
-  $$("[data-m]", s).forEach(b => b.onclick = () => { gr.value = r0(serving * +b.dataset.m); upd(); updP(); });
+  $$("[data-m]", s).forEach(b => b.onclick = () => { gr.value = gS(serving * +b.dataset.m); upd(); updP(); });
   $("#pback", s).onclick = () => openAdd();
   $("#pgo", s).onclick = () => {
     const grams = num(gr.value);
@@ -810,7 +811,7 @@ function matchLocal(text) {
   text.split(/\s*(?:,|;|\n|\+|\bund\b|\bsowie\b)\s*/i).map(x => x.trim()).filter(Boolean).forEach(seg => {
     const p = parseSeg(seg), f = p.name ? findOwnFood(p.name) : null;
     if (!f) return rest.push(seg);
-    const grams = Math.max(1, r1(p.grams != null ? p.grams : (p.count != null ? p.count : 1) * (num(f.serving) || 100)));
+    const grams = Math.max(0.1, r2(p.grams != null ? p.grams : (p.count != null ? p.count : 1) * (num(f.serving) || 100)));
     items.push({ name: f.name, grams, kcal: num(f.kcal), protein: num(f.protein), carbs: num(f.carbs), fat: num(f.fat), sugar: num(f.sugar), fiber: num(f.fiber), sat: num(f.sat), salt: num(f.salt), on: true, fid: f.id });
   });
   return { items, rest };
@@ -995,7 +996,7 @@ async function analyzePhoto(file, note) {
   lastAi = { model: usedModel, ms };
   const items = (parseAiJson(txt).items || []).filter(i => i && i.name);
   if (!items.length) throw new Error(file ? "Es wurde nichts erkannt. Versuche ein schärferes Foto." : "Es wurde nichts erkannt. Beschreibe das Essen etwas genauer.");
-  return items.map(i => ({ name: String(i.name), grams: Math.max(1, num(i.grams) || 100), kcal: num(i.kcal), protein: num(i.protein), carbs: num(i.carbs), fat: num(i.fat), sugar: num(i.sugar), fiber: num(i.fiber), sat: num(i.sat), salt: num(i.salt), on: true }));
+  return items.map(i => ({ name: String(i.name), grams: Math.max(0.1, num(i.grams) || 100), kcal: num(i.kcal), protein: num(i.protein), carbs: num(i.carbs), fat: num(i.fat), sugar: num(i.sugar), fiber: num(i.fiber), sat: num(i.sat), salt: num(i.salt), on: true }));
 }
 function renderPhotoItems() {
   const o = $("#pout");
@@ -1005,7 +1006,7 @@ function renderPhotoItems() {
   o.innerHTML = `<div id="pstat" style="margin-top:12px">${photoStatus}</div><h2 style="margin-top:10px">Erkannt</h2><div class="muted small" style="margin-bottom:8px">Alles ist änderbar, die Summe rechnet mit. Nährwerte gelten pro 100 g.${lastAi && photoItems.some(i => !i.fid) ? ` <span class="tiny">· ${(lastAi.ms / 1000).toFixed(1).replace(".", ",")} s, ${esc(lastAi.model)}</span>` : ""}</div>` + photoItems.map((i, k) => `<div class="card" data-k="${k}">
       <div class="row"><input type="checkbox" ${i.on ? "checked" : ""} data-f="on" style="width:22px;height:22px"><input type="text" value="${esc(i.name)}" data-f="name"></div>
       <div class="tiny muted" style="margin:6px 2px 0">${i.fid ? "aus deinen Lebensmitteln" : "KI-Schätzung"}</div>
-      <div class="grid2"><div><label style="margin:8px 0 3px">Menge (g)</label><div class="row" style="gap:6px"><button type="button" class="chip" data-step="-1" aria-label="weniger">−</button><input type="text" inputmode="decimal" value="${r0(i.grams)}" data-f="grams"><button type="button" class="chip" data-step="1" aria-label="mehr">+</button></div></div>${""}${fld("Kalorien (kcal)", "kcal", r0(i.kcal))}
+      <div class="grid2"><div><label style="margin:8px 0 3px">Menge (g)</label><div class="row" style="gap:6px"><button type="button" class="chip" data-step="-1" aria-label="weniger">−</button><input type="text" inputmode="decimal" value="${gS(i.grams)}" data-f="grams"><button type="button" class="chip" data-step="1" aria-label="mehr">+</button></div></div>${""}${fld("Kalorien (kcal)", "kcal", r0(i.kcal))}
       ${fld("Eiweiß (g)", "protein", r1(i.protein))}${fld("Kohlenhydrate (g)", "carbs", r1(i.carbs))}
       ${fld("Fett (g)", "fat", r1(i.fat))}${fld("davon Zucker (g)", "sugar", r2(i.sugar))}
       ${fld("Ballaststoffe (g)", "fiber", r2(i.fiber))}${fld("davon gesättigt (g)", "sat", r2(i.sat))}
@@ -1016,17 +1017,17 @@ function renderPhotoItems() {
     const it = photoItems[+card.dataset.k];
     $$("[data-step]", card).forEach(bt => bt.onclick = () => {
       const g = num($("[data-f=grams]", card).value) || it.grams, st = g < 30 ? 5 : 10;
-      it.grams = Math.max(1, r1(g + st * +bt.dataset.step)); $("[data-f=grams]", card).value = r0(it.grams); $("[data-sum]", card).textContent = sum(it);
+      it.grams = Math.max(0.1, r2(g + st * +bt.dataset.step)); $("[data-f=grams]", card).value = gS(it.grams); $("[data-sum]", card).textContent = sum(it);
     });
     $$("[data-f]", card).forEach(inp => { const h = () => {
       const f = inp.dataset.f;
       it[f] = f === "on" ? inp.checked : f === "name" ? inp.value : num(inp.value);
-      if (f === "grams") it.grams = Math.max(1, it.grams || 0);
+      if (f === "grams") it.grams = Math.max(0.1, it.grams || 0);
       $("[data-sum]", card).textContent = sum(it);
     }; inp.onchange = h; inp.oninput = h; });
   });
   const chosen = () => photoItems.filter(i => i.on);
-  const toFood = i => ({ id: uid(), name: i.name, brand: "", barcode: "", kcal: r1(i.kcal), protein: r1(i.protein), carbs: r1(i.carbs), fat: r1(i.fat), sugar: r2(i.sugar), fiber: r2(i.fiber), sat: r2(i.sat), salt: r2(i.salt), serving: r0(i.grams), used: 1 });
+  const toFood = i => ({ id: uid(), name: i.name, brand: "", barcode: "", kcal: r1(i.kcal), protein: r1(i.protein), carbs: r1(i.carbs), fat: r1(i.fat), sugar: r2(i.sugar), fiber: r2(i.fiber), sat: r2(i.sat), salt: r2(i.salt), serving: r2(i.grams), used: 1 });
   const own = i => i.fid && D.foods.find(x => x.id === i.fid);
   const toDb = list => list.map(i => { if (own(i)) return own(i); const f = toFood(i); const ex = D.foods.find(x => x.name.toLowerCase() === f.name.toLowerCase() && !x.barcode); if (ex) return ex; D.foods.push(f); return f; });
   $("#pDiary", o).onclick = () => {
@@ -1301,7 +1302,7 @@ function drawRecipeEditor() {
     <div class="muted tiny" style="margin:6px 2px 0">Gewicht des fertigen Gerichts auf der Waage. Damit trägst du später einfach ein, wie viel Gramm du genommen hast. Leer = Summe der Zutaten.</div>
     <h2 style="margin:20px 2px 6px">Zutaten</h2>
     <div id="ri">${d.items.length ? d.items.map((i, k) => `<div class="ing" data-k="${k}"><div class="grow"><div class="t">${esc(i.name)}</div><div class="muted tiny" data-kc></div></div>
-      <input type="text" inputmode="decimal" value="${r0(i.grams)}" aria-label="Menge in Gramm"><span class="muted small">g</span><button class="iconbtn" data-del aria-label="Zutat entfernen">×</button></div>`).join("")
+      <input type="text" inputmode="decimal" value="${gS(i.grams)}" aria-label="Menge in Gramm"><span class="muted small">g</span><button class="iconbtn" data-del aria-label="Zutat entfernen">×</button></div>`).join("")
       : `<div class="muted small" style="padding:4px 2px 12px">Noch keine Zutaten. Füge unten die erste hinzu.</div>`}</div>
     <button class="btn sec block" id="rAdd">Zutat hinzufügen</button>
     <div class="card" style="margin-top:16px" id="rsum"></div>
@@ -1401,7 +1402,7 @@ function pickAmount(food, onPick, onBack) {
   if (!food) return;
   const serving = food.serving || 100;
   const s = sheet(`<h3>${esc(food.name)}</h3><div class="muted small">Pro 100 g: ${r0(food.kcal)} kcal, E ${r1(food.protein)} / KH ${r1(food.carbs)} / F ${r1(food.fat)}</div>
-    <label>Menge in g oder ml</label><input type="text" inputmode="decimal" id="za" value="${r0(serving)}">
+    <label>Menge in g oder ml</label><input type="text" inputmode="decimal" id="za" value="${gS(serving)}">
     <div class="card" style="margin-top:12px" id="zv"></div>
     <button class="btn block" id="zOk">Zur Zutatenliste</button><button class="btn sec block" style="margin-top:8px" id="zBk">Zurück</button>`);
   const za = $("#za", s);
@@ -1457,7 +1458,7 @@ function missingSheet(list, ek, back) {
   const anyFood = todo.some(foodOfEntry);
   const items = todo.map(e => {
     const ms = MICRO.filter(m => !hasN(e[m.ek])).sort((a, b) => (b.ek === ek) - (a.ek === ek));
-    return `<div class="card" style="margin-bottom:10px"><div class="row between"><b style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(e.name)}</b><span class="muted small">${r0(e.grams)} g</span></div>
+    return `<div class="card" style="margin-bottom:10px"><div class="row between"><b style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(e.name)}</b><span class="muted small">${nde(e.grams, 2)} g</span></div>
       ${ms.map(m => `<div class="ing" style="padding:6px 0"><div class="grow"><div class="t">${m.name}</div><div class="muted tiny">pro 100 g · <span data-calc="${e.id}|${m.ek}">–</span></div></div><input type="text" inputmode="decimal" placeholder="–" data-me="${e.id}" data-mk="${m.ek}" aria-label="${m.name} pro 100 g für ${esc(e.name)}"></div>`).join("")}</div>`;
   }).join("");
   const s = sheet(`<button class="linkbtn" id="msBack" style="margin:-4px 0 6px">‹ Zurück</button><h3>${lab[ek]} nachtragen</h3>
@@ -1507,7 +1508,7 @@ function mealSheet(mid, date) {
   if (fillMissingMicro(list)) save();
   const t = sum(list), dt = sum(day), name = mealName(mid);
   const entries = list.map(e => `<div class="entry" data-eid="${e.id}" role="button" tabindex="0"><div class="nm"><div class="t">${esc(e.name)}</div>
-    <div class="s"><span class="g">${r0(e.grams)} g</span><span class="cp">E ${r0(e.p)}</span><span class="cc">KH ${r0(e.c)}</span><span class="cf">F ${r0(e.f)}</span></div></div><div class="kcal">${fmt(e.kcal)}<small>kcal</small></div></div>`).join("");
+    <div class="s"><span class="g">${nde(e.grams, 2)} g</span><span class="cp">E ${r0(e.p)}</span><span class="cc">KH ${r0(e.c)}</span><span class="cf">F ${r0(e.f)}</span></div></div><div class="kcal">${fmt(e.kcal)}<small>kcal</small></div></div>`).join("");
   const s = sheet(`<button class="linkbtn" id="mvBack" style="margin:-4px 0 6px">‹ Tagesübersicht</button><h3>${name}</h3>
     <div class="muted small" style="margin:-6px 0 12px">${fmt(t.kcal)} kcal${dt.kcal > 0 ? ` · ${Math.round(t.kcal / dt.kcal * 100)} % des Tages` : ""} · ${list.length} ${list.length === 1 ? "Eintrag" : "Einträge"}</div>
     ${list.length ? nutrientBody(list, day) : `<div class="muted center" style="padding:24px 10px">In dieser Mahlzeit ist nichts eingetragen.</div>`}
@@ -1610,10 +1611,10 @@ function editEntry(id) {
   const line = t => `${r0(t.kcal)} kcal · E ${r1(t.p)} · KH ${r1(t.c)} · F ${r1(t.f)}`;
   const ingHtml = ings ? `<div class="mealtools" style="margin-top:16px"><b>Zutaten nur für diesen Eintrag</b></div>
     <div class="muted small" style="margin:2px 0 8px">Mengen ändern oder Zutaten abwählen. Das gespeicherte Rezept bleibt unverändert, beim nächsten Mal ist wieder alles wie im Rezept.</div>
-    ${ings.map((i, k) => `<div class="row" data-i="${k}" style="gap:8px;margin-bottom:8px"><input type="checkbox" ${i.off ? "" : "checked"} data-o style="width:22px;height:22px"><div class="grow" style="min-width:0"><div style="font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(i.name)}</div></div><input type="text" inputmode="decimal" value="${r0(i.grams)}" data-g style="width:84px;flex:none"><span class="muted small">g</span></div>`).join("")}
+    ${ings.map((i, k) => `<div class="row" data-i="${k}" style="gap:8px;margin-bottom:8px"><input type="checkbox" ${i.off ? "" : "checked"} data-o style="width:22px;height:22px"><div class="grow" style="min-width:0"><div style="font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(i.name)}</div></div><input type="text" inputmode="decimal" value="${gS(i.grams)}" data-g style="width:84px;flex:none"><span class="muted small">g</span></div>`).join("")}
     <div class="muted small" id="eiSum" style="margin-top:4px"></div>` : "";
   const s = sheet(`<h3>${esc(e.name)}</h3><div id="eNut"></div>
-    ${ings ? "" : `<label>Menge (g)</label><input type="text" inputmode="decimal" id="eg" value="${r0(e.grams)}">`}${ings ? `<label>Menge gesamt (g)</label><input type="text" inputmode="decimal" id="eg" value="${r0(e.grams)}">` : ""}
+    ${ings ? "" : `<label>Menge (g)</label><input type="text" inputmode="decimal" id="eg" value="${gS(e.grams)}">`}${ings ? `<label>Menge gesamt (g)</label><input type="text" inputmode="decimal" id="eg" value="${gS(e.grams)}">` : ""}
     ${ingHtml}
     <label>Uhrzeit</label><input type="time" id="et" value="${timeOk(e.t) ? e.t : ""}">
     <label>Mahlzeit</label><select id="em">${MEALS.map(m => `<option value="${m.id}" ${m.id === e.meal ? "selected" : ""}>${m.name}</option>`).join("")}</select>
@@ -1644,7 +1645,7 @@ function editEntry(id) {
       $("[data-g]", row).oninput = ev => { i.grams = Math.max(0, num(ev.target.value)); dirty = true; refresh(); };
     });
     // Gesamtmenge ändern = alle Zutaten anteilig skalieren
-    $("#eg", s).onchange = ev => { const g = num(ev.target.value), t = tot(); if (g > 0 && t.g > 0) { const k = g / (t.g * gf); ings.forEach(i => { if (!i.off) i.grams *= k; }); $$("[data-i]", s).forEach(row => { $("[data-g]", row).value = r0(ings[+row.dataset.i].grams); }); dirty = true; } refresh(); };
+    $("#eg", s).onchange = ev => { const g = num(ev.target.value), t = tot(); if (g > 0 && t.g > 0) { const k = g / (t.g * gf); ings.forEach(i => { if (!i.off) i.grams *= k; }); $$("[data-i]", s).forEach(row => { $("[data-g]", row).value = gS(ings[+row.dataset.i].grams); }); dirty = true; } refresh(); };
   }
   $("#es", s).onclick = () => {
     if (ings && dirty) {
@@ -1856,10 +1857,10 @@ function costSheet(date) {
   else {
     const ck = it => `<label class="ksck" title="Nicht bezahlt (geschenkt)"><input type="checkbox" data-gift="${it.e.id}" ${it.gift ? "checked" : ""} aria-label="Nicht bezahlt, geschenkt: ${esc(it.e.name)}"></label>`;
     const priceTxt = (it, x) => it.gift ? `<span class="muted">geschenkt</span>` : x.cost != null ? eurFmt(x.cost) : "Preis fehlt ›";
-    const partRow = (it, x, k, j, cls, box) => { const fix = !it.gift && x.cost == null; return `<div class="ksrow ${cls} ${fix ? "miss" : ""} ${it.gift ? "gift" : ""}" ${fix ? `data-fix="${k}.${j}" role="button" tabindex="0"` : ""}>${box ? ck(it) : ""}<span class="kn">${esc(x.name)} <span class="muted tiny">${r0(x.grams)} g</span></span><span class="kv">${priceTxt(it, x)}</span></div>`; };
+    const partRow = (it, x, k, j, cls, box) => { const fix = !it.gift && x.cost == null; return `<div class="ksrow ${cls} ${fix ? "miss" : ""} ${it.gift ? "gift" : ""}" ${fix ? `data-fix="${k}.${j}" role="button" tabindex="0"` : ""}>${box ? ck(it) : ""}<span class="kn">${esc(x.name)} <span class="muted tiny">${nde(x.grams, 2)} g</span></span><span class="kv">${priceTxt(it, x)}</span></div>`; };
     const rows = C.items.map((it, k) => {
       if (!it.ings) return partRow(it, it.parts[0], k, 0, "main", true);
-      return `<div class="ksrec"><div class="ksrow main ${it.gift ? "gift" : ""}">${ck(it)}<span class="kn">${esc(it.e.name)} <span class="muted tiny">Rezept · ${r0(it.e.grams)} g</span></span><span class="kv">${it.gift ? `<span class="muted">geschenkt</span>` : eurFmt(it.cost) + (it.missing.length ? "*" : "")}</span></div>${it.parts.map((x, j) => partRow(it, x, k, j, "sub", false)).join("")}</div>`;
+      return `<div class="ksrec"><div class="ksrow main ${it.gift ? "gift" : ""}">${ck(it)}<span class="kn">${esc(it.e.name)} <span class="muted tiny">Rezept · ${nde(it.e.grams, 2)} g</span></span><span class="kv">${it.gift ? `<span class="muted">geschenkt</span>` : eurFmt(it.cost) + (it.missing.length ? "*" : "")}</span></div>${it.parts.map((x, j) => partRow(it, x, k, j, "sub", false)).join("")}</div>`;
     }).join("");
     body = `<div class="card nsum" style="grid-template-columns:1fr"><div><b>${eurFmt(C.total)}</b><span class="muted tiny">${C.missing ? `bisher berechnet, bei ${C.missing} ${C.missing === 1 ? "Zutat/Eintrag fehlt" : "Zutaten/Einträgen fehlt"} der Preis` : "Gesamtkosten des Tages"}${C.giftN ? ` · ${C.giftN} geschenkt${C.giftValue > 0 ? " (Wert ca. " + eurFmt(C.giftValue) + ", nicht mitgezählt)" : ""}` : ""}</span></div></div>
       ${C.missing ? `<div class="muted small" style="margin:10px 2px 4px">Tippe auf „Preis fehlt“, um direkt zum Lebensmittel zu springen und den Preis einzutragen.</div>` : ""}
@@ -2177,7 +2178,7 @@ function gapSheetHtml() {
 }
 const GAP_SCHEMA = { type: "OBJECT", properties: { tips: { type: "ARRAY", items: { type: "OBJECT", properties: { title: { type: "STRING" }, why: { type: "STRING" } }, required: ["title", "why"] } }, note: { type: "STRING" } }, required: ["tips"] };
 async function askGapAi(a, date, meal) {
-  const eaten = dayEntries(date).map(e => `${e.name} ${r0(e.grams)} g`).join(", ") || "noch nichts";
+  const eaten = dayEntries(date).map(e => `${e.name} ${nde(e.grams, 2)} g`).join(", ") || "noch nichts";
   const prompt = `Du bist eine kurze, sachliche Ernährungs-Hilfe. Gegessen wurde heute: ${eaten}. Bisher ${r0(a.t.kcal)} kcal, Eiweiß ${r0(a.t.p)} g, Kohlenhydrate ${r0(a.t.c)} g, Fett ${r0(a.t.f)} g. Tagesziel ${r0(a.g.kcal)} kcal, Eiweiß ${r0(a.g.p)} g, Kohlenhydrate ${r0(a.g.c)} g, Fett ${r0(a.g.f)} g. Es ist ${new Date().getHours()} Uhr. Der Nutzer möchte Vorschläge für: ${meal.name}. Nenne bis zu 4 konkrete Ideen für genau diese Mahlzeit (deutsche Alltagslebensmittel mit Mengen und ungefähren Kalorien), die zu den restlichen Kalorien des Tages passen und Lücken bei Makros sowie wahrscheinlich knappen Vitaminen und Mineralstoffen schließen. Erkläre in "why" in einem Satz, was sie ergänzen. Mikronährstoffe sind nur grobe Einschätzungen, schreibe das im Feld "note" in einem kurzen Satz. Antworte nur mit JSON: {"tips":[{"title":"…","why":"…"}],"note":"…"}`;
   const body = JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { responseMimeType: "application/json", responseSchema: GAP_SCHEMA, maxOutputTokens: 900, temperature: 0.5, thinkingConfig: { thinkingBudget: 0 } } });
   const leanBody = JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { responseMimeType: "application/json", maxOutputTokens: 900 } });
