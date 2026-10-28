@@ -154,6 +154,31 @@ function coffeeRemove(d) {
   if (x.ml > CF_STEP + 0.5) x.ml -= CF_STEP; else l.pop();
   if (l.length) D.coffee[d] = l; else if (D.coffee) delete D.coffee[d]; save(); render();
 }
+/* Seite zum Bearbeiten aller Kaffee-Einträge eines Tages (Uhrzeit, Menge, Löschen, Hinzufügen) */
+function coffeeEditSheet(d) {
+  const rows = cupsOf(d).map(x => ({ t: x.t, ml: x.ml })), today = d === iso(new Date());
+  const s = sheet(`<h3>Kaffee bearbeiten</h3><div class="muted small" style="margin:-6px 0 12px">${niceDate(d)}, ${fromIso(d).toLocaleDateString("de-DE", { day: "numeric", month: "long" })}. Ändere Uhrzeit und Menge oder lösche einen Eintrag.</div><div id="ceList"></div>
+    <button class="btn sec block" style="margin-top:10px" id="ceAdd">+ Eintrag hinzufügen</button>
+    <button class="btn block" style="margin-top:14px" id="ceSave">Speichern</button><button class="btn sec block" style="margin-top:8px" id="ceCancel">Abbrechen</button>`);
+  const draw = () => {
+    $("#ceList", s).innerHTML = rows.length ? rows.map((x, i) => `<div class="cerow" data-i="${i}"><input type="time" data-ce="t" value="${timeOk(x.t) ? x.t : ""}" aria-label="Uhrzeit"><div class="cemlw"><input type="text" inputmode="decimal" data-ce="ml" value="${String(Math.round(x.ml * 10) / 10).replace(".", ",")}" aria-label="Menge in ml"><span class="muted small">ml</span></div><button class="iconbtn" data-ce="del" aria-label="Eintrag löschen">${icon("trash", 18)}</button></div>`).join("") : `<div class="muted center" style="padding:18px 10px">Keine Einträge an diesem Tag.</div>`;
+    $$(".cerow", s).forEach(r => {
+      const i = +r.dataset.i;
+      $('[data-ce="t"]', r).oninput = e => { rows[i].t = e.target.value; };
+      $('[data-ce="ml"]', r).oninput = e => { rows[i].ml = num(e.target.value); };
+      $('[data-ce="del"]', r).onclick = () => { rows.splice(i, 1); draw(); };
+    });
+  };
+  draw();
+  $("#ceAdd", s).onclick = () => { rows.push({ t: today ? nowT() : "", ml: CF_STEP }); draw(); const l = $$(".cerow", s); if (l.length) $('[data-ce="ml"]', l[l.length - 1]).focus(); };
+  $("#ceCancel", s).onclick = closeSheet;
+  $("#ceSave", s).onclick = () => {
+    if (rows.some(x => !(x.ml > 0 && x.ml <= 2000))) return toast("Jede Menge muss zwischen 1 und 2000 ml liegen");
+    const out = rows.map(x => ({ t: timeOk(x.t) ? x.t : "", ml: Math.round(x.ml * 10) / 10 })).sort((a, b) => (a.t || "99:99").localeCompare(b.t || "99:99"));
+    D.coffee = D.coffee || {}; if (out.length) D.coffee[d] = out; else delete D.coffee[d];
+    save(); closeSheet(); render(); toast("Gespeichert");
+  };
+}
 function coffeeCustom(d) {
   const el = $("#cfCustom"), v = el ? num(el.value) : 0;
   if (!(v > 0) || v > 2000) return toast("Bitte eine Menge zwischen 1 und 2000 ml eingeben");
@@ -191,7 +216,7 @@ function coffeeCard(d) {
       <div class="muted small">${P.why === "limit" ? "Mit " + r0(P.tot0) + " mg Koffein bist du beim Limit von " + CF_DAY_MAX + " mg pro Tag." : "Weiterer Kaffee ließe bis " + cf.sleep + " zu viel Koffein im Körper (mehr als " + cf.rest + " mg)."}</div>${lv}</div>`;
   }
   return `<section class="coffeecard"><div class="cf-top"><div class="cf-l"><span class="cf-ic" aria-hidden="true">☕</span><div><b>Kaffee</b><div class="muted tiny">${cups.length ? `${r0(ml)} ml · ca. ${r0(mgOfMl(ml))} mg Koffein${ts.length ? " · " + ts.join(", ") : ""}` : "Noch kein Kaffee an diesem Tag"}</div></div></div>
-    <div class="cf-r"><button class="iconbtn" data-act="coffeeDel" aria-label="100 ml weniger" ${cups.length ? "" : "disabled"}>−</button><b class="cf-n">${r0(ml)}<small>ml</small></b><button class="iconbtn" data-act="coffeeAdd" aria-label="100 ml mehr">+</button></div></div>
+    <div class="cf-r"><button class="iconbtn" data-act="coffeeEdit" aria-label="Kaffee-Einträge bearbeiten">${icon("pen", 18)}</button><button class="iconbtn" data-act="coffeeDel" aria-label="100 ml weniger" ${cups.length ? "" : "disabled"}>−</button><b class="cf-n">${r0(ml)}<small>ml</small></b><button class="iconbtn" data-act="coffeeAdd" aria-label="100 ml mehr">+</button></div></div>
     <div class="cf-custom"><input type="text" inputmode="decimal" id="cfCustom" placeholder="Eigene Menge (ml)" autocomplete="off"><button class="btn sec" data-act="coffeeCustom">Hinzufügen</button></div>
     <div class="muted tiny" style="margin-top:6px">+ und − ändern um ${CF_STEP} ml, mit „Hinzufügen“ trägst du eine eigene Menge ein.</div>
     ${plan}
@@ -269,6 +294,8 @@ const IC = {
   search: '<circle cx="11" cy="11" r="6.5"/><path d="m16 16 4 4"/>',
   scan: '<path d="M4 8V6a2 2 0 0 1 2-2h2M16 4h2a2 2 0 0 1 2 2v2M20 16v2a2 2 0 0 1-2 2h-2M8 20H6a2 2 0 0 1-2-2v-2M7 12h10"/>',
   cal: '<rect x="4" y="5" width="16" height="15" rx="3"/><path d="M8 3v4M16 3v4M4 10h16"/>',
+  pen: '<path d="M4 20h4L19 9a2.8 2.8 0 0 0-4-4L4 16z"/><path d="m13.5 6.5 4 4"/>',
+  trash: '<path d="M5 7h14M10 11v6M14 11v6M6.5 7l1 12a1.5 1.5 0 0 0 1.5 1.4h6a1.5 1.5 0 0 0 1.5-1.4l1-12M9.5 7V5a1.5 1.5 0 0 1 1.5-1.5h2A1.5 1.5 0 0 1 14.5 5v2"/>',
 };
 const icon = (n, s = 22, w = 2) => `<svg class="ic" width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round">${IC[n]}</svg>`;
 const fmt = n => Math.round(n).toLocaleString("de-DE");
@@ -317,7 +344,9 @@ function viewToday() {
   <button class="btn sec block gapbtn" data-act="nutri">Nährstoffe im Detail</button>
   <button class="btn block gapbtn" data-act="gaps">${icon("plus", 18, 2.4)}KI-Vorschläge für eine Mahlzeit</button>
   <section class="exportcard"><b>Tag exportieren</b><div class="muted small">Alles, was du an diesem Tag gegessen hast, inkl. Rezept-Zutaten, als Textdatei – z. B. für eine KI-Analyse.</div>
-    <div class="grid2"><button class="btn" data-act="exportDay">Als Datei</button><button class="btn sec" data-act="copyDay">Kopieren</button></div></section>`;
+    <div class="grid2"><button class="btn" data-act="exportDay">Als Datei</button><button class="btn sec" data-act="copyDay">Kopieren</button></div></section>
+  <section class="exportcard"><b>Kosten des Tages</b><div class="muted small">Was dein Tag gekostet hat, berechnet aus den Preisen deiner Lebensmittel (bei Rezepten anteilig pro Zutat).</div>
+    <button class="btn block" data-act="costDay">Kosten berechnen</button></section>`;
 }
 
 /* ---- Woche ---- */
@@ -1651,23 +1680,30 @@ function recipeSyncSheet(f, oldName, hits) {
     save(); closeSheet(); render(); toast(hits.length + (hits.length === 1 ? " Rezept aktualisiert" : " Rezepte aktualisiert"));
   };
 }
-function foodEdit(f) {
-  const s = sheet(`<h3>${f ? "Lebensmittel bearbeiten" : "Neues Lebensmittel"}</h3>${foodForm(f)}
+/* after: wird nach Speichern/Abbrechen statt „Sheet schließen“ aufgerufen (z. B. zurück zur Kostenübersicht);
+   draft: f ist ein Entwurf (neues Lebensmittel aus einem Eintrag), wird beim Speichern neu angelegt */
+function foodEdit(f, after, draft) {
+  const existing = f && !draft;
+  const s = sheet(`<h3>${existing ? "Lebensmittel bearbeiten" : "Neues Lebensmittel"}</h3>${foodForm(f)}
     <button class="btn block" style="margin-top:14px" id="fs">Speichern</button>
-    ${f ? `<button class="btn danger block" style="margin-top:8px" id="fd">Löschen</button>` : ""}
+    ${existing ? `<button class="btn danger block" style="margin-top:8px" id="fd">Löschen</button>` : ""}
     <button class="btn sec block" style="margin-top:8px" id="fb">Abbrechen</button>`);
   bindPaste(s, () => { closeSheet(); render(); });
   $("#fs", s).onclick = () => {
-    const n = readFoodForm(s, f); if (!n) return;
-    const oldName = f ? String(f.name).toLowerCase() : "";
-    if (f) { Object.assign(f, n); if (!(n.price > 0)) { delete f.price; delete f.priceG; } } else D.foods.push(n);
+    const n = readFoodForm(s, existing ? f : null); if (!n) return;
+    const oldName = existing ? String(f.name).toLowerCase() : "";
+    const nutKey = x => [x.name, x.kcal || 0, x.protein || 0, x.carbs || 0, x.fat || 0, ...MICRO.map(m => x[m.fk] || 0)].join("|");
+    const changed = existing && nutKey(f) !== nutKey(n);
+    if (existing) { Object.assign(f, n); if (!(n.price > 0)) { delete f.price; delete f.priceG; } } else D.foods.push(n);
     save();
-    const hits = f ? D.recipes.filter(r => (r.items || []).some(i => String(i.name).toLowerCase() === oldName)) : [];
+    const hits = changed ? D.recipes.filter(r => (r.items || []).some(i => String(i.name).toLowerCase() === oldName)) : [];
     if (hits.length) return recipeSyncSheet(f, oldName, hits);
+    if (after) { render(); toast("Gespeichert"); return after(); }
     closeSheet(); render(); toast("Gespeichert");
   };
-  if (f) $("#fd", s).onclick = () => { D.foods = D.foods.filter(x => x !== f); save(); closeSheet(); render(); };
-  $("#fb", s).onclick = () => { closeSheet(); };
+  if (existing) $("#fd", s).onclick = () => { D.foods = D.foods.filter(x => x !== f); save(); closeSheet(); render(); };
+  $("#fb", s).onclick = () => { if (after) after(); else closeSheet(); };
+  if (after && $("#fPrice", s)) setTimeout(() => $("#fPrice", s) && $("#fPrice", s).focus(), 250);
 }
 
 /* ---------- CSV ---------- */
@@ -1752,6 +1788,49 @@ const csvOf = (head, rows) => "﻿" + [head.join(";")].concat(rows.map(r => r.ma
 /* ---- Protokoll für KI-Analyse (Tag/Zeitraum) ---- */
 const nde = (v, d = 1) => (Math.round(v * Math.pow(10, d)) / Math.pow(10, d)).toLocaleString("de-DE", { maximumFractionDigits: d });
 const dLong = x => fromIso(x).toLocaleDateString("de-DE", { weekday: "long", day: "2-digit", month: "2-digit", year: "numeric" });
+/* ---------- Kosten des Tages ---------- */
+/* Preis je Eintrag: Einzel-Lebensmittel = Preis des Lebensmittels (gleicher Name) für die gegessene Menge.
+   Rezept = Summe der Zutaten: jede Zutat (mit ihrer Menge in diesem Eintrag, also anteilig) zum Preis des gleichnamigen Lebensmittels. */
+function foodByName(name, brand) {
+  const nm = String(name || "").toLowerCase(), all = D.foods.filter(x => x.name.toLowerCase() === nm);
+  return (brand && all.find(x => (x.brand || "").toLowerCase() === String(brand).toLowerCase())) || all.find(x => hasPrice(x)) || all[0] || null;
+}
+const rdObj = o => Object.fromEntries(Object.entries(o).map(([k, v]) => [k, typeof v === "number" ? Math.round(v * 100) / 100 : v]));
+function dayCost(date) {
+  const items = dayEntries(date).map(e => {
+    const ings = entryIngs(e), parts = [];
+    if (ings) ings.filter(i => !i.off).forEach(i => { const f = foodByName(i.name); parts.push({ name: i.name, grams: i.grams, food: f, cost: priceOf(f, i.grams), draft: rdObj({ name: i.name, kcal: i.kcal, protein: i.protein, carbs: i.carbs, fat: i.fat, ...pick100(i), serving: 100 }) }); });
+    else { const f = foodByName(e.name, e.brand), k = e.grams > 0 ? 100 / e.grams : 0; parts.push({ name: e.name, grams: e.grams, food: f, cost: priceOf(f, e.grams), draft: rdObj({ name: e.name, brand: e.brand || "", kcal: e.kcal * k, protein: e.p * k, carbs: e.c * k, fat: e.f * k, ...Object.fromEntries(MICRO.filter(m => hasN(e[m.ek])).map(m => [m.fk, e[m.ek] * k])), serving: 100 }) }); }
+    const known = parts.filter(x => x.cost != null), missing = parts.filter(x => x.cost == null);
+    return { e, ings: !!ings, parts, cost: known.reduce((a, x) => a + x.cost, 0), missing };
+  });
+  const total = items.reduce((a, x) => a + x.cost, 0), missing = items.reduce((a, x) => a + x.missing.length, 0);
+  return { items, total, missing };
+}
+function costSheet(date) {
+  date = date || ui.date;
+  const C = dayCost(date), back = () => costSheet(date);
+  const head = `<div class="row between" style="margin:-4px 0 12px"><button class="iconbtn" id="ksPrev" aria-label="Vorheriger Tag">${icon("left", 18)}</button><div style="text-align:center"><h3 style="margin:0">Kosten</h3><div class="muted small">${niceDate(date)}, ${fromIso(date).toLocaleDateString("de-DE", { day: "numeric", month: "long" })}</div></div><button class="iconbtn" id="ksNext" aria-label="Nächster Tag">${icon("right", 18)}</button></div>`;
+  let body;
+  if (!C.items.length) body = `<div class="muted center" style="padding:28px 10px">An diesem Tag ist noch nichts eingetragen.</div>`;
+  else {
+    const partRow = (x, k, j) => `<div class="ksrow ${x.cost == null ? "miss" : ""}" ${x.cost == null ? `data-fix="${k}.${j}" role="button" tabindex="0"` : ""}><span class="kn">${esc(x.name)} <span class="muted tiny">${r0(x.grams)} g</span></span><span class="kv">${x.cost != null ? eurFmt(x.cost) : "Preis fehlt ›"}</span></div>`;
+    const rows = C.items.map((it, k) => {
+      if (!it.ings) return partRow(it.parts[0], k, 0).replace('class="ksrow', 'class="ksrow main');
+      return `<div class="ksrec"><div class="ksrow main"><span class="kn">${esc(it.e.name)} <span class="muted tiny">Rezept · ${r0(it.e.grams)} g</span></span><span class="kv">${eurFmt(it.cost)}${it.missing.length ? "*" : ""}</span></div>${it.parts.map((x, j) => partRow(x, k, j).replace('class="ksrow', 'class="ksrow sub')).join("")}</div>`;
+    }).join("");
+    body = `<div class="card nsum" style="grid-template-columns:1fr"><div><b>${eurFmt(C.total)}</b><span class="muted tiny">${C.missing ? `bisher berechnet, bei ${C.missing} ${C.missing === 1 ? "Zutat/Eintrag fehlt" : "Zutaten/Einträgen fehlt"} der Preis` : "Gesamtkosten des Tages"}</span></div></div>
+      ${C.missing ? `<div class="muted small" style="margin:10px 2px 4px">Tippe auf „Preis fehlt“, um direkt zum Lebensmittel zu springen und den Preis einzutragen.</div>` : ""}
+      <div class="list" style="padding:4px 14px;margin-top:10px">${rows}</div>
+      <div class="muted tiny" style="margin:10px 4px 0">Der Preis kommt aus „Meine Lebensmittel“ (Preis für eine Menge). Bei Rezepten zählt jede Zutat anteilig für die Menge, die du gegessen hast. Zugeordnet wird über den Namen.${C.items.some(i => i.ings && i.missing.length) ? " * = unvollständig." : ""}</div>`;
+  }
+  const s = sheet(head + body + `<button class="btn sec block" style="margin-top:16px" id="ksClose">Schließen</button>`);
+  $("#ksClose", s).onclick = closeSheet;
+  $("#ksPrev", s).onclick = () => costSheet(addDays(date, -1));
+  $("#ksNext", s).onclick = () => costSheet(addDays(date, 1));
+  $$("[data-fix]", s).forEach(el => { const go = () => { const [k, j] = el.dataset.fix.split(".").map(Number), x = C.items[k].parts[j]; if (x.food) foodEdit(x.food, back); else foodEdit(x.draft, back, true); }; el.onclick = go; el.onkeydown = ev => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); go(); } }; });
+}
+
 function recipeFor(e) { return (e.rid && D.recipes.find(r => r.id === e.rid)) || D.recipes.find(r => r.name === e.name) || null; }
 function buildReport(from, to) {
   for (let d = from; d <= to; d = addDays(d, 1)) fillMissingMicro(dayEntries(d));
@@ -2143,8 +2222,10 @@ document.addEventListener("click", async ev => {
   else if (a === "toggleMeal") { ui.open[t.dataset.meal] = !ui.open[t.dataset.meal]; render(); }
   else if (a === "add") openAdd(t.dataset.meal);
   else if (a === "editEntry") editEntry(t.dataset.id);
+  else if (a === "costDay") costSheet(ui.date);
   else if (a === "coffeeAdd") coffeeAdd(ui.date, CF_STEP);
   else if (a === "coffeeCustom") coffeeCustom(ui.date);
+  else if (a === "coffeeEdit") coffeeEditSheet(ui.date);
   else if (a === "coffeeDel") coffeeRemove(ui.date);
   else if (a === "period") { ui.period = +t.dataset.v; ui.weekOffset = 0; render(); }
   else if (a === "cpreset") {
