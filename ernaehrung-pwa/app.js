@@ -129,7 +129,7 @@ function calc(food, grams) {
 
 /* Preis: food.price (€) gilt für food.priceG (g/ml) */
 const eurFmt = v => v.toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " €";
-const hasPrice = f => f && f.price > 0 && f.priceG > 0;
+const hasPrice = f => !!f && typeof f.price === "number" && f.price >= 0 && f.priceG > 0; // price 0 = kostenlos
 const priceOf = (f, grams) => hasPrice(f) ? f.price * grams / f.priceG : undefined;
 
 /* ---- Kaffee-Zähler in ml: D.coffee[datum] = Liste { t: Uhrzeit oder "", ml } (ältere Tage: Liste von Uhrzeiten = je eine Portion) ---- */
@@ -658,7 +658,7 @@ function pickFood(f, fromOnline) {
     <button class="btn sec block" style="margin-top:8px" id="pback">Zurück</button>`);
   const gr = $("#gr", s);
   const upd = () => { const c = calc(f, num(gr.value)); $("#pv", s).innerHTML = `<div class="row between"><b style="font-size:22px">${r0(c.kcal)} kcal</b><span class="small"><span class="dot" style="background:var(--p)"></span>E ${r1(c.p)} <span class="dot" style="background:var(--c)"></span>KH ${r1(c.c)} <span class="dot" style="background:var(--f)"></span>F ${r1(c.f)}</span></div>`; };
-  const updP = () => { const pv = priceOf(f, num(gr.value)); $("#ppv", s).textContent = pv != null ? "≈ " + eurFmt(pv) + " für diese Menge" : ""; };
+  const updP = () => { const pv = priceOf(f, num(gr.value)); $("#ppv", s).textContent = pv == null ? "" : pv === 0 ? "Kostenlos" : "≈ " + eurFmt(pv) + " für diese Menge"; };
   gr.oninput = () => { upd(); updP(); }; upd(); updP();
   $$("[data-m]", s).forEach(b => b.onclick = () => { gr.value = r0(serving * +b.dataset.m); upd(); updP(); });
   $("#pback", s).onclick = () => openAdd();
@@ -1028,8 +1028,8 @@ function foodForm(f) {
     <div><label>davon gesättigte Fettsäuren (g)</label><input type="text" inputmode="decimal" id="fSat" value="${v("sat")}"></div><div><label>Salz (g)</label><input type="text" inputmode="decimal" id="fSalt" value="${v("salt")}"></div></div>
     <label>Portionsgröße (g)</label><input type="text" inputmode="decimal" id="fServ" value="${v("serving") || 100}">
     <div class="muted small" style="margin-top:14px">Preis (optional)</div>
-    <div class="grid2"><div><label>Preis (€)</label><input type="text" inputmode="decimal" id="fPrice" placeholder="z. B. 1,29" value="${f.price > 0 ? String(f.price).replace(".", ",") : ""}"></div><div><label>für Menge (g oder ml)</label><input type="text" inputmode="decimal" id="fPriceG" placeholder="z. B. 500" value="${f.priceG > 0 ? String(f.priceG).replace(".", ",") : ""}"></div></div>
-    <div class="muted tiny" id="fPriceHint" style="margin-top:6px">${hasPrice(f) ? "≈ " + eurFmt(f.price / f.priceG * 100) + " pro 100 g" : "Was kostet die Packung und wie viel ist drin? Daraus rechnet die App den Preis pro Menge aus."}</div>`;
+    <div class="grid2"><div><label>Preis (€)</label><input type="text" inputmode="decimal" id="fPrice" placeholder="z. B. 1,29" value="${hasPrice(f) ? String(f.price).replace(".", ",") : ""}"></div><div><label>für Menge (g oder ml)</label><input type="text" inputmode="decimal" id="fPriceG" placeholder="z. B. 500" value="${f.priceG > 0 ? String(f.priceG).replace(".", ",") : ""}"></div></div>
+    <div class="muted tiny" id="fPriceHint" style="margin-top:6px">${hasPrice(f) ? (f.price === 0 ? "Kostenlos" : "≈ " + eurFmt(f.price / f.priceG * 100) + " pro 100 g") : "Was kostet die Packung und wie viel ist drin? Daraus rechnet die App den Preis pro Menge aus."}</div>`;
 }
 /* Lebensmittel aus eingefügtem Text (CSV, Tab, JSON) */
 const FOOD_KEYS = { name: "name", bezeichnung: "name", lebensmittel: "name", produkt: "name", marke: "brand", brand: "brand", barcode: "barcode", ean: "barcode",
@@ -1043,9 +1043,12 @@ function normFood(o) {
   const out = { name: "", brand: "", barcode: "", kcal: 0, protein: 0, carbs: 0, fat: 0, sugar: 0, fiber: 0, sat: 0, salt: 0, serving: 100 };
   Object.entries(o).forEach(([k, v]) => {
     const key = foodKey(k); if (!key) return;
+    if ((key === "price" || key === "priceG") && String(v ?? "").trim() === "") return; // leer = kein Preis (0 = kostenlos)
     out[key] = ["name", "brand", "barcode"].includes(key) ? String(v ?? "").trim() : num(String(v ?? ""));
   });
   out.barcode = out.barcode.replace(/\D/g, ""); out.serving = out.serving || 100;
+  if (out.price != null) { if (!(out.priceG > 0)) { if (out.price === 0) out.priceG = 100; else { delete out.price; delete out.priceG; } } }
+  else delete out.priceG;
   return out.name ? out : null;
 }
 function parseFoodsText(raw) {
@@ -1090,7 +1093,7 @@ function bindPaste(root, onMulti) {
       const n = (v, keep) => v || keep ? String(v).replace(".", ",") : "";
       set("#fName", f.name); set("#fBrand", f.brand); if (f.barcode) set("#fBar", f.barcode);
       set("#fKcal", n(f.kcal, true)); set("#fP", n(f.protein, true)); set("#fC", n(f.carbs, true)); set("#fF", n(f.fat, true));
-      set("#fS", n(f.sugar)); set("#fFi", n(f.fiber)); set("#fSat", n(f.sat)); set("#fSalt", n(f.salt)); if (f.price > 0 && f.priceG > 0) { set("#fPrice", n(f.price)); set("#fPriceG", n(f.priceG)); } set("#fServ", n(f.serving, true));
+      set("#fS", n(f.sugar)); set("#fFi", n(f.fiber)); set("#fSat", n(f.sat)); set("#fSalt", n(f.salt)); if (hasPrice(f)) { set("#fPrice", n(f.price, true)); set("#fPriceG", n(f.priceG, true)); } set("#fServ", n(f.serving, true));
       ta.value = ""; toast("Felder ausgefüllt. Bitte kurz prüfen und speichern.");
     } else {
       list.forEach(upsertFood); save(); toast(list.length + " Lebensmittel gespeichert"); onMulti();
@@ -1103,17 +1106,17 @@ function bindPaste(root, onMulti) {
 /* Live-Hinweis zum Preis im Lebensmittelformular */
 function bindPriceHint(root) {
   const a = $("#fPrice", root), b = $("#fPriceG", root), h = $("#fPriceHint", root); if (!a || !b || !h) return;
-  const upd = () => { const p = num(a.value), g = num(b.value); if (p > 0 && g > 0) h.textContent = "≈ " + eurFmt(p / g * 100) + " pro 100 g"; else if (p > 0 || g > 0) h.textContent = "Bitte Preis und Menge angeben."; };
+  const upd = () => { const p = num(a.value), g = num(b.value); if (a.value.trim() !== "" && p === 0) h.textContent = "Kostenlos"; else if (p > 0 && g > 0) h.textContent = "≈ " + eurFmt(p / g * 100) + " pro 100 g"; else if (p > 0 || g > 0) h.textContent = "Bitte Preis und Menge angeben."; };
   a.oninput = b.oninput = upd;
 }
 function readFoodForm(root, base) {
   const name = $("#fName", root).value.trim();
   if (!name) { toast("Bitte einen Namen eingeben"); return null; }
-  const pr = $("#fPrice", root) ? num($("#fPrice", root).value) : 0, pg = $("#fPriceG", root) ? num($("#fPriceG", root).value) : 0;
+  const prTxt = $("#fPrice", root) ? $("#fPrice", root).value.trim() : "", pr = num(prTxt), pg = $("#fPriceG", root) ? num($("#fPriceG", root).value) : 0;
   const out = { ...(base || {}), id: (base && base.id) || uid(), name, brand: $("#fBrand", root).value.trim(), barcode: $("#fBar", root).value.replace(/\D/g, ""),
     kcal: num($("#fKcal", root).value), protein: num($("#fP", root).value), carbs: num($("#fC", root).value), fat: num($("#fF", root).value),
     sugar: num($("#fS", root).value), fiber: num($("#fFi", root).value), sat: num($("#fSat", root).value), salt: num($("#fSalt", root).value), serving: num($("#fServ", root).value) || 100, used: (base && base.used) || 0 };
-  if (pr > 0 && pg > 0) { out.price = pr; out.priceG = pg; } else { delete out.price; delete out.priceG; }
+  if (prTxt !== "" && pr >= 0 && (pg > 0 || pr === 0)) { out.price = pr; out.priceG = pg > 0 ? pg : 100; } else { delete out.price; delete out.priceG; } // 0 € = kostenlos (Menge optional)
   return out;
 }
 /* Mehrere Gerichte auf einmal (z. B. Buffet): CSV einfügen -> jede Zeile ein Tagebucheintrag, nichts landet in „Meine Lebensmittel“ */
@@ -1694,7 +1697,7 @@ function foodEdit(f, after, draft) {
     const oldName = existing ? String(f.name).toLowerCase() : "";
     const nutKey = x => [x.name, x.kcal || 0, x.protein || 0, x.carbs || 0, x.fat || 0, ...MICRO.map(m => x[m.fk] || 0)].join("|");
     const changed = existing && nutKey(f) !== nutKey(n);
-    if (existing) { Object.assign(f, n); if (!(n.price > 0)) { delete f.price; delete f.priceG; } } else D.foods.push(n);
+    if (existing) { Object.assign(f, n); if (n.price == null) { delete f.price; delete f.priceG; } } else D.foods.push(n);
     save();
     const hits = changed ? D.recipes.filter(r => (r.items || []).some(i => String(i.name).toLowerCase() === oldName)) : [];
     if (hits.length) return recipeSyncSheet(f, oldName, hits);
@@ -1742,7 +1745,7 @@ function importCsv(text) {
     const name = g("name"); if (!name) return;
     const f = { name, brand: g("brand"), barcode: g("barcode").replace(/\D/g, ""), kcal: num(g("kcal")), protein: num(g("protein")), carbs: num(g("carbs")), fat: num(g("fat")), sugar: num(g("sugar")), fiber: num(g("fiber")), sat: num(g("sat")), salt: num(g("salt")), serving: num(g("serving")) || 100 };
     if (idx.sat == null) delete f.sat; if (idx.salt == null) delete f.salt;
-    { const pr = num(g("price")), pg = num(g("priceG")); if (pr > 0 && pg > 0) { f.price = pr; f.priceG = pg; } }
+    { const prT = g("price"), pr = num(prT), pg = num(g("priceG")); if (prT !== "" && pr >= 0 && (pg > 0 || pr === 0)) { f.price = pr; f.priceG = pg > 0 ? pg : 100; } }
     const ex = D.foods.find(x => (f.barcode && x.barcode === f.barcode) || (!f.barcode && !x.barcode && x.name.toLowerCase() === f.name.toLowerCase() && x.brand === f.brand));
     if (ex) { Object.assign(ex, f); updated++; } else { D.foods.push({ ...f, id: uid(), used: 0 }); added++; }
   });
