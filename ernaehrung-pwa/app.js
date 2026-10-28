@@ -131,7 +131,8 @@ function calc(food, grams) {
 /* Preis: food.price (€) gilt für food.priceG (g/ml) */
 const eurFmt = v => v.toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " €";
 const hasPrice = f => !!f && typeof f.price === "number" && f.price >= 0 && f.priceG > 0; // price 0 = kostenlos
-const priceOf = (f, grams) => hasPrice(f) ? f.price * grams / f.priceG : undefined;
+/* priceU "piece": Preis gilt für 1 Stück = 1 Portion (f.serving g), egal wie viel es genau wiegt */
+const priceOf = (f, grams) => !hasPrice(f) ? undefined : f.priceU === "piece" && f.serving > 0 ? f.price * grams / f.serving : f.price * grams / f.priceG;
 
 /* ---- Kaffee-Zähler in ml: D.coffee[datum] = Liste { t: Uhrzeit oder "", ml } (ältere Tage: Liste von Uhrzeiten = je eine Portion) ---- */
 const CF_HALF = 5; // Halbwertszeit Koffein ca. 5 h (Tageslimit und Rest zum Einschlafen sind einstellbar)
@@ -686,7 +687,8 @@ function pickFood(f, fromOnline) {
   const s = sheet(`<h3>${esc(f.name)}</h3><div class="muted small">${f.brand ? esc(f.brand) + " · " : ""}pro 100 g: ${r0(f.kcal)} kcal · E ${r1(f.protein)} · KH ${r1(f.carbs)} · F ${r1(f.fat)}</div>
     <label>Menge (g oder ml)</label><div class="row"><input type="text" inputmode="decimal" id="gr" value="${gS(serving)}">
     <button class="chip" data-m="0.5">½</button><button class="chip" data-m="1">1×</button><button class="chip" data-m="2">2×</button></div>
-    <div class="muted tiny">1× = Portion ${gS(serving)} g</div>
+    <div class="row" style="margin-top:8px;gap:8px"><label style="margin:0;flex:none">oder Stück</label><input type="text" inputmode="decimal" id="gs" style="max-width:90px" aria-label="Anzahl Stück"><span class="muted small">à ${gS(serving)} g</span></div>
+    <div class="muted tiny">1 Stück = 1 Portion = ${gS(serving)} g (die Portionsgröße stellst du im Lebensmittel ein)</div>
     <div class="card" style="margin-top:12px" id="pv"></div>
     <div class="muted small" id="ppv" style="margin:6px 2px 0"></div>
     <label>Mahlzeit</label><select id="pm">${MEALS.map(m => `<option value="${m.id}" ${m.id === ui.meal ? "selected" : ""}>${m.name}</option>`).join("")}</select>
@@ -695,8 +697,11 @@ function pickFood(f, fromOnline) {
   const gr = $("#gr", s);
   const upd = () => { const c = calc(f, num(gr.value)); $("#pv", s).innerHTML = `<div class="row between"><b style="font-size:22px">${r0(c.kcal)} kcal</b><span class="small"><span class="dot" style="background:var(--p)"></span>E ${r1(c.p)} <span class="dot" style="background:var(--c)"></span>KH ${r1(c.c)} <span class="dot" style="background:var(--f)"></span>F ${r1(c.f)}</span></div>`; };
   const updP = () => { const pv = priceOf(f, num(gr.value)); $("#ppv", s).textContent = pv == null ? "" : pv === 0 ? "Kostenlos" : "≈ " + eurFmt(pv) + " für diese Menge"; };
-  gr.oninput = () => { upd(); updP(); }; upd(); updP();
-  $$("[data-m]", s).forEach(b => b.onclick = () => { gr.value = gS(serving * +b.dataset.m); upd(); updP(); });
+  const gs = $("#gs", s), syncS = () => { const g = num(gr.value); gs.value = g > 0 && serving > 0 ? gS(g / serving) : ""; };
+  gr.oninput = () => { upd(); updP(); syncS(); };
+  gs.oninput = () => { const n = num(gs.value); if (n > 0) { gr.value = gS(n * serving); upd(); updP(); } };
+  upd(); updP(); syncS();
+  $$("[data-m]", s).forEach(b => b.onclick = () => { gr.value = gS(serving * +b.dataset.m); upd(); updP(); syncS(); });
   $("#pback", s).onclick = () => openAdd();
   $("#pgo", s).onclick = () => {
     const grams = num(gr.value);
@@ -1064,8 +1069,9 @@ function foodForm(f) {
     <div><label>davon gesättigte Fettsäuren (g)</label><input type="text" inputmode="decimal" id="fSat" value="${v("sat")}"></div><div><label>Salz (g)</label><input type="text" inputmode="decimal" id="fSalt" value="${v("salt")}"></div></div>
     <label>Portionsgröße (g)</label><input type="text" inputmode="decimal" id="fServ" value="${v("serving") || 100}">
     <div class="muted small" style="margin-top:14px">Preis (optional)</div>
-    <div class="grid2"><div><label>Preis (€)</label><input type="text" inputmode="decimal" id="fPrice" placeholder="z. B. 1,29" value="${hasPrice(f) ? String(f.price).replace(".", ",") : ""}"></div><div><label>für Menge (g oder ml)</label><input type="text" inputmode="decimal" id="fPriceG" placeholder="z. B. 500" value="${f.priceG > 0 ? String(f.priceG).replace(".", ",") : ""}"></div></div>
-    <div class="muted tiny" id="fPriceHint" style="margin-top:6px">${hasPrice(f) ? (f.price === 0 ? "Kostenlos" : "≈ " + eurFmt(f.price / f.priceG * 100) + " pro 100 g") : "Was kostet die Packung und wie viel ist drin? Daraus rechnet die App den Preis pro Menge aus."}</div>`;
+    <div class="grid2"><div><label>Preis (€)</label><input type="text" inputmode="decimal" id="fPrice" placeholder="z. B. 1,29" value="${hasPrice(f) ? String(f.price).replace(".", ",") : ""}"></div><div><label>Preis gilt für</label><select id="fPriceU"><option value="g">eine Menge (g/ml)</option><option value="piece" ${f.priceU === "piece" ? "selected" : ""}>1 Stück / Portion</option></select></div></div>
+    <div id="fPriceGw" ${f.priceU === "piece" ? 'style="display:none"' : ""}><label>Menge, für die der Preis gilt (g oder ml)</label><input type="text" inputmode="decimal" id="fPriceG" placeholder="z. B. 500" value="${f.priceG > 0 && f.priceU !== "piece" ? String(f.priceG).replace(".", ",") : ""}"></div>
+    <div class="muted tiny" id="fPriceHint" style="margin-top:6px">${hasPrice(f) ? (f.price === 0 ? "Kostenlos" : "≈ " + eurFmt(priceOf(f, 100)) + " pro 100 g") : "Was kostet die Packung und wie viel ist drin? Oder wähle „1 Stück / Portion“, wenn du das Gewicht nicht kennst (z. B. Döner)."}</div>`;
 }
 /* Lebensmittel aus eingefügtem Text (CSV, Tab, JSON) */
 const FOOD_KEYS = { name: "name", bezeichnung: "name", lebensmittel: "name", produkt: "name", marke: "brand", brand: "brand", barcode: "barcode", ean: "barcode",
@@ -1141,9 +1147,16 @@ function bindPaste(root, onMulti) {
 }
 /* Live-Hinweis zum Preis im Lebensmittelformular */
 function bindPriceHint(root) {
-  const a = $("#fPrice", root), b = $("#fPriceG", root), h = $("#fPriceHint", root); if (!a || !b || !h) return;
-  const upd = () => { const p = num(a.value), g = num(b.value); if (a.value.trim() !== "" && p === 0) h.textContent = "Kostenlos"; else if (p > 0 && g > 0) h.textContent = "≈ " + eurFmt(p / g * 100) + " pro 100 g"; else if (p > 0 || g > 0) h.textContent = "Bitte Preis und Menge angeben."; };
-  a.oninput = b.oninput = upd;
+  const a = $("#fPrice", root), b = $("#fPriceG", root), h = $("#fPriceHint", root), u = $("#fPriceU", root), sv = $("#fServ", root), w = $("#fPriceGw", root); if (!a || !b || !h) return;
+  const upd = () => {
+    const piece = u && u.value === "piece", p = num(a.value), g = num(b.value), sg = (sv && num(sv.value)) || 100;
+    if (w) w.style.display = piece ? "none" : "";
+    if (a.value.trim() !== "" && p === 0) h.textContent = "Kostenlos";
+    else if (piece) h.textContent = p > 0 ? "≈ " + eurFmt(p) + " pro Stück. 1 Stück = 1 Portion (" + gS(sg) + " g), also " + eurFmt(p / sg * 100) + " pro 100 g. Ändere oben die Portionsgröße, wenn ein Stück anders wiegt." : "Preis für ein Stück bzw. eine Portion eintragen.";
+    else if (p > 0 && g > 0) h.textContent = "≈ " + eurFmt(p / g * 100) + " pro 100 g";
+    else if (p > 0 || g > 0) h.textContent = "Bitte Preis und Menge angeben.";
+  };
+  a.oninput = b.oninput = upd; if (u) u.onchange = upd; if (sv) sv.addEventListener("input", upd); upd();
 }
 function readFoodForm(root, base) {
   const name = $("#fName", root).value.trim();
@@ -1152,7 +1165,9 @@ function readFoodForm(root, base) {
   const out = { ...(base || {}), id: (base && base.id) || uid(), name, brand: $("#fBrand", root).value.trim(), barcode: $("#fBar", root).value.replace(/\D/g, ""),
     kcal: num($("#fKcal", root).value), protein: num($("#fP", root).value), carbs: num($("#fC", root).value), fat: num($("#fF", root).value),
     sugar: num($("#fS", root).value), fiber: num($("#fFi", root).value), sat: num($("#fSat", root).value), salt: num($("#fSalt", root).value), serving: num($("#fServ", root).value) || 100, used: (base && base.used) || 0 };
-  if (prTxt !== "" && pr >= 0 && (pg > 0 || pr === 0)) { out.price = pr; out.priceG = pg > 0 ? pg : 100; } else { delete out.price; delete out.priceG; } // 0 € = kostenlos (Menge optional)
+  const piece = $("#fPriceU", root) && $("#fPriceU", root).value === "piece";
+  if (prTxt !== "" && pr >= 0 && piece) { out.price = pr; out.priceG = out.serving; out.priceU = "piece"; }
+  else if (prTxt !== "" && pr >= 0 && (pg > 0 || pr === 0)) { out.price = pr; out.priceG = pg > 0 ? pg : 100; delete out.priceU; } else { delete out.price; delete out.priceG; delete out.priceU; } // 0 € = kostenlos (Menge optional)
   return out;
 }
 /* Mehrere Gerichte auf einmal (z. B. Buffet): CSV einfügen -> jede Zeile ein Tagebucheintrag, nichts landet in „Meine Lebensmittel“ */
@@ -1733,7 +1748,7 @@ function foodEdit(f, after, draft) {
     const oldName = existing ? String(f.name).toLowerCase() : "";
     const nutKey = x => [x.name, x.kcal || 0, x.protein || 0, x.carbs || 0, x.fat || 0, ...MICRO.map(m => x[m.fk] || 0)].join("|");
     const changed = existing && nutKey(f) !== nutKey(n);
-    if (existing) { Object.assign(f, n); if (n.price == null) { delete f.price; delete f.priceG; } } else D.foods.push(n);
+    if (existing) { Object.assign(f, n); if (n.price == null) { delete f.price; delete f.priceG; } if (!n.priceU) delete f.priceU; } else D.foods.push(n);
     save();
     const hits = changed ? D.recipes.filter(r => (r.items || []).some(i => String(i.name).toLowerCase() === oldName)) : [];
     if (hits.length) return recipeSyncSheet(f, oldName, hits);
