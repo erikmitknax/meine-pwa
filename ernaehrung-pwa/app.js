@@ -1804,11 +1804,13 @@ function dayCost(date) {
     const ings = entryIngs(e), parts = [];
     if (ings) ings.filter(i => !i.off).forEach(i => { const f = foodByName(i.name); parts.push({ name: i.name, grams: i.grams, food: f, cost: priceOf(f, i.grams), draft: rdObj({ name: i.name, kcal: i.kcal, protein: i.protein, carbs: i.carbs, fat: i.fat, ...pick100(i), serving: 100 }) }); });
     else { const f = foodByName(e.name, e.brand), k = e.grams > 0 ? 100 / e.grams : 0; parts.push({ name: e.name, grams: e.grams, food: f, cost: priceOf(f, e.grams), draft: rdObj({ name: e.name, brand: e.brand || "", kcal: e.kcal * k, protein: e.p * k, carbs: e.c * k, fat: e.f * k, ...Object.fromEntries(MICRO.filter(m => hasN(e[m.ek])).map(m => [m.fk, e[m.ek] * k])), serving: 100 }) }); }
-    const known = parts.filter(x => x.cost != null), missing = parts.filter(x => x.cost == null);
-    return { e, ings: !!ings, parts, cost: known.reduce((a, x) => a + x.cost, 0), missing };
+    const known = parts.filter(x => x.cost != null), gift = !!e.free; // geschenkt / nicht selbst bezahlt
+    const value = known.reduce((a, x) => a + x.cost, 0);
+    return { e, ings: !!ings, parts, gift, value, cost: gift ? 0 : value, missing: gift ? [] : parts.filter(x => x.cost == null) };
   });
   const total = items.reduce((a, x) => a + x.cost, 0), missing = items.reduce((a, x) => a + x.missing.length, 0);
-  return { items, total, missing };
+  const giftN = items.filter(x => x.gift).length, giftValue = items.filter(x => x.gift).reduce((a, x) => a + x.value, 0);
+  return { items, total, missing, giftN, giftValue };
 }
 function costSheet(date) {
   date = date || ui.date;
@@ -1817,18 +1819,22 @@ function costSheet(date) {
   let body;
   if (!C.items.length) body = `<div class="muted center" style="padding:28px 10px">An diesem Tag ist noch nichts eingetragen.</div>`;
   else {
-    const partRow = (x, k, j) => `<div class="ksrow ${x.cost == null ? "miss" : ""}" ${x.cost == null ? `data-fix="${k}.${j}" role="button" tabindex="0"` : ""}><span class="kn">${esc(x.name)} <span class="muted tiny">${r0(x.grams)} g</span></span><span class="kv">${x.cost != null ? eurFmt(x.cost) : "Preis fehlt ›"}</span></div>`;
+    const ck = it => `<label class="ksck" title="Nicht bezahlt (geschenkt)"><input type="checkbox" data-gift="${it.e.id}" ${it.gift ? "checked" : ""} aria-label="Nicht bezahlt, geschenkt: ${esc(it.e.name)}"></label>`;
+    const priceTxt = (it, x) => it.gift ? `<span class="muted">geschenkt</span>` : x.cost != null ? eurFmt(x.cost) : "Preis fehlt ›";
+    const partRow = (it, x, k, j, cls, box) => { const fix = !it.gift && x.cost == null; return `<div class="ksrow ${cls} ${fix ? "miss" : ""} ${it.gift ? "gift" : ""}" ${fix ? `data-fix="${k}.${j}" role="button" tabindex="0"` : ""}>${box ? ck(it) : ""}<span class="kn">${esc(x.name)} <span class="muted tiny">${r0(x.grams)} g</span></span><span class="kv">${priceTxt(it, x)}</span></div>`; };
     const rows = C.items.map((it, k) => {
-      if (!it.ings) return partRow(it.parts[0], k, 0).replace('class="ksrow', 'class="ksrow main');
-      return `<div class="ksrec"><div class="ksrow main"><span class="kn">${esc(it.e.name)} <span class="muted tiny">Rezept · ${r0(it.e.grams)} g</span></span><span class="kv">${eurFmt(it.cost)}${it.missing.length ? "*" : ""}</span></div>${it.parts.map((x, j) => partRow(x, k, j).replace('class="ksrow', 'class="ksrow sub')).join("")}</div>`;
+      if (!it.ings) return partRow(it, it.parts[0], k, 0, "main", true);
+      return `<div class="ksrec"><div class="ksrow main ${it.gift ? "gift" : ""}">${ck(it)}<span class="kn">${esc(it.e.name)} <span class="muted tiny">Rezept · ${r0(it.e.grams)} g</span></span><span class="kv">${it.gift ? `<span class="muted">geschenkt</span>` : eurFmt(it.cost) + (it.missing.length ? "*" : "")}</span></div>${it.parts.map((x, j) => partRow(it, x, k, j, "sub", false)).join("")}</div>`;
     }).join("");
-    body = `<div class="card nsum" style="grid-template-columns:1fr"><div><b>${eurFmt(C.total)}</b><span class="muted tiny">${C.missing ? `bisher berechnet, bei ${C.missing} ${C.missing === 1 ? "Zutat/Eintrag fehlt" : "Zutaten/Einträgen fehlt"} der Preis` : "Gesamtkosten des Tages"}</span></div></div>
+    body = `<div class="card nsum" style="grid-template-columns:1fr"><div><b>${eurFmt(C.total)}</b><span class="muted tiny">${C.missing ? `bisher berechnet, bei ${C.missing} ${C.missing === 1 ? "Zutat/Eintrag fehlt" : "Zutaten/Einträgen fehlt"} der Preis` : "Gesamtkosten des Tages"}${C.giftN ? ` · ${C.giftN} geschenkt${C.giftValue > 0 ? " (Wert ca. " + eurFmt(C.giftValue) + ", nicht mitgezählt)" : ""}` : ""}</span></div></div>
       ${C.missing ? `<div class="muted small" style="margin:10px 2px 4px">Tippe auf „Preis fehlt“, um direkt zum Lebensmittel zu springen und den Preis einzutragen.</div>` : ""}
+      <div class="muted tiny" style="margin:8px 2px 0">Mit dem Haken links markierst du etwas, das du geschenkt bekommen und nicht selbst bezahlt hast. Es kostet dann nichts und zählt nicht in die Summe.</div>
       <div class="list" style="padding:4px 14px;margin-top:10px">${rows}</div>
       <div class="muted tiny" style="margin:10px 4px 0">Der Preis kommt aus „Meine Lebensmittel“ (Preis für eine Menge). Bei Rezepten zählt jede Zutat anteilig für die Menge, die du gegessen hast. Zugeordnet wird über den Namen.${C.items.some(i => i.ings && i.missing.length) ? " * = unvollständig." : ""}</div>`;
   }
   const s = sheet(head + body + `<button class="btn sec block" style="margin-top:16px" id="ksClose">Schließen</button>`);
   $("#ksClose", s).onclick = closeSheet;
+  $$("[data-gift]", s).forEach(cb => { cb.onclick = ev => ev.stopPropagation(); cb.onchange = () => { const e = D.entries.find(x => x.id === cb.dataset.gift); if (!e) return; if (cb.checked) e.free = true; else delete e.free; save(); costSheet(date); }; });
   $("#ksPrev", s).onclick = () => costSheet(addDays(date, -1));
   $("#ksNext", s).onclick = () => costSheet(addDays(date, 1));
   $$("[data-fix]", s).forEach(el => { const go = () => { const [k, j] = el.dataset.fix.split(".").map(Number), x = C.items[k].parts[j]; if (x.food) foodEdit(x.food, back); else foodEdit(x.draft, back, true); }; el.onclick = go; el.onkeydown = ev => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); go(); } }; });
