@@ -267,6 +267,29 @@ html.pv-lock,html.pv-lock body{overflow:hidden}
 .pgroup{display:grid;gap:6px}.pgroup>.pgh{display:flex;align-items:center;gap:10px;font-weight:600}
 .prow{display:flex;gap:10px;align-items:flex-start;padding:8px 10px;border:1px solid var(--line);border-radius:10px;background:var(--surface);cursor:pointer}
 .prow .f{font-weight:600;overflow-wrap:anywhere;white-space:pre-wrap}.prow .b{color:var(--muted);font-weight:400;font-size:.9rem;overflow-wrap:anywhere;max-height:3.2em;overflow:hidden}
+.labmodes{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:10px}
+.labmode{display:grid;gap:4px;justify-items:start;text-align:left;padding:14px;border:1px solid var(--line);border-radius:12px;background:var(--surface);color:inherit;font:inherit;cursor:pointer}
+.labmode:hover:not(:disabled){border-color:var(--accent)}.labmode:disabled{opacity:.5;cursor:default}
+.labmode .ico{font-size:1.5rem}.labmode small{color:var(--muted);font-weight:400}
+.labq{gap:12px}.labtext{font-size:1.05rem;overflow-wrap:anywhere}
+.labstmt{padding:12px;border:1px dashed var(--line);border-radius:10px;overflow-wrap:anywhere}
+.labopts,.labcol{display:grid;gap:8px}
+.labopt{display:flex;gap:10px;align-items:flex-start;text-align:left;padding:12px;border:1px solid var(--line);border-radius:10px;background:var(--surface);color:inherit;font:inherit;cursor:pointer;overflow-wrap:anywhere}
+.labopt .k{flex:none;min-width:1.4em;color:var(--muted);font-family:monospace}
+.labopt.ok{border-color:var(--good);background:color-mix(in srgb,var(--good) 14%,var(--surface))}
+.labopt.bad{border-color:var(--bad);background:color-mix(in srgb,var(--bad) 14%,var(--surface))}
+.labopt.sel{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 16%,var(--surface))}
+.labpairs{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.labfb{display:grid;gap:6px;padding:12px;border-radius:10px;border:1px solid var(--line)}
+.labfb.ok{border-color:var(--good)}.labfb.bad{border-color:var(--bad)}
+.labfb.ok>b{color:var(--good)}.labfb.bad>b{color:var(--bad)}
+.labgaps{line-height:2.3;overflow-wrap:anywhere}
+.labgap{border:0;border-bottom:2px solid var(--accent);background:color-mix(in srgb,var(--accent) 10%,transparent);color:inherit;font:inherit;padding:0 6px;border-radius:4px;cursor:pointer;min-height:1.8em}
+.labgap.f{border-bottom-style:dashed}.labgap.ok{border-bottom-color:var(--good);color:var(--good)}.labgap.bad{border-bottom-color:var(--bad);color:var(--bad)}
+.gapfix{color:var(--good);font-size:.85em}
+.labbank{display:flex;flex-wrap:wrap;gap:8px}
+.labchip{padding:6px 12px;border:1px solid var(--line);border-radius:999px;background:var(--surface);color:inherit;font:inherit;cursor:pointer}
+.labchip:disabled{opacity:.35}
 #r2{position:relative;overflow:hidden;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;touch-action:manipulation}
 #r2::after{content:"";position:absolute;inset:0 auto 0 0;width:0;background:var(--good);opacity:.3;pointer-events:none}
 #r2.holding::after{width:100%;transition:width 1s linear}
@@ -297,6 +320,10 @@ html.pv-lock,html.pv-lock body{overflow:hidden}
       <p id="dueText" style="color:var(--muted);margin-top:6px"></p>
     </div>
     <button class="btn primary" id="startDue" type="button">Jetzt lernen</button>
+  </div>
+  <div class="panel">
+    <div class="row between"><div class="label">Ausblick · neu fällige Karten pro Tag</div><span class="syncnote" id="fcSum"></span></div>
+    <div class="bars" id="fcBars"></div>
   </div>
   <div class="grid cols2">
     <div class="panel">
@@ -397,6 +424,8 @@ html.pv-lock,html.pv-lock body{overflow:hidden}
 </section>
 
 <!-- FOKUS -->
+<section id="tab-labor" hidden class="grid"><div id="labRoot" class="grid"></div></section>
+
 <section id="tab-fokus" hidden class="grid">
   <div class="panel timer">
     <div class="row" role="group" aria-label="Phase">
@@ -534,6 +563,7 @@ function migrateV1(o){
 const TABDEF=[
  {id:"heute",name:"Heute",desc:"Übersicht: fällige Karten, Serie und Fortschritt je Fach. Von hier startest du die Runde."},
  {id:"lernen",name:"Lernen",desc:"Karten abfragen, wahlweise nach Thema oder als gemischter Lernstapel aus mehreren Themen."},
+ {id:"labor",name:"Labor",desc:"Weitere Lernmethoden aus deinen Karten: Multiple Choice, Lückentext, Tippen, Zuordnen und mehr."},
  {id:"fokus",name:"Fokus",desc:"Lerntimer mit Lern- und Pausenphasen (Pomodoro)."},
  {id:"bib",name:"Bibliothek",desc:"Themen, Stapel und Karten verwalten, importieren und PDFs anhängen."}];
 const tabName=t=>t.name||TABDEF.find(x=>x.id===t.id).name;
@@ -1148,6 +1178,13 @@ function renderHome(){
     ?`${due} ${due===1?"Karte wartet":"Karten warten"} auf dich, etwa ${Math.max(1,Math.round(due*0.4))} Min.`
     :(total?"Alles erledigt. Die nächsten Karten werden später fällig.":"Importiere zuerst Karten in der Bibliothek.");
   $("#startDue").disabled=!due;
+  /* Ausblick: wie viele Karten in den nächsten 7 Tagen neu fällig werden */
+  const sot=startOfToday(),fc=Array(8).fill(0);
+  S.decks.forEach(d=>d.cards.forEach(c=>{if(c.p||(c.due||0)<=Date.now())return;const k=Math.floor((c.due-sot)/DAY);if(k>=1&&k<=7)fc[k]++}));
+  $("#dueText").textContent+=fc[1]?` Morgen kommen ${fc[1]} dazu.`:(total&&!fc[1]?" Morgen kommen keine dazu.":"");
+  const fmax=Math.max(5,...fc.slice(1)),fwd=["So","Mo","Di","Mi","Do","Fr","Sa"];
+  $("#fcBars").innerHTML=fc.slice(1).map((n,i)=>`<div><small>${n||""}</small><span class="b${i===0?" today":""}" style="height:${n/fmax*72}%"></span><small>${i===0?"Morgen":fwd[new Date(Date.now()+(i+1)*864e5).getDay()]}</small></div>`).join("");
+  $("#fcSum").textContent=`${fc.slice(1).reduce((a,b)=>a+b,0)} Karten in den nächsten 7 Tagen`;
   const days=[];for(let i=6;i>=0;i--)days.push(t-i);
   const vals=days.map(x=>{const l=S.log[x]||{};return (l.r||0)+(l.q||0)});
   const max=Math.max(5,...vals),wd=["So","Mo","Di","Mi","Do","Fr","Sa"];
@@ -2376,6 +2413,282 @@ function renderKonto(){
     el("p",{class:"syncnote",text:"Änderungen erscheinen innerhalb weniger Sekunden auf allen angemeldeten Geräten. Offline arbeitest du normal weiter, der Abgleich holt sich später nach. PDF-Unterlagen werden nicht synchronisiert (dafür Dropbox)."}),
     err(),el("div",{class:"row"},now,out));
 }
+/* ---------- Labor: weitere Lernmethoden, automatisch aus den vorhandenen Karten ---------- */
+const LABMODES=[
+ {id:"mc",ico:"🔘",name:"Multiple Choice",desc:"Frage lesen, die richtige Antwort aus vier wählen.",min:4},
+ {id:"rev",ico:"↩️",name:"Rückwärts",desc:"Die Antwort ist vorgegeben, du findest die passende Frage.",min:4},
+ {id:"gap",ico:"✏️",name:"Lückentext",desc:"Wichtige Wörter der Antwort fehlen, setze sie aus der Wortbank ein.",min:3},
+ {id:"type",ico:"⌨️",name:"Tippen",desc:"Antwort frei eintippen. Geprüft wird, ob die Stichwörter vorkommen.",min:1},
+ {id:"tf",ico:"✅",name:"Stimmt / Stimmt nicht",desc:"Frage mit einer Antwort: passt sie oder wurde sie vertauscht?",min:4},
+ {id:"match",ico:"🔗",name:"Zuordnen",desc:"Fünf Fragen und fünf Antworten, verbinde die passenden Paare.",min:3},
+ {id:"blitz",ico:"⚡",name:"Blitzrunde",desc:"60 Sekunden, so viele Multiple-Choice-Fragen wie möglich.",min:4}];
+let L={src:"all",n:10},LR=null,labTimer=0;
+function labStop(){clearInterval(labTimer);labTimer=0}
+const labPlain=t=>String(t||"").replace(/\r\n?/g,"\n").split("\n").map(l=>l.replace(BUL,"").trim()).filter(Boolean);
+const labShort=(t,n=110)=>{const s=labPlain(t).slice(0,3).join(" · ");return s.length>n?s.slice(0,n-1).trimEnd()+"…":s};
+const labNorm=s=>String(s||"").toLowerCase().replace(/ß/g,"ss").normalize("NFD").replace(/[̀-ͯ]/g,"").replace(/[^a-z0-9 ]/g," ");
+const labWords=s=>[...new Set(labNorm(s).split(/\s+/).filter(w=>w.length>=4))];
+const labCore=w=>{const m=w.match(/^([^\p{L}\p{N}]*)(.*?)([^\p{L}\p{N}]*)$/u);return {pre:m[1],core:m[2],post:m[3]}};
+/* Falsche Antworten: bevorzugt aus demselben Stapel, nie dieselbe Aussage */
+function labDistract(it,pool,fld,n){
+  const want=labShort(it.c[fld]),seen=new Set([want]),same=[],other=[];
+  shuffle(pool).forEach(x=>{if(x.c===it.c)return;const t=labShort(x.c[fld]);if(!t||seen.has(t))return;seen.add(t);(x.d===it.d?same:other).push(t)});
+  return same.concat(other).slice(0,n);
+}
+function labMake(mode,it,pool){
+  const c=it.c;
+  if(mode==="mc"||mode==="blitz")return {t:"choice",q:c.f,correct:labShort(c.b),opts:shuffle([labShort(c.b),...labDistract(it,pool,"b",3)]),it,full:c.b};
+  if(mode==="rev")return {t:"choice",q:c.b,correct:labShort(c.f),opts:shuffle([labShort(c.f),...labDistract(it,pool,"f",3)]),it,full:c.f,rev:1};
+  if(mode==="tf"){const truth=Math.random()<.5,w=labDistract(it,pool,"b",1)[0];const real=truth||!w;return {t:"tf",q:c.f,shown:real?labShort(c.b,160):w,truth:real,it,full:c.b}}
+  if(mode==="type")return {t:"type",q:c.f,it,full:c.b};
+  if(mode==="gap"){
+    let text=labPlain(c.b).join(" ");if(text.length>260){text=text.slice(0,260);text=text.slice(0,text.lastIndexOf(" ")>100?text.lastIndexOf(" "):260)+" …"}
+    const tk=text.split(" ").map(labCore);
+    let cand=tk.map((x,i)=>x.core.length>=5?i:-1).filter(i=>i>=0);
+    if(!cand.length)cand=tk.map((x,i)=>x.core.length>=4?i:-1).filter(i=>i>=0);
+    if(!cand.length)return null;
+    const k=Math.min(4,Math.max(1,Math.round(cand.length/3)));
+    const gaps=shuffle(cand).slice(0,k).sort((a,b)=>a-b);
+    const ans=gaps.map(i=>tk[i].core),low=new Set(ans.map(a=>a.toLowerCase()));
+    const dis=[];shuffle(pool).forEach(x=>{if(dis.length>=2||x.c===c)return;const ws=labPlain(x.c.b).join(" ").split(" ").map(w=>labCore(w).core).filter(w=>w.length>=5&&!low.has(w.toLowerCase()));if(ws.length)dis.push(ws[Math.floor(Math.random()*ws.length)])});
+    return {t:"gap",q:c.f,tk,gaps,ans,bank:shuffle(ans.concat([...new Set(dis)].filter(d=>!low.has(d.toLowerCase())))),it,full:c.b};
+  }
+  return null;
+}
+/* ----- Auswahl ----- */
+function labRender(){
+  labStop();LR=null;
+  const root=$("#labRoot");root.replaceChildren();
+  const sel=el("select",{});
+  sel.append(el("option",{value:"all",text:"Alles (alle Themen gemischt)"}));
+  if(S.sets.length){const g=el("optgroup",{label:"Lernstapel"});S.sets.forEach(s=>g.append(el("option",{value:"set:"+s.id,text:s.name})));sel.append(g)}
+  if(S.topics.length){const g=el("optgroup",{label:"Einzelne Themen (mit Unterthemen)"});flatTopics().forEach(x=>g.append(el("option",{value:"topic:"+x.t.id,text:topicPath(x.t.id)})));sel.append(g)}
+  if([...sel.options].some(o=>o.value===L.src))sel.value=L.src;else L.src="all";
+  const nsel=el("select",{});[10,20,30].forEach(n=>nsel.append(el("option",{value:n,text:n+" Fragen"})));nsel.value=L.n;
+  const info=el("span",{class:"syncnote"}),grid=el("div",{class:"labmodes"});
+  const draw=()=>{
+    const cnt=cardsOf(parseSrc(L.src)).length;
+    info.textContent=cnt+" Karten in dieser Auswahl";grid.replaceChildren();
+    LABMODES.forEach(m=>{
+      const ok=cnt>=m.min;
+      const b=el("button",{class:"labmode",type:"button"},el("span",{class:"ico","aria-hidden":"true"},m.ico),el("b",{text:m.name}),el("small",{text:ok?m.desc:"Braucht mindestens "+m.min+" Karten."}));
+      if(!ok)b.disabled=true;else b.addEventListener("click",()=>labStart(m.id));
+      grid.append(b);
+    });
+  };
+  sel.addEventListener("change",()=>{L.src=sel.value;draw()});nsel.addEventListener("change",()=>{L.n=+nsel.value});
+  root.append(el("div",{class:"panel"},el("h2",{text:"Labor"}),
+    el("p",{style:"color:var(--muted);margin:6px 0 14px",text:"Hier probierst du weitere Lernmethoden aus. Sie entstehen automatisch aus deinen vorhandenen Karten. Dein Lernstand (Fächer, Termine) ändert sich dabei nicht."}),
+    el("div",{class:"grid cols2"},el("label",{},"Welche Karten?",sel),el("label",{},"Anzahl",nsel)),
+    el("div",{style:"margin-top:10px"},info)),grid);
+  draw();
+}
+function labStart(mode){
+  const pool=cardsOf(parseSrc(L.src));
+  if(!pool.length)return;
+  const order=shuffle(pool);
+  LR={mode,pool,order,qs:[],i:0,ok:0,total:0,wrong:[],tEnd:0,over:false};
+  if(mode==="match"){
+    const chunks=[];const lim=order.slice(0,L.n);
+    for(let i=0;i<lim.length;i+=5){const ch=lim.slice(i,i+5);if(ch.length>=3)chunks.push(ch);else if(chunks.length)chunks[chunks.length-1].push(...ch)}
+    LR.qs=chunks.map(ch=>({t:"match",items:ch}));LR.total=lim.length;
+  }else if(mode==="blitz"){LR.qs=null;LR.tEnd=Date.now()+60000;LR.n=0}
+  else{
+    order.slice(0,L.n).forEach(it=>{const q=labMake(mode,it,pool);if(q)LR.qs.push(q)});
+    LR.total=LR.qs.length;
+    if(!LR.qs.length){toast("Aus diesen Karten lässt sich diese Methode nicht bilden.");labRender();return}
+  }
+  labShow();
+}
+function labHead(root,label){
+  const m=LABMODES.find(x=>x.id===LR.mode);
+  const prog=el("div",{class:"progress"},el("i"));
+  const top=el("div",{class:"row between"},el("b",{text:m.ico+" "+m.name}),el("span",{class:"syncnote",id:"labCount",text:label}),el("button",{class:"btn",type:"button",text:"Beenden",onclick:labRender}));
+  root.append(top,prog);return prog;
+}
+function labShow(){
+  const root=$("#labRoot");root.replaceChildren();labStop();
+  if(LR.mode==="blitz")return labBlitzNext();
+  if(LR.i>=LR.qs.length)return labEnd();
+  const q=LR.qs[LR.i];
+  const prog=labHead(root,(LR.i+1)+" von "+LR.qs.length+" · "+LR.ok+" richtig");
+  prog.firstChild.style.width=(LR.i/LR.qs.length*100)+"%";
+  const body=el("div",{class:"panel grid labq"});root.append(body);
+  ({choice:labChoice,tf:labTF,type:labType,gap:labGap,match:labMatch})[q.t](body,q);
+}
+function labQuestion(body,q,label){
+  const src=[topicPath(q.it.d.topic),q.it.d.title].filter(Boolean).join(" · ");
+  const e=el("div",{class:"labtext"});fillCard(e,q.rev?q.q:q.q);
+  body.append(el("small",{class:"label",text:label||(src||"Frage")}),e);
+}
+/* Rückmeldung: richtig/falsch, vollständige Antwort, Weiter */
+function labFeedback(body,q,ok,extra){
+  LR.mode!=="match"&&(ok?LR.ok++:LR.wrong.push(q.it));
+  const fb=el("div",{class:"labfb "+(ok?"ok":"bad")});
+  fb.append(el("b",{text:ok?"Richtig":"Nicht ganz"}));
+  if(extra)fb.append(el("div",{class:"syncnote",text:extra}));
+  const full=el("div",{class:"labtext"});fillCard(full,q.full);
+  fb.append(el("small",{class:"label",text:q.rev?"Die passende Frage":"Die ganze Antwort"}),full);
+  const go=el("button",{class:"btn primary",type:"button",text:"Weiter"});
+  go.addEventListener("click",()=>{LR.i++;labShow()});
+  body.append(fb,go);go.focus();
+  return fb;
+}
+function labChoice(body,q){
+  labQuestion(body,q,q.rev?"Zu welcher Frage gehört diese Antwort?":null);
+  const list=el("div",{class:"labopts"});
+  q.opts.forEach((o,i)=>{
+    const b=el("button",{class:"labopt",type:"button"},el("span",{class:"k",text:String(i+1)}),el("span",{text:o}));
+    b.addEventListener("click",()=>{
+      if(list.dataset.done)return;list.dataset.done="1";
+      const ok=o===q.correct;
+      [...list.children].forEach(x=>{x.disabled=true;if(x.lastChild.textContent===q.correct)x.classList.add("ok")});
+      if(!ok)b.classList.add("bad");
+      labFeedback(body,q,ok);
+    });
+    list.append(b);
+  });
+  body.append(list);LR.cur={q,list};
+}
+function labTF(body,q){
+  labQuestion(body,q,"Gehört diese Antwort zur Frage?");
+  body.append(el("div",{class:"labstmt",text:q.shown}));
+  const row=el("div",{class:"row"});
+  [["Stimmt",true],["Stimmt nicht",false]].forEach(([t,v])=>{
+    const b=el("button",{class:"btn",type:"button",text:t});
+    b.addEventListener("click",()=>{[...row.children].forEach(x=>x.disabled=true);labFeedback(body,q,v===q.truth,q.truth?"Die gezeigte Antwort war die richtige.":"Die gezeigte Antwort gehörte zu einer anderen Karte.")});
+    row.append(b);
+  });
+  body.append(row);
+}
+function labType(body,q){
+  labQuestion(body,q);
+  const ta=el("textarea",{rows:"3",placeholder:"Deine Antwort in eigenen Worten …"});
+  const go=el("button",{class:"btn primary",type:"button",text:"Prüfen"});
+  body.append(ta,go);ta.focus();
+  go.addEventListener("click",()=>{
+    const inp=labWords(ta.value),need=labWords(q.full);
+    const hit=w=>inp.some(x=>x===w||(w.length>=6&&x.length>=6&&x.slice(0,5)===w.slice(0,5)));
+    const got=need.filter(hit),miss=need.filter(w=>!hit(w));
+    const ok=need.length?got.length/need.length>=.6:labNorm(ta.value).trim()===labNorm(q.full).trim();
+    ta.disabled=true;go.remove();
+    const fb=labFeedback(body,q,ok,need.length?`${got.length} von ${need.length} Stichwörtern getroffen`+(miss.length?`. Es fehlten: ${miss.slice(0,8).join(", ")}`:""):"");
+    if(!ok){
+      const ov=el("button",{class:"btn",type:"button",text:"Habe ich sinngemäß gewusst"});
+      ov.addEventListener("click",()=>{LR.wrong=LR.wrong.filter(x=>x!==q.it);LR.ok++;fb.className="labfb ok";fb.firstChild.textContent="Als richtig gewertet";ov.remove()});
+      fb.append(ov);
+    }
+  });
+}
+function labGap(body,q){
+  labQuestion(body,q,"Setze die fehlenden Wörter ein");
+  const fill=q.gaps.map(()=>-1);let done=false;
+  const para=el("div",{class:"labgaps"}),bank=el("div",{class:"labbank"}),chk=el("button",{class:"btn primary",type:"button",text:"Prüfen",disabled:"true"});
+  const draw=()=>{
+    para.replaceChildren();bank.replaceChildren();
+    let g=0;
+    q.tk.forEach((t,i)=>{
+      const gi=q.gaps.indexOf(i);
+      if(gi<0){para.append(t.pre+t.core+t.post+" ");return}
+      const filled=fill[gi]>=0,b=el("button",{class:"labgap"+(filled?" f":""),type:"button",text:filled?q.bank[fill[gi]]:"_".repeat(Math.max(4,Math.min(10,t.core.length)))});
+      if(done){const ok=filled&&q.bank[fill[gi]].toLowerCase()===t.core.toLowerCase();b.classList.add(ok?"ok":"bad");if(!ok)b.textContent=q.bank[fill[gi]]||"…";b.disabled=true;
+        para.append(t.pre,b,t.post);if(!ok)para.append(el("span",{class:"gapfix",text:" ("+t.core+")"}));para.append(" ")}
+      else{b.addEventListener("click",()=>{if(fill[gi]>=0){fill[gi]=-1;draw()}});para.append(t.pre,b,t.post," ")}
+    });
+    q.bank.forEach((w,wi)=>{
+      const used=fill.includes(wi),b=el("button",{class:"labchip",type:"button",text:w});
+      if(used||done)b.disabled=true;
+      b.addEventListener("click",()=>{const s=fill.indexOf(-1);if(s<0)return;fill[s]=wi;draw()});
+      bank.append(b);
+    });
+    chk.disabled=fill.includes(-1);
+  };
+  chk.addEventListener("click",()=>{
+    done=true;chk.remove();draw();
+    const right=q.gaps.filter((_,gi)=>q.bank[fill[gi]].toLowerCase()===q.ans[gi].toLowerCase()).length;
+    labFeedback(body,q,right===q.gaps.length,right+" von "+q.gaps.length+" Lücken richtig");
+  });
+  body.append(para,bank,chk);draw();
+}
+function labMatch(body,q){
+  const its=q.items;
+  const fr=its.map(it=>({k:it.c.id,t:labShort(it.c.f,70)})),bk=shuffle(its.map(it=>({k:it.c.id,t:labShort(it.c.b,90)})));
+  let selF=null,selB=null;const matched=new Set(),missed=new Set();
+  const cl=el("div",{class:"labcol"}),cr=el("div",{class:"labcol"});
+  const draw=()=>{
+    cl.replaceChildren();cr.replaceChildren();
+    fr.forEach(x=>{const b=el("button",{class:"labopt"+(matched.has(x.k)?" ok":"")+(selF===x.k?" sel":""),type:"button",text:x.t});if(matched.has(x.k))b.disabled=true;b.addEventListener("click",()=>{selF=x.k;try1()});cl.append(b)});
+    bk.forEach(x=>{const b=el("button",{class:"labopt"+(matched.has(x.k)?" ok":"")+(selB===x.k?" sel":""),type:"button",text:x.t});if(matched.has(x.k))b.disabled=true;b.addEventListener("click",()=>{selB=x.k;try1()});cr.append(b)});
+  };
+  const try1=()=>{
+    if(selF&&selB){
+      if(selF===selB){matched.add(selF);if(!missed.has(selF))LR.ok++}
+      else{missed.add(selF);missed.add(selB)}
+      selF=selB=null;
+      if(matched.size===its.length){
+        its.forEach(it=>{if(missed.has(it.c.id))LR.wrong.push(it)});
+        draw();const go=el("button",{class:"btn primary",type:"button",text:"Weiter"});go.addEventListener("click",()=>{LR.i++;labShow()});
+        body.append(el("div",{class:"labfb ok"},el("b",{text:"Alle Paare gefunden"}),el("div",{class:"syncnote",text:missed.size?"Fehler bei: "+its.filter(it=>missed.has(it.c.id)).map(it=>labShort(it.c.f,40)).join(" · "):"Ohne Fehler!"})),go);return;
+      }
+    }
+    draw();
+  };
+  body.append(el("small",{class:"label",text:"Tippe links eine Frage und rechts die passende Antwort an"}),el("div",{class:"labpairs"},cl,cr));draw();
+}
+/* ----- Blitzrunde ----- */
+function labBlitzNext(){
+  const root=$("#labRoot");root.replaceChildren();
+  const left=Math.max(0,Math.ceil((LR.tEnd-Date.now())/1000));
+  if(left<=0||LR.over)return labEnd();
+  const it=LR.order[LR.n%LR.order.length];LR.n++;
+  const q=labMake("blitz",it,LR.pool);
+  const prog=labHead(root,"");const cnt=$("#labCount");
+  const tick=()=>{const l=Math.max(0,(LR.tEnd-Date.now())/1000);cnt.textContent=Math.ceil(l)+" s · "+LR.ok+" richtig";prog.firstChild.style.width=(l/60*100)+"%";if(l<=0){labStop();LR.over=true;labEnd()}};
+  tick();labTimer=setInterval(tick,200);
+  const body=el("div",{class:"panel grid labq"});root.append(body);
+  labQuestion(body,q);
+  const list=el("div",{class:"labopts"});
+  q.opts.forEach((o,i)=>{
+    const b=el("button",{class:"labopt",type:"button"},el("span",{class:"k",text:String(i+1)}),el("span",{text:o}));
+    b.addEventListener("click",()=>{
+      if(list.dataset.done)return;list.dataset.done="1";const ok=o===q.correct;
+      if(ok)LR.ok++;else LR.wrong.push(q.it);LR.total++;
+      [...list.children].forEach(x=>{x.disabled=true;if(x.lastChild.textContent===q.correct)x.classList.add("ok")});if(!ok)b.classList.add("bad");
+      labStop();setTimeout(labBlitzNext,ok?350:900);
+    });
+    list.append(b);
+  });
+  body.append(list);LR.cur={q,list};
+}
+/* ----- Ergebnis ----- */
+function labEnd(){
+  labStop();const root=$("#labRoot");root.replaceChildren();
+  const m=LABMODES.find(x=>x.id===LR.mode),n=LR.mode==="blitz"?LR.total:LR.total;
+  const wrong=[...new Map(LR.wrong.map(x=>[x.c.id,x])).values()];
+  const p=el("div",{class:"panel grid"});
+  p.append(el("h2",{text:m.ico+" "+LR.ok+(LR.mode==="blitz"?" richtig in 60 Sekunden":" von "+n+" richtig")}));
+  if(LR.mode==="blitz"&&LR.total)p.append(el("p",{style:"color:var(--muted)",text:LR.ok+" von "+LR.total+" beantworteten Fragen waren richtig."}));
+  if(wrong.length){
+    p.append(el("div",{class:"label",text:"Das hat noch nicht gesessen"}));
+    wrong.slice(0,12).forEach(x=>p.append(el("div",{class:"prow",style:"cursor:default"},el("div",{},el("div",{class:"f",text:labShort(x.c.f,120)}),el("div",{class:"b",text:labShort(x.c.b,140)})))));
+    if(wrong.length>12)p.append(el("span",{class:"syncnote",text:"… und "+(wrong.length-12)+" weitere"}));
+  }else p.append(el("p",{text:"Alles richtig. Stark!"}));
+  const row=el("div",{class:"row"});
+  const again=el("button",{class:"btn primary",type:"button",text:"Nochmal"});again.addEventListener("click",()=>labStart(LR.mode));
+  const back=el("button",{class:"btn",type:"button",text:"Andere Methode",onclick:labRender});
+  row.append(again,back);
+  if(wrong.length){
+    const mk=el("button",{class:"btn",type:"button",text:"Falsche Karten heute noch lernen"});
+    mk.addEventListener("click",()=>{const ds=new Set();wrong.forEach(x=>{x.c.box=0;x.c.due=Date.now();ds.add(x.d)});ds.forEach(d=>{d.updated=Date.now();saveDeck(d)});refreshAll();mk.disabled=true;mk.textContent="Eingeplant";toast(wrong.length+" Karten sind jetzt fällig.")});
+    row.append(mk);
+  }
+  p.append(row);root.append(p);
+}
+document.addEventListener("keydown",e=>{
+  if(curTab!=="labor"||!LR||!LR.cur||e.ctrlKey||e.metaKey||e.altKey)return;
+  const t=e.target;if(t&&/^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))return;
+  if(/^[1-4]$/.test(e.key)){const b=LR.cur.list&&LR.cur.list.children[+e.key-1];if(b&&!b.disabled){e.preventDefault();b.click()}}
+});
 
 /* ---------- Fokus-Timer ---------- */
 const PH={work:"Lernen",short:"Kurze Pause",long:"Lange Pause"},CIRC=339.29;
@@ -2466,9 +2779,11 @@ function renderNav(){
 }
 function setTab(name){
   curTab=name;$$("nav [data-tab]").forEach(b=>b.setAttribute("aria-selected",String(b.dataset.tab===name)));
-  ["heute","lernen","fokus","bib","einst"].forEach(n=>{$("#tab-"+n).hidden=n!==name});
+  ["heute","lernen","labor","fokus","bib","einst"].forEach(n=>{$("#tab-"+n).hidden=n!==name});
   if(name==="heute")renderHome();
   if(name==="lernen"){fillSrc();renderSets()}
+  if(name!=="labor")labStop();
+  if(name==="labor")labRender();
   if(name==="fokus")drawTimer();
   if(name==="einst"){renderSettings();renderSicherung();renderKonto()}
   if(name==="bib"){lib.view="list";lib.deckId=null;renderLib()}
