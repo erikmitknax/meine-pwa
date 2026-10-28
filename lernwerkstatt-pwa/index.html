@@ -2446,7 +2446,7 @@ const LABMODES=[
 let L={src:"all",n:10},LR=null,labTimer=0;
 function labStop(){clearInterval(labTimer);labTimer=0}
 const labPlain=t=>String(t||"").replace(/\r\n?/g,"\n").split("\n").map(l=>l.replace(BUL,"").trim()).filter(Boolean);
-const labShort=(t,n=110)=>{const s=labPlain(t).slice(0,3).join(" · ");return s.length>n?s.slice(0,n-1).trimEnd()+"…":s};
+const labShort=(t,n=420)=>{const s=labPlain(t).join(" · ");return s.length>n?s.slice(0,n-1).trimEnd()+"…":s};
 const labNorm=s=>String(s||"").toLowerCase().replace(/ß/g,"ss").normalize("NFD").replace(/[̀-ͯ]/g,"").replace(/[^a-z0-9 ]/g," ");
 const labWords=s=>[...new Set(labNorm(s).split(/\s+/).filter(w=>w.length>=4))];
 const labCore=w=>{const m=w.match(/^([^\p{L}\p{N}]*)(.*?)([^\p{L}\p{N}]*)$/u);return {pre:m[1],core:m[2],post:m[3]}};
@@ -2460,7 +2460,7 @@ function labMake(mode,it,pool){
   const c=it.c;
   if(mode==="mc"||mode==="blitz")return {t:"choice",q:c.f,correct:labShort(c.b),opts:shuffle([labShort(c.b),...labDistract(it,pool,"b",3)]),it,full:c.b};
   if(mode==="rev")return {t:"choice",q:c.b,correct:labShort(c.f),opts:shuffle([labShort(c.f),...labDistract(it,pool,"f",3)]),it,full:c.f,rev:1};
-  if(mode==="tf"){const truth=Math.random()<.5,w=labDistract(it,pool,"b",1)[0];const real=truth||!w;return {t:"tf",q:c.f,shown:real?labShort(c.b,160):w,truth:real,it,full:c.b}}
+  if(mode==="tf"){const truth=Math.random()<.5,w=labDistract(it,pool,"b",1)[0];const real=truth||!w;return {t:"tf",q:c.f,shown:real?labShort(c.b):w,truth:real,it,full:c.b}}
   if(mode==="type")return {t:"type",q:c.f,it,full:c.b};
   if(mode==="gap"){
     let text=labPlain(c.b).join(" ");if(text.length>260){text=text.slice(0,260);text=text.slice(0,text.lastIndexOf(" ")>100?text.lastIndexOf(" "):260)+" …"}
@@ -2633,7 +2633,7 @@ function labGap(body,q){
 }
 function labMatch(body,q){
   const its=q.items;
-  const fr=its.map(it=>({k:it.c.id,t:labShort(it.c.f,70)})),bk=shuffle(its.map(it=>({k:it.c.id,t:labShort(it.c.b,90)})));
+  const fr=its.map(it=>({k:it.c.id,t:labShort(it.c.f)})),bk=shuffle(its.map(it=>({k:it.c.id,t:labShort(it.c.b)})));
   let selF=null,selB=null;const matched=new Set(),missed=new Set();
   const cl=el("div",{class:"labcol"}),cr=el("div",{class:"labcol"});
   const draw=()=>{
