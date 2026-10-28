@@ -322,3 +322,6 @@ textarea::placeholder{color:var(--muted);opacity:.8}
 .ksck{flex:none;display:flex;align-items:center;margin:0;padding:4px 10px 4px 0;cursor:pointer}.ksck input{width:20px;height:20px;margin:0;padding:0;accent-color:var(--accent)}
 .ksrow.gift .kn{opacity:.55;text-decoration:line-through}
 .ksrow .kn{flex:1}
+.cerow select{flex:1 1 100%;min-width:0}
+.cerow{flex-wrap:wrap}
+.cf-src select{width:auto;max-width:70%;flex:none}
