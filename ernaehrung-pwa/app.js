@@ -201,7 +201,10 @@ function coffeePlan(d) {
   let latest = null; const budget = c.rest - R0;
   if (tot0 + mgP <= CF_DAY_MAX && budget > 0) { latest = budget >= mgP ? B : B - CF_HALF * 60 * Math.log2(mgP / budget); if (latest < now) latest = null; }
   const why = tot0 + mgP > CF_DAY_MAX ? "limit" : ts.length ? "" : "sleep";
-  return { c, B, level, nextOk, ts, latest, why, tot0 };
+  // Passt die Planungsmenge nicht mehr, aber eine kleinere? Größte noch okaye Menge ab der nächsten möglichen Zeit.
+  let small = null; const t0 = Math.ceil(nextOk / 5) * 5;
+  if (why === "sleep" && t0 < B) { const mg = Math.min((c.rest - R0) / Math.pow(0.5, (B - t0) / (CF_HALF * 60)), CF_DAY_MAX - tot0), ml = mg / c.mg100 * 100; if (ml >= 20) small = { ml: Math.floor(ml / 10) * 10, t: t0 }; }
+  return { c, B, level, nextOk, ts, latest, why, tot0, small, R0 };
 }
 function coffeeCard(d) {
   const cups = cupsOf(d), ml = mlOf(d), ts = cups.filter(x => timeOk(x.t)).map(x => x.t), cf = cfCfg(), isToday = d === iso(new Date());
@@ -213,7 +216,7 @@ function coffeeCard(d) {
       plan = `<div class="cf-plan"><div class="cf-big ${first <= nowM + 4 ? "ok" : ""}">${first <= nowM + 4 ? "Jetzt wieder möglich" : "Nächster Kaffee ab " + hm(first)}</div>
         <div class="muted small">${P.latest != null && P.latest < P.B ? "Letzter Kaffee spätestens um " + hm(P.latest) + " (Schlafen " + cf.sleep + "). " : ""}Noch bis zu ${fmtMl(P.ts.length * cf.ml)} heute: ${P.ts.map(hm).join(" · ")} (je ${r0(cf.ml)} ml)</div>${lv}</div>`;
     } else plan = `<div class="cf-plan"><div class="cf-big stop">${P.why === "limit" ? "Tageslimit erreicht" : "Heute lieber kein Kaffee mehr"}</div>
-      <div class="muted small">${P.why === "limit" ? "Mit " + r0(P.tot0) + " mg Koffein bist du beim Limit von " + CF_DAY_MAX + " mg pro Tag." : "Weiterer Kaffee ließe bis " + cf.sleep + " zu viel Koffein im Körper (mehr als " + cf.rest + " mg)."}</div>${lv}</div>`;
+      <div class="muted small">${P.why === "limit" ? "Mit " + r0(P.tot0) + " mg Koffein bist du beim Limit von " + CF_DAY_MAX + " mg pro Tag." : "Eine Portion von " + r0(cf.ml) + " ml ließe bis " + cf.sleep + " zu viel Koffein im Körper (mehr als " + cf.rest + " mg). Bis dahin sind von deinen bisherigen Kaffees noch ca. " + r0(P.R0) + " mg übrig." + (P.small ? " Eine kleinere Menge bis ca. " + P.small.ml + " ml wäre " + (P.small.t <= tMin(nowT()) + 4 ? "jetzt" : "ab " + hm(P.small.t)) + " noch okay." : "")}</div>${lv}</div>`;
   }
   return `<section class="coffeecard"><div class="cf-top"><div class="cf-l"><span class="cf-ic" aria-hidden="true">☕</span><div><b>Kaffee</b><div class="muted tiny">${cups.length ? `${r0(ml)} ml · ca. ${r0(mgOfMl(ml))} mg Koffein${ts.length ? " · " + ts.join(", ") : ""}` : "Noch kein Kaffee an diesem Tag"}</div></div></div>
     <div class="cf-r"><button class="iconbtn" data-act="coffeeEdit" aria-label="Kaffee-Einträge bearbeiten">${icon("pen", 18)}</button><button class="iconbtn" data-act="coffeeDel" aria-label="100 ml weniger" ${cups.length ? "" : "disabled"}>−</button><b class="cf-n">${r0(ml)}<small>ml</small></b><button class="iconbtn" data-act="coffeeAdd" aria-label="100 ml mehr">+</button></div></div>
