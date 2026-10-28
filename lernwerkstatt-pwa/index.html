@@ -1231,7 +1231,7 @@ function fillSrc(){
   if(S.sets.length){const g=el("optgroup",{label:"Lernstapel"});S.sets.forEach(s=>g.append(el("option",{value:"set:"+s.id,text:s.name})));sel.append(g)}
   if(S.topics.length){const g=el("optgroup",{label:"Einzelne Themen (mit Unterthemen)"});flatTopics().forEach(x=>g.append(el("option",{value:"topic:"+x.t.id,text:topicPath(x.t.id)})));sel.append(g)}
   if([...sel.options].some(o=>o.value===old))sel.value=old;
-  $("#noteOpt").checked=!!S.note;
+  $("#noteOpt").checked=S.note!==false;
   srcInfo();
 }
 function srcInfo(){
@@ -1348,13 +1348,13 @@ function flip(){
 }
 /* Eigene Antwort vorher aufschreiben und nach dem Umdrehen selbst vergleichen (kein Abgleich durch die App) */
 function syncNote(fresh){
-  const on=!!(S&&S.note)&&Q.active,box=$("#noteBox");box.hidden=!on;if(!on)return;
+  const on=!(S&&S.note===false)&&Q.active,box=$("#noteBox");box.hidden=!on;if(!on)return;
   const t=$("#noteIn").value.trim();
   $("#noteEdit").hidden=!!Q.flipped;$("#noteShow").hidden=!(Q.flipped&&t);$("#noteTxt").textContent=t;
   if(fresh&&!Q.flipped&&window.matchMedia&&matchMedia("(pointer:fine)").matches)$("#noteIn").focus();
 }
 $("#noteIn").addEventListener("keydown",e=>{if(e.key==="Enter"&&(e.ctrlKey||e.metaKey)){e.preventDefault();$("#noteIn").blur();flip()}});
-{const o=$("#noteOpt");o.checked=!!(S&&S.note);o.addEventListener("change",()=>{S.note=o.checked;saveMeta()})}
+{const o=$("#noteOpt");o.checked=!(S&&S.note===false);o.addEventListener("change",()=>{S.note=o.checked;saveMeta()})}
 /* Kleine Rückmeldung nach der Bewertung: Konfetti, Bizeps, Schweißtropfen */
 const fxOn=()=>(!S||S.fx!==false)&&!(window.matchMedia&&matchMedia("(prefers-reduced-motion: reduce)").matches);
 function rateInfo(txt,easy){
