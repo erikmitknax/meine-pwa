@@ -290,6 +290,10 @@ html.pv-lock,html.pv-lock body{overflow:hidden}
 .labbank{display:flex;flex-wrap:wrap;gap:8px}
 .labchip{padding:6px 12px;border:1px solid var(--line);border-radius:999px;background:var(--surface);color:inherit;font:inherit;cursor:pointer}
 .labchip:disabled{opacity:.35}
+.notebox{width:100%;max-width:620px;display:grid;gap:8px}
+.notebox textarea{width:100%;resize:vertical}
+#noteShow{padding:12px;border:1px dashed var(--accent);border-radius:10px;background:color-mix(in srgb,var(--accent) 7%,var(--surface))}
+#noteTxt{white-space:pre-wrap;overflow-wrap:anywhere;margin-top:4px}
 #r2{position:relative;overflow:hidden;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;touch-action:manipulation}
 #r2::after{content:"";position:absolute;inset:0 auto 0 0;width:0;background:var(--good);opacity:.3;pointer-events:none}
 #r2.holding::after{width:100%;transition:width 1s linear}
@@ -367,6 +371,7 @@ html.pv-lock,html.pv-lock body{overflow:hidden}
           </select>
         </label>
       </div>
+      <label class="row" style="margin-top:14px;gap:10px;align-items:flex-start;cursor:pointer"><input type="checkbox" id="noteOpt" style="margin-top:3px"><span>Eigene Antwort vorher aufschreiben<br><small class="syncnote">Du schreibst deine Antwort, drehst die Karte um und vergleichst selbst. Die App prüft nichts.</small></span></label>
       <div class="row between" style="margin-top:14px">
         <span class="syncnote" id="srcInfo"></span>
         <button class="btn primary" id="studyGo" type="button">Starten</button>
@@ -397,6 +402,12 @@ html.pv-lock,html.pv-lock body{overflow:hidden}
         <div class="face back"><div class="tophead"><span class="label">Antwort</span><span class="src" id="srcB"></span></div><div class="txt" id="cardA"></div><span class="hint">Wie gut wusstest du es?</span></div>
       </div>
     </button>
+    <div class="notebox" id="noteBox" hidden>
+      <div id="noteEdit" class="grid" style="gap:6px"><label class="label" for="noteIn">Deine Antwort (nur für dich, die App prüft nichts)</label>
+        <textarea id="noteIn" rows="3" placeholder="Erst aufschreiben, dann die Karte umdrehen und vergleichen …"></textarea>
+        <small class="syncnote">Strg + Enter dreht die Karte um.</small></div>
+      <div id="noteShow" hidden><div class="label">Das hast du geschrieben</div><div id="noteTxt"></div></div>
+    </div>
     <div class="cardmeta" id="cardMeta">
       <span class="cm-deck"><small>Stapel</small><b id="cardDeck"></b></span>
       <button class="btn small cm-edit" id="cardPause" type="button" aria-label="Karte pausieren (1 Sekunde gedrückt halten)" title="Zum Pausieren 1 Sekunde gedrückt halten">⏸</button>
@@ -1220,6 +1231,7 @@ function fillSrc(){
   if(S.sets.length){const g=el("optgroup",{label:"Lernstapel"});S.sets.forEach(s=>g.append(el("option",{value:"set:"+s.id,text:s.name})));sel.append(g)}
   if(S.topics.length){const g=el("optgroup",{label:"Einzelne Themen (mit Unterthemen)"});flatTopics().forEach(x=>g.append(el("option",{value:"topic:"+x.t.id,text:topicPath(x.t.id)})));sel.append(g)}
   if([...sel.options].some(o=>o.value===old))sel.value=old;
+  $("#noteOpt").checked=!!S.note;
   srcInfo();
 }
 function srcInfo(){
@@ -1257,7 +1269,7 @@ function fillCard(e,text){
 }
 function showCard(){
   const x=Q.map[Q.queue[0]];if(!x)return finishStudy();
-  Q.flipped=false;$("#card").classList.remove("flip");$("#rate").hidden=true;
+  Q.flipped=false;$("#card").classList.remove("flip");$("#rate").hidden=true;$("#noteIn").value="";syncNote(true);
   fillCard($("#cardQ"),x.c.f);fillCard($("#cardA"),x.c.b);
   [["#cardQ",x.c.f],["#cardA",x.c.b]].forEach(([s,t])=>{const e=$(s),n=t.length;e.classList.remove("l1","l2","l3");if(n>500)e.classList.add("l3");else if(n>250)e.classList.add("l2");else if(n>110)e.classList.add("l1")});
   const src=[topicPath(x.d.topic),x.d.title].filter(Boolean).join(" · ");
@@ -1332,8 +1344,17 @@ function pauseCard(){
 
 function flip(){
   if(!Q.active)return;
-  Q.flipped=!Q.flipped;$("#card").classList.toggle("flip",Q.flipped);$("#rate").hidden=!Q.flipped;
+  Q.flipped=!Q.flipped;$("#card").classList.toggle("flip",Q.flipped);$("#rate").hidden=!Q.flipped;syncNote();
 }
+/* Eigene Antwort vorher aufschreiben und nach dem Umdrehen selbst vergleichen (kein Abgleich durch die App) */
+function syncNote(fresh){
+  const on=!!(S&&S.note)&&Q.active,box=$("#noteBox");box.hidden=!on;if(!on)return;
+  const t=$("#noteIn").value.trim();
+  $("#noteEdit").hidden=!!Q.flipped;$("#noteShow").hidden=!(Q.flipped&&t);$("#noteTxt").textContent=t;
+  if(fresh&&!Q.flipped&&window.matchMedia&&matchMedia("(pointer:fine)").matches)$("#noteIn").focus();
+}
+$("#noteIn").addEventListener("keydown",e=>{if(e.key==="Enter"&&(e.ctrlKey||e.metaKey)){e.preventDefault();$("#noteIn").blur();flip()}});
+{const o=$("#noteOpt");o.checked=!!(S&&S.note);o.addEventListener("change",()=>{S.note=o.checked;saveMeta()})}
 /* Kleine Rückmeldung nach der Bewertung: Konfetti, Bizeps, Schweißtropfen */
 const fxOn=()=>(!S||S.fx!==false)&&!(window.matchMedia&&matchMedia("(prefers-reduced-motion: reduce)").matches);
 function rateInfo(txt,easy){
