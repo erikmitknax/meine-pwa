@@ -16,7 +16,7 @@ const NATIVE = !!(window.Capacitor && window.Capacitor.isNativePlatform && windo
 
 const DEFAULTS = () => ({
   ver: 3, foods: [], recipes: [], entries: [], weights: {}, coffee: {},
-  settings: { kcal: 2200, pP: 30, pC: 40, pF: 30, mode: "auto", accent: "#12935f", geminiKey: "", geminiModel: "gemini-2.5-flash-lite", goalWeight: "", weightGate: true, coffeeSleep: "23:00", coffeeGap: 3, coffeeMl: 200, coffeeMg100: 40, coffeeRest: 30 },
+  settings: { kcal: 2200, pP: 30, pC: 40, pF: 30, mode: "auto", accent: "#12935f", geminiKey: "", geminiModel: "gemini-2.5-flash-lite", goalWeight: "", weightGate: true, coffeeSleep: "23:00", coffeeGap: 3, coffeeMl: 200, coffeeMg100: 40, coffeeRest: 30, coffeeDayMax: 400 },
 });
 let D = load();
 let ui = { setOpen: {}, tab: "today", date: iso(new Date()), weekOffset: 0, period: 7, wRange: 90, meal: "b", open: {} };
@@ -133,10 +133,10 @@ const hasPrice = f => !!f && typeof f.price === "number" && f.price >= 0 && f.pr
 const priceOf = (f, grams) => hasPrice(f) ? f.price * grams / f.priceG : undefined;
 
 /* ---- Kaffee-Zähler in ml: D.coffee[datum] = Liste { t: Uhrzeit oder "", ml } (ältere Tage: Liste von Uhrzeiten = je eine Portion) ---- */
-const CF_HALF = 5, CF_DAY_MAX = 400; // Halbwertszeit Koffein ca. 5 h, Tageslimit 400 mg (EFSA)
+const CF_HALF = 5; // Halbwertszeit Koffein ca. 5 h (Tageslimit und Rest zum Einschlafen sind einstellbar)
 function cfCfg() {
   const s = D.settings, n = (v, def, lo, hi) => { const x = num(v); return x >= lo && x <= hi ? x : def; };
-  return { sleep: timeOk(s.coffeeSleep) ? s.coffeeSleep : "23:00", gap: n(s.coffeeGap, 3, 0.5, 12), ml: n(s.coffeeMl, 200, 20, 1000), mg100: n(s.coffeeMg100, 40, 5, 300), rest: n(s.coffeeRest, 30, 5, 150) };
+  return { sleep: timeOk(s.coffeeSleep) ? s.coffeeSleep : "23:00", gap: n(s.coffeeGap, 3, 0.5, 12), ml: n(s.coffeeMl, 200, 20, 1000), mg100: n(s.coffeeMg100, 40, 5, 300), rest: n(s.coffeeRest, 30, 5, 400), dayMax: n(s.coffeeDayMax, 400, 100, 1000) };
 }
 const cupsOf = d => (D.coffee && Array.isArray(D.coffee[d]) ? D.coffee[d] : []).map(x => typeof x === "string" ? { t: x, ml: cfCfg().ml } : { t: x.t || "", ml: num(x.ml) || cfCfg().ml });
 const mlOf = d => cupsOf(d).reduce((a, c) => a + c.ml, 0);
@@ -197,13 +197,13 @@ function coffeePlan(d) {
   const nextOk = last != null ? Math.max(now, last + c.gap * 60) : now;
   const ts = []; let t = Math.ceil(nextOk / 5) * 5;
   const R0 = R, tot0 = tot;
-  while (t < B) { const add = dec(mgP, t, B); if (R + add > c.rest + 1e-9 || tot + mgP > CF_DAY_MAX) break; ts.push(t); R += add; tot += mgP; t += c.gap * 60; }
+  while (t < B) { const add = dec(mgP, t, B); if (R + add > c.rest + 1e-9 || tot + mgP > c.dayMax) break; ts.push(t); R += add; tot += mgP; t += c.gap * 60; }
   let latest = null; const budget = c.rest - R0;
-  if (tot0 + mgP <= CF_DAY_MAX && budget > 0) { latest = budget >= mgP ? B : B - CF_HALF * 60 * Math.log2(mgP / budget); if (latest < now) latest = null; }
-  const why = tot0 + mgP > CF_DAY_MAX ? "limit" : ts.length ? "" : "sleep";
+  if (tot0 + mgP <= c.dayMax && budget > 0) { latest = budget >= mgP ? B : B - CF_HALF * 60 * Math.log2(mgP / budget); if (latest < now) latest = null; }
+  const why = tot0 + mgP > c.dayMax ? "limit" : ts.length ? "" : "sleep";
   // Passt die Planungsmenge nicht mehr, aber eine kleinere? Größte noch okaye Menge ab der nächsten möglichen Zeit.
   let small = null; const t0 = Math.ceil(nextOk / 5) * 5;
-  if (why === "sleep" && t0 < B) { const mg = Math.min((c.rest - R0) / Math.pow(0.5, (B - t0) / (CF_HALF * 60)), CF_DAY_MAX - tot0), ml = mg / c.mg100 * 100; if (ml >= 20) small = { ml: Math.floor(ml / 10) * 10, t: t0 }; }
+  if (why === "sleep" && t0 < B) { const mg = Math.min((c.rest - R0) / Math.pow(0.5, (B - t0) / (CF_HALF * 60)), c.dayMax - tot0), ml = mg / c.mg100 * 100; if (ml >= 20) small = { ml: Math.floor(ml / 10) * 10, t: t0 }; }
   return { c, B, level, nextOk, ts, latest, why, tot0, small, R0 };
 }
 function coffeeCard(d) {
@@ -216,7 +216,7 @@ function coffeeCard(d) {
       plan = `<div class="cf-plan"><div class="cf-big ${first <= nowM + 4 ? "ok" : ""}">${first <= nowM + 4 ? "Jetzt wieder möglich" : "Nächster Kaffee ab " + hm(first)}</div>
         <div class="muted small">${P.latest != null && P.latest < P.B ? "Letzter Kaffee spätestens um " + hm(P.latest) + " (Schlafen " + cf.sleep + "). " : ""}Noch bis zu ${fmtMl(P.ts.length * cf.ml)} heute: ${P.ts.map(hm).join(" · ")} (je ${r0(cf.ml)} ml)</div>${lv}</div>`;
     } else plan = `<div class="cf-plan"><div class="cf-big stop">${P.why === "limit" ? "Tageslimit erreicht" : "Heute lieber kein Kaffee mehr"}</div>
-      <div class="muted small">${P.why === "limit" ? "Mit " + r0(P.tot0) + " mg Koffein bist du beim Limit von " + CF_DAY_MAX + " mg pro Tag." : "Eine Portion von " + r0(cf.ml) + " ml ließe bis " + cf.sleep + " zu viel Koffein im Körper (mehr als " + cf.rest + " mg). Bis dahin sind von deinen bisherigen Kaffees noch ca. " + r0(P.R0) + " mg übrig." + (P.small ? " Eine kleinere Menge bis ca. " + P.small.ml + " ml wäre " + (P.small.t <= tMin(nowT()) + 4 ? "jetzt" : "ab " + hm(P.small.t)) + " noch okay." : "")}</div>${lv}</div>`;
+      <div class="muted small">${P.why === "limit" ? "Mit " + r0(P.tot0) + " mg Koffein bist du beim Limit von " + cf.dayMax + " mg pro Tag." : "Eine Portion von " + r0(cf.ml) + " ml ließe bis " + cf.sleep + " zu viel Koffein im Körper (mehr als " + cf.rest + " mg). Bis dahin sind von deinen bisherigen Kaffees noch ca. " + r0(P.R0) + " mg übrig." + (P.small ? " Eine kleinere Menge bis ca. " + P.small.ml + " ml wäre " + (P.small.t <= tMin(nowT()) + 4 ? "jetzt" : "ab " + hm(P.small.t)) + " noch okay." : "")}</div>${lv}</div>`;
   }
   return `<section class="coffeecard"><div class="cf-top"><div class="cf-l"><span class="cf-ic" aria-hidden="true">☕</span><div><b>Kaffee</b><div class="muted tiny">${cups.length ? `${r0(ml)} ml · ca. ${r0(mgOfMl(ml))} mg Koffein${ts.length ? " · " + ts.join(", ") : ""}` : "Noch kein Kaffee an diesem Tag"}</div></div></div>
     <div class="cf-r"><button class="iconbtn" data-act="coffeeEdit" aria-label="Kaffee-Einträge bearbeiten">${icon("pen", 18)}</button><button class="iconbtn" data-act="coffeeDel" aria-label="100 ml weniger" ${cups.length ? "" : "disabled"}>−</button><b class="cf-n">${r0(ml)}<small>ml</small></b><button class="iconbtn" data-act="coffeeAdd" aria-label="100 ml mehr">+</button></div></div>
@@ -227,7 +227,8 @@ function coffeeCard(d) {
     <details class="cf-set"><summary>Annahmen anpassen</summary>
       <div class="grid2"><div><label>Typische Menge pro Kaffee für die Planung (ml)</label><input type="text" inputmode="decimal" id="cfMl" value="${r0(cf.ml)}"></div><div><label>mg Koffein pro 100 ml</label><input type="text" inputmode="decimal" id="cfMg" value="${cf.mg100}"></div></div>
       <div class="grid2"><div><label>Pause zwischen zwei Kaffees (Std.)</label><input type="text" inputmode="decimal" id="cfGap" value="${String(cf.gap).replace(".", ",")}"></div><div><label>Erlaubter Koffein-Rest beim Einschlafen (mg)</label><input type="text" inputmode="decimal" id="cfRest" value="${cf.rest}"></div></div>
-      <div class="muted tiny" style="margin-top:8px">Rechnung: Koffein wird mit einer Halbwertszeit von ca. ${CF_HALF} Stunden abgebaut. Die App plant Portionen so, dass zur Schlafenszeit höchstens der erlaubte Rest übrig ist und du ${CF_DAY_MAX} mg pro Tag nicht überschreitest. Nur Einträge mit Uhrzeit zählen für den Abbau. Filterkaffee hat grob 40 mg pro 100 ml, Espresso etwa 200 mg. Das ist eine grobe Orientierung, keine medizinische Beratung.</div></details></section>`;
+      <label>Tageslimit (mg Koffein pro Tag)</label><input type="text" inputmode="decimal" id="cfDay" value="${cf.dayMax}">
+      <div class="muted tiny" style="margin-top:8px">Rechnung: Koffein wird mit einer Halbwertszeit von ca. ${CF_HALF} Stunden abgebaut. Die App plant Portionen so, dass zur Schlafenszeit höchstens der erlaubte Rest übrig ist und du ${cf.dayMax} mg pro Tag nicht überschreitest. Als sicher für gesunde Erwachsene gelten laut Europäischer Behörde für Lebensmittelsicherheit bis zu 400 mg pro Tag und 200 mg auf einmal; wie viel du verträgst, ist individuell. Nur Einträge mit Uhrzeit zählen für den Abbau. Filterkaffee hat grob 40 mg pro 100 ml, Espresso etwa 200 mg. Das ist eine grobe Orientierung, keine medizinische Beratung.</div></details></section>`;
 }
 
 /* ---------- Theme ---------- */
@@ -2324,8 +2325,8 @@ document.addEventListener("click", async ev => {
 document.addEventListener("keydown", ev => { if ((ev.key === "Enter" || ev.key === " ") && ev.target.matches && ev.target.matches("[role=button][data-act]")) { ev.preventDefault(); ev.target.click(); } });
 document.addEventListener("change", async ev => {
   const ct = ev.target;
-  if (ct && ["cfSleep", "cfMl", "cfMg", "cfGap", "cfRest"].includes(ct.id)) {
-    const k = { cfSleep: "coffeeSleep", cfMl: "coffeeMl", cfMg: "coffeeMg100", cfGap: "coffeeGap", cfRest: "coffeeRest" }[ct.id];
+  if (ct && ["cfSleep", "cfMl", "cfMg", "cfGap", "cfRest", "cfDay"].includes(ct.id)) {
+    const k = { cfSleep: "coffeeSleep", cfMl: "coffeeMl", cfMg: "coffeeMg100", cfGap: "coffeeGap", cfRest: "coffeeRest", cfDay: "coffeeDayMax" }[ct.id];
     if (ct.id === "cfSleep") { if (timeOk(ct.value)) D.settings.coffeeSleep = ct.value; } else D.settings[k] = num(ct.value);
     save(); render(); return;
   }
