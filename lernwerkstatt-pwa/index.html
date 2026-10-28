@@ -267,6 +267,11 @@ html.pv-lock,html.pv-lock body{overflow:hidden}
 .pgroup{display:grid;gap:6px}.pgroup>.pgh{display:flex;align-items:center;gap:10px;font-weight:600}
 .prow{display:flex;gap:10px;align-items:flex-start;padding:8px 10px;border:1px solid var(--line);border-radius:10px;background:var(--surface);cursor:pointer}
 .prow .f{font-weight:600;overflow-wrap:anywhere;white-space:pre-wrap}.prow .b{color:var(--muted);font-weight:400;font-size:.9rem;overflow-wrap:anywhere;max-height:3.2em;overflow:hidden}
+#r2{position:relative;overflow:hidden;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;touch-action:manipulation}
+#r2::after{content:"";position:absolute;inset:0 auto 0 0;width:0;background:var(--good);opacity:.3;pointer-events:none}
+#r2.holding::after{width:100%;transition:width 1s linear}
+#rateInfo{position:fixed;left:50%;bottom:calc(90px + env(safe-area-inset-bottom));transform:translateX(-50%);z-index:9998;background:var(--ink);color:var(--bg);padding:8px 14px;border-radius:999px;font-size:.85rem;font-weight:600;box-shadow:0 4px 14px rgba(0,0,0,.25);pointer-events:none;max-width:92vw;text-align:center;transition:opacity .4s}
+#rateInfo.out{opacity:0}
 #cardPause{position:relative;overflow:hidden;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;touch-action:manipulation}
 #cardPause::after{content:"";position:absolute;inset:0 auto 0 0;width:0;background:var(--accent);opacity:.3;pointer-events:none}
 #cardPause.holding::after{width:100%;transition:width 1s linear}
@@ -377,7 +382,7 @@ html.pv-lock,html.pv-lock body{overflow:hidden}
       <button class="r2" id="r2" type="button">Gewusst<small id="i2"></small></button>
     </div>
     <div class="docs" id="studyDocs" hidden></div>
-    <p class="syncnote">Tasten: Leertaste umdrehen, 1 nochmal, 2 schwer, 3 gewusst, Pfeil links zurück</p>
+    <p class="syncnote">Tasten: Leertaste umdrehen, 1 nochmal, 2 schwer, 3 gewusst, 4 leicht, Pfeil links zurück. Gewusst 1 Sekunde gedrückt halten = leicht (Karte springt ein Fach weiter)</p>
   </div>
 
   <div id="studyDone" class="panel" hidden>
@@ -786,16 +791,19 @@ function srsCfg(){
   const b=d.b.map((v,i)=>{const x=a.b&&a.b[i]||{};return {act:SRS_ACTS.some(o=>o[0]===x.act)?x.act:v.act,f:SRS_FACTORS.some(o=>o[0]===Number(x.f))?Number(x.f):1}});
   return {ivl,b,again:a.again!==false};
 }
-function nextBox(c,r){
+function nextBox(c,r,easy){
   const box=c.box||0,act=srsCfg().b[r].act;
-  if(act==="reset")return 0;
-  if(act==="back")return Math.max(0,box-1);
-  if(act==="stay")return Math.max(1,box);
-  return Math.min(MAXBOX,box+(act==="up2"?2:1));
+  let n;
+  if(act==="reset")n=0;
+  else if(act==="back")n=Math.max(0,box-1);
+  else if(act==="stay")n=Math.max(1,box);
+  else n=Math.min(MAXBOX,box+(act==="up2"?2:1));
+  return easy&&r===2&&n>0?Math.min(MAXBOX,n+1):n;   /* leicht: ein Fach weiter */
 }
 function daysFor(box,r){const k=srsCfg();return Math.max(1,Math.round(k.ivl[box]*k.b[r].f))}
 function dueFor(box,r=2){return box===0?Date.now():startOfToday()+daysFor(box,r)*DAY+3*3600000}
-function intervalLabel(c,r){const b=nextBox(c,r);if(b===0)return r===0&&!srsCfg().again?"beim nächsten Mal":"gleich nochmal";const n=daysFor(b,r);return n===1?"morgen":"in "+n+" Tagen"}
+function intervalLabel(c,r,easy){const b=nextBox(c,r,easy);if(b===0)return r===0&&!srsCfg().again?"beim nächsten Mal":"gleich nochmal";const n=daysFor(b,r);return n===1?"morgen":"in "+n+" Tagen"}
+function returnInfo(c,r,easy){const b=nextBox(c,r,easy),l=intervalLabel(c,r,easy);return b===0?"Kommt "+l+" wieder":"Fach "+b+" · kommt "+l+" wieder"}
 
 /* ---------- Import-Parser ---------- */
 function pick(o,keys){for(const k of keys){if(o[k]!=null&&String(o[k]).trim()!=="")return String(o[k]).trim()}return ""}
@@ -1288,7 +1296,20 @@ function flip(){
 }
 /* Kleine Rückmeldung nach der Bewertung: Konfetti, Bizeps, Schweißtropfen */
 const fxOn=()=>(!S||S.fx!==false)&&!(window.matchMedia&&matchMedia("(prefers-reduced-motion: reduce)").matches);
-function fxBurst(r){
+function rateInfo(txt,easy){
+  const old=$("#rateInfo");if(old)old.remove();
+  const p=el("div",{id:"rateInfo",role:"status",class:easy?"easy":""},txt);document.body.append(p);
+  setTimeout(()=>{p.classList.add("out");setTimeout(()=>p.remove(),400)},2200);
+}
+function fxBurst(r,easy){
+  if(easy&&fxOn()&&document.body.animate){
+    const btn=$("#r2"),rc=btn&&btn.getBoundingClientRect();
+    if(rc&&rc.width){const layer=el("div",{"aria-hidden":"true",style:"position:fixed;inset:0;pointer-events:none;z-index:9999;overflow:hidden"});document.body.append(layer);
+      ["🚀","✨","⭐","✨","🚀"].forEach((ch,i)=>{const p=el("span",{style:"position:absolute;left:"+(rc.left+rc.width/2)+"px;top:"+(rc.top+rc.height/2)+"px;font-size:"+(i%4?20:40)+"px;line-height:1"},ch);layer.append(p);
+        p.animate([{transform:"translate(-50%,-50%) scale(.4)",opacity:1},{transform:"translate(calc(-50% + "+(i-2)*34+"px),calc(-50% - 260px)) scale(1.1)",opacity:0}],{duration:1100,delay:i*60,easing:"cubic-bezier(.2,.7,.4,1)",fill:"both"})});
+      setTimeout(()=>layer.remove(),1500)}
+    return;
+  }
   if(!fxOn()||!document.body.animate)return;
   const btn=$("#r"+r),rc=btn&&btn.getBoundingClientRect();if(!rc||!rc.width)return;
   const cx=rc.left+rc.width/2,cy=rc.top+rc.height/2;
@@ -1313,13 +1334,15 @@ function fxBurst(r){
   }
   setTimeout(()=>layer.remove(),1700);
 }
-function rate(r){
+function rate(r,easy){
   if(!Q.active||!Q.flipped)return;
-  fxBurst(r);
+  easy=!!easy&&r===2;
   const id=Q.queue.shift(),x=Q.map[id];if(!x)return;
+  fxBurst(r,easy);
   const c=x.c,snap={id,r,prev:{box:c.box,due:c.due,ok:c.ok,bad:c.bad},again:r===0&&srsCfg().again};
   (Q.hist=Q.hist||[]).push(snap);if(Q.hist.length>200)Q.hist.shift();
-  c.box=nextBox(c,r);c.due=dueFor(c.box,r);
+  rateInfo((easy?"🚀 Leicht · ":"")+returnInfo(c,r,easy),easy);
+  c.box=nextBox(c,r,easy);c.due=dueFor(c.box,r);
   if(r===2)c.ok=(c.ok||0)+1;if(r===0)c.bad=(c.bad||0)+1;
   Q.stats[r]++;bump("r",1);if(r===2)bump("c",1);
   saveDeck(x.d);
@@ -1357,7 +1380,18 @@ $("#r0").addEventListener("click",()=>rate(0));
 $("#studyUndo").addEventListener("click",undoRate);
 $("#studyUndoDone").addEventListener("click",undoRate);
 $("#r1").addEventListener("click",()=>rate(1));
-$("#r2").addEventListener("click",()=>rate(2));
+(function(){
+  const b=$("#r2");let timer=0,fired=false;
+  const stop=()=>{clearTimeout(timer);timer=0;b.classList.remove("holding")};
+  const start=()=>{
+    if(timer)return;fired=false;b.classList.remove("holding");void b.offsetWidth;b.classList.add("holding");
+    timer=setTimeout(()=>{timer=0;fired=true;b.classList.remove("holding");if(navigator.vibrate)try{navigator.vibrate(30)}catch(e){}rate(2,true)},1000);
+  };
+  b.addEventListener("pointerdown",e=>{if(e.button>0)return;start()});
+  ["pointerup","pointerleave","pointercancel"].forEach(t=>b.addEventListener(t,stop));
+  b.addEventListener("contextmenu",e=>e.preventDefault());
+  b.addEventListener("click",()=>{if(fired){fired=false;return}rate(2)});
+})();
 $("#studyEnd").addEventListener("click",leaveStudy);
 $("#studyBack").addEventListener("click",leaveStudy);
 $("#studyAgain").addEventListener("click",()=>{const p=Q.params;$("#studyDone").hidden=true;startStudy(p[0],p[1],p[2])});
@@ -1367,7 +1401,7 @@ document.addEventListener("keydown",e=>{
   if(/INPUT|TEXTAREA|SELECT/.test((e.target||{}).tagName||""))return;
   if(e.key===" "&&e.target.tagName!=="BUTTON"){e.preventDefault();flip()}
   else if(e.key==="ArrowLeft"||e.key==="Backspace"){e.preventDefault();undoRate()}
-  else if(Q.flipped){if(e.key==="1")rate(0);else if(e.key==="2")rate(1);else if(e.key==="3")rate(2)}
+  else if(Q.flipped){if(e.key==="1")rate(0);else if(e.key==="2")rate(1);else if(e.key==="3")rate(2);else if(e.key==="4")rate(2,true)}
 });
 
 /* ---------- Lernstapel (eigene Mischungen) ---------- */
