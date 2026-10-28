@@ -1230,7 +1230,10 @@ function showCard(){
   if(docs.length){dbox.hidden=false;dbox.append(el("span",{text:"Unterlagen:"}));docs.forEach(e=>dbox.append(linkFor(e)))}else dbox.hidden=true;
   $("#studyCount").textContent=`${Q.done} von ${Q.total} geschafft`;
   $("#studyProg").style.width=(Q.done/Q.total*100)+"%";
-  [0,1,2].forEach(r=>{$("#i"+r).textContent=intervalLabel(x.c,r)});
+  [0,1,2].forEach(r=>{
+    let t=intervalLabel(x.c,r);
+    if(r===2){const e=intervalLabel(x.c,2,true);if(e!==t)t+=" (halten: "+e+")"}   /* wohin die Karte bei 1 s Halten = leicht landet */
+    $("#i"+r).textContent=t});
   $("#studyUndo").disabled=!(Q.hist&&Q.hist.length);
 }
 /* Karte während des Lernens bearbeiten oder löschen */
