@@ -16,7 +16,7 @@ const NATIVE = !!(window.Capacitor && window.Capacitor.isNativePlatform && windo
 
 const DEFAULTS = () => ({
   ver: 3, foods: [], recipes: [], entries: [], weights: {}, coffee: {},
-  settings: { kcal: 2200, pP: 30, pC: 40, pF: 30, mode: "auto", accent: "#12935f", geminiKey: "", geminiModel: "gemini-2.5-flash-lite", goalWeight: "", weightGate: true, coffeeSleep: "23:00", coffeeGap: 3, coffeeMl: 200, coffeeMg100: 40, coffeeRest: 30, coffeeDayMax: 400, cfCustom: [], cfLast: "kaffee" },
+  settings: { kcal: 2200, pP: 30, pC: 40, pF: 30, mode: "auto", accent: "#12935f", geminiKey: "", geminiModel: "gemini-2.5-flash-lite", goalWeight: "", weightGate: true, coffeeMl: 200, coffeeMg100: 40, cfSleepBy: {}, cfCustom: [], cfLast: "kaffee" },
 });
 let D = load();
 let ui = { setOpen: {}, tab: "today", date: iso(new Date()), weekOffset: 0, period: 7, wRange: 90, meal: "b", open: {} };
@@ -136,9 +136,12 @@ const priceOf = (f, grams) => !hasPrice(f) ? undefined : f.priceU === "piece" &&
 
 /* ---- Kaffee-Zähler in ml: D.coffee[datum] = Liste { t: Uhrzeit oder "", ml } (ältere Tage: Liste von Uhrzeiten = je eine Portion) ---- */
 const CF_HALF = 5; // Halbwertszeit Koffein ca. 5 h (Tageslimit und Rest zum Einschlafen sind einstellbar)
+const CF_REST = 50; // Ziel: höchstens so viel mg Koffein im Körper beim Einschlafen
+const CF_SLEEP = "23:00"; // Standard-Schlafenszeit, pro Tag änderbar
+const cfSleepOf = d => { const t = (D.settings.cfSleepBy || {})[d]; return timeOk(t) ? t : CF_SLEEP; };
 function cfCfg() {
   const s = D.settings, n = (v, def, lo, hi) => { const x = num(v); return x >= lo && x <= hi ? x : def; };
-  return { sleep: timeOk(s.coffeeSleep) ? s.coffeeSleep : "23:00", gap: n(s.coffeeGap, 3, 0.5, 12), ml: n(s.coffeeMl, 200, 20, 1000), mg100: n(s.coffeeMg100, 40, 5, 300), rest: n(s.coffeeRest, 30, 5, 400), dayMax: n(s.coffeeDayMax, 400, 100, 1000) };
+  return { ml: n(s.coffeeMl, 200, 20, 1000), mg100: n(s.coffeeMg100, 40, 5, 300) };
 }
 /* Koffein-Quellen: jede Portion kennt ihre Stärke (m = mg pro 100 ml). "kaffee" folgt der Einstellung "mg Koffein pro 100 ml". */
 const CF_SRC = [
@@ -214,38 +217,26 @@ function coffeeCustom(d) {
   coffeeAdd(d, Math.round(v * 10) / 10);
 }
 const hm = m => { m = ((Math.round(m) % 1440) + 1440) % 1440; return String(Math.floor(m / 60)).padStart(2, "0") + ":" + String(m % 60).padStart(2, "0"); };
-/* Plan für heute: wann der nächste Kaffee okay ist, bis wann der letzte und wie viel noch passt,
-   damit zur Schlafenszeit höchstens "Rest" mg Koffein im Körper sind (Abbau mit Halbwertszeit). */
+/* Wie viel Koffein ist jetzt im Körper und wie viel passt jetzt noch, damit zur Schlafenszeit höchstens CF_REST mg übrig sind (Abbau mit Halbwertszeit). */
 function coffeePlan(d) {
-  const c = cfCfg(), now = tMin(nowT()), cups = cupsOf(d), timed = cups.filter(x => timeOk(x.t)).map(x => ({ m: tMin(x.t), mg: mgOfCup(x) })).sort((x, y) => x.m - y.m);
-  let B = tMin(c.sleep); if (B < 360) B += 1440; // Schlafen nach Mitternacht
-  const dec = (mg, from, to) => mg * Math.pow(0.5, (to - from) / (CF_HALF * 60)), mgP = mgOfMl(c.ml);
-  let R = timed.reduce((a, x) => a + (x.m <= B ? dec(x.mg, x.m, B) : 0), 0), tot = cups.reduce((a, x) => a + mgOfCup(x), 0);
+  const timed = cupsOf(d).filter(x => timeOk(x.t)).map(x => ({ m: tMin(x.t), mg: mgOfCup(x) }));
+  let B = tMin(cfSleepOf(d)), now = tMin(nowT()); if (B < 360) { B += 1440; if (now < 360) now += 1440; } // Schlafen nach Mitternacht
+  const dec = (mg, from, to) => mg * Math.pow(0.5, (to - from) / (CF_HALF * 60));
+  const R0 = timed.reduce((a, x) => a + (x.m <= B ? dec(x.mg, x.m, B) : 0), 0);
   const level = timed.reduce((a, x) => a + (x.m <= now ? dec(x.mg, x.m, now) : 0), 0);
-  const last = timed.length ? timed[timed.length - 1].m : null;
-  const nextOk = last != null ? Math.max(now, last + c.gap * 60) : now;
-  const ts = []; let t = Math.ceil(nextOk / 5) * 5;
-  const R0 = R, tot0 = tot;
-  while (t < B) { const add = dec(mgP, t, B); if (R + add > c.rest + 1e-9 || tot + mgP > c.dayMax) break; ts.push(t); R += add; tot += mgP; t += c.gap * 60; }
-  let latest = null; const budget = c.rest - R0;
-  if (tot0 + mgP <= c.dayMax && budget > 0) { latest = budget >= mgP ? B : B - CF_HALF * 60 * Math.log2(mgP / budget); if (latest < now) latest = null; }
-  const why = tot0 + mgP > c.dayMax ? "limit" : ts.length ? "" : "sleep";
-  // Passt die Planungsmenge nicht mehr, aber eine kleinere? Größte noch okaye Menge ab der nächsten möglichen Zeit.
-  let small = null; const t0 = Math.ceil(nextOk / 5) * 5;
-  if (why === "sleep" && t0 < B) { const mg = Math.min((c.rest - R0) / Math.pow(0.5, (B - t0) / (CF_HALF * 60)), c.dayMax - tot0), ml = mg / c.mg100 * 100; if (ml >= 20) small = { ml: Math.floor(ml / 10) * 10, t: t0 }; }
-  return { c, B, level, nextOk, ts, latest, why, tot0, small, R0 };
+  const budget = CF_REST - R0, late = now >= B;
+  const mg = !late && budget > 0 ? budget / Math.pow(0.5, (B - now) / (CF_HALF * 60)) : 0;
+  return { B, level, R0, budget, late, mg };
 }
 function coffeeCard(d) {
   const cups = cupsOf(d), ml = mlOf(d), ts = cups.filter(x => timeOk(x.t)).map(x => x.t), cf = cfCfg(), isToday = d === iso(new Date()), cs = srcOf(cfCur()), srcs = cfSources();
   let plan = "";
   if (isToday) {
-    const P = coffeePlan(d), lv = P.level >= 5 ? `<div class="muted tiny">Aktuell etwa ${r0(P.level)} mg Koffein im Körper</div>` : "";
-    if (P.ts.length) {
-      const first = P.ts[0], nowM = tMin(nowT());
-      plan = `<div class="cf-plan"><div class="cf-big ${first <= nowM + 4 ? "ok" : ""}">${first <= nowM + 4 ? "Jetzt wieder möglich" : "Nächster Kaffee ab " + hm(first)}</div>
-        <div class="muted small">${P.latest != null && P.latest < P.B ? "Letzter Kaffee spätestens um " + hm(P.latest) + " (Schlafen " + cf.sleep + "). " : ""}Noch bis zu ${fmtMl(P.ts.length * cf.ml)} heute: ${P.ts.map(hm).join(" · ")} (je ${r0(cf.ml)} ml)</div>${lv}</div>`;
-    } else plan = `<div class="cf-plan"><div class="cf-big stop">${P.why === "limit" ? "Tageslimit erreicht" : "Heute lieber kein Kaffee mehr"}</div>
-      <div class="muted small">${P.why === "limit" ? "Mit " + r0(P.tot0) + " mg Koffein bist du beim Limit von " + cf.dayMax + " mg pro Tag." : "Eine Portion von " + r0(cf.ml) + " ml ließe bis " + cf.sleep + " zu viel Koffein im Körper (mehr als " + cf.rest + " mg). Bis dahin sind von deinen bisherigen Kaffees noch ca. " + r0(P.R0) + " mg übrig." + (P.small ? " Eine kleinere Menge bis ca. " + P.small.ml + " ml wäre " + (P.small.t <= tMin(nowT()) + 4 ? "jetzt" : "ab " + hm(P.small.t)) + " noch okay." : "")}</div>${lv}</div>`;
+    const P = coffeePlan(d), per100 = cs.mg != null ? cs.mg : cf.mg100, mlOk = Math.floor(P.mg / per100 * 100 / 10) * 10, sl = cfSleepOf(d);
+    const body = P.late ? `<div class="cf-big stop">Schlafenszeit erreicht</div>`
+      : mlOk >= 10 ? `<div class="cf-big ok">Jetzt noch bis zu ${fmtMl(mlOk)}</div><div class="muted small">${cs.n}, ca. ${r0(mlOk * per100 / 100)} mg Koffein. Um ${sl} sind dann noch ${CF_REST} mg im Körper.</div>`
+      : `<div class="cf-big stop">Heute lieber nichts mehr</div><div class="muted small">Bis ${sl} sind von früher noch ca. ${r0(P.R0)} mg übrig (Ziel: höchstens ${CF_REST} mg).</div>`;
+    plan = `<div class="cf-plan">${body}<div class="muted small" style="margin-top:6px">Aktuell im Körper: <b>${r0(P.level)} mg</b> Koffein</div></div>`;
   }
   return `<section class="coffeecard"><div class="cf-top"><div class="cf-l"><span class="cf-ic" aria-hidden="true">☕</span><div><b>Koffein</b><div class="muted tiny">${cups.length ? `${r0(ml)} ml · ca. ${r0(mgOfDay(d))} mg Koffein${ts.length ? " · " + ts.join(", ") : ""}` : "Noch kein Koffein an diesem Tag"}</div></div></div>
     <div class="cf-r"><button class="iconbtn" data-act="coffeeEdit" aria-label="Kaffee-Einträge bearbeiten">${icon("pen", 18)}</button><button class="iconbtn" data-act="coffeeDel" aria-label="eine Portion weniger" ${cups.length ? "" : "disabled"}>−</button><b class="cf-n">${r0(ml)}<small>ml</small></b><button class="iconbtn" data-act="coffeeAdd" aria-label="eine Portion mehr">+</button></div></div>
@@ -253,15 +244,13 @@ function coffeeCard(d) {
     <div class="cf-custom"><input type="text" inputmode="decimal" id="cfCustom" placeholder="Eigene Menge (ml)" autocomplete="off"><button class="btn sec" data-act="coffeeCustom">Hinzufügen</button></div>
     <div class="muted tiny" style="margin-top:6px">+ und − ändern um ${r0(cs.ml)} ml (${cs.n}), mit „Hinzufügen“ trägst du eine eigene Menge davon ein, z. B. ${r0(cs.ml * 1.32)} ml.</div>
     ${plan}
-    <div class="cf-sleep"><label for="cfSleep">Schlafen um</label><input type="time" id="cfSleep" value="${cf.sleep}"></div>
+    <div class="cf-sleep"><label for="cfSleep">Schlafen um <span class="muted tiny">(nur für diesen Tag)</span></label><input type="time" id="cfSleep" value="${cfSleepOf(d)}"></div>
     <details class="cf-set" ${ui.cfOpen ? "open" : ""}><summary>Annahmen anpassen</summary>
-      <div class="grid2"><div><label>Typische Menge pro Kaffee für die Planung (ml)</label><input type="text" inputmode="decimal" id="cfMl" value="${r0(cf.ml)}"></div><div><label>mg Koffein pro 100 ml (Kaffee)</label><input type="text" inputmode="decimal" id="cfMg" value="${cf.mg100}"></div></div>
-      <div class="grid2"><div><label>Pause zwischen zwei Kaffees (Std.)</label><input type="text" inputmode="decimal" id="cfGap" value="${String(cf.gap).replace(".", ",")}"></div><div><label>Erlaubter Koffein-Rest beim Einschlafen (mg)</label><input type="text" inputmode="decimal" id="cfRest" value="${cf.rest}"></div></div>
-      <label>Tageslimit (mg Koffein pro Tag)</label><input type="text" inputmode="decimal" id="cfDay" value="${cf.dayMax}">
+      <div class="grid2"><div><label>Typische Menge pro Kaffee (ml)</label><input type="text" inputmode="decimal" id="cfMl" value="${r0(cf.ml)}"></div><div><label>mg Koffein pro 100 ml (Kaffee)</label><input type="text" inputmode="decimal" id="cfMg" value="${cf.mg100}"></div></div>
       <label style="margin-top:12px">Eigene Getränke</label>
       ${(D.settings.cfCustom || []).length ? (D.settings.cfCustom || []).map(z => `<div class="cerow"><span style="flex:1;min-width:0">${esc(z.n)} · ${nde(num(z.mg))} mg/100 ml · ${r0(num(z.ml) || 100)} ml</span><button class="iconbtn" data-act="cfSrcDel" data-id="${esc(z.id)}" aria-label="${esc(z.n)} löschen">${icon("trash", 18)}</button></div>`).join("") : `<div class="muted tiny">Noch keine. Gib Name, Koffein pro 100 ml und deine übliche Portion ein.</div>`}
       <div class="cf-custom" style="flex-wrap:wrap"><input type="text" id="cfsN" placeholder="Name, z. B. Monster" autocomplete="off" style="flex:1 1 100%"><input type="text" inputmode="decimal" id="cfsMg" placeholder="mg / 100 ml" autocomplete="off"><input type="text" inputmode="decimal" id="cfsMl" placeholder="Portion (ml)" autocomplete="off"><button class="btn sec" data-act="cfSrcAdd">Speichern</button></div>
-      <div class="muted tiny" style="margin-top:8px">Rechnung: Koffein wird mit einer Halbwertszeit von ca. ${CF_HALF} Stunden abgebaut. Die App plant Portionen so, dass zur Schlafenszeit höchstens der erlaubte Rest übrig ist und du ${cf.dayMax} mg pro Tag nicht überschreitest. Als sicher für gesunde Erwachsene gelten laut Europäischer Behörde für Lebensmittelsicherheit bis zu 400 mg pro Tag und 200 mg auf einmal; wie viel du verträgst, ist individuell. Jede Portion rechnet mit der Stärke ihres Getränks. Nur Einträge mit Uhrzeit zählen für den Abbau. Weitere Koffeinquellen (z. B. Schokolade, Tabletten) kannst du als eigenes Getränk anlegen. Filterkaffee hat grob 40 mg pro 100 ml, Espresso etwa 200 mg. Das ist eine grobe Orientierung, keine medizinische Beratung.</div></details></section>`;
+      <div class="muted tiny" style="margin-top:8px">Koffein wird mit ca. ${CF_HALF} Std. Halbwertszeit abgebaut. Ziel: höchstens ${CF_REST} mg beim Schlafen. Richtwerte, keine medizinische Beratung.</div></details></section>`;
 }
 
 /* ---------- Theme ---------- */
@@ -2384,10 +2373,10 @@ document.addEventListener("keydown", ev => { if ((ev.key === "Enter" || ev.key =
 document.addEventListener("change", async ev => {
   const ct = ev.target;
   if (ct && ct.id === "cfSrc") { ui.cfSrc = ct.value; D.settings.cfLast = ct.value; save(); render(); return; }
-  if (ct && ["cfSleep", "cfMl", "cfMg", "cfGap", "cfRest", "cfDay"].includes(ct.id)) {
+  if (ct && ["cfSleep", "cfMl", "cfMg"].includes(ct.id)) {
     if (ct.id !== "cfSleep") ui.cfOpen = true;
-    const k = { cfSleep: "coffeeSleep", cfMl: "coffeeMl", cfMg: "coffeeMg100", cfGap: "coffeeGap", cfRest: "coffeeRest", cfDay: "coffeeDayMax" }[ct.id];
-    if (ct.id === "cfSleep") { if (timeOk(ct.value)) D.settings.coffeeSleep = ct.value; } else D.settings[k] = num(ct.value);
+    const k = { cfMl: "coffeeMl", cfMg: "coffeeMg100" }[ct.id];
+    if (ct.id === "cfSleep") { const m = D.settings.cfSleepBy = D.settings.cfSleepBy || {}; if (timeOk(ct.value) && ct.value !== CF_SLEEP) m[ui.date] = ct.value; else delete m[ui.date]; } else D.settings[k] = num(ct.value);
     save(); render(); return;
   }
   if (ct && (ct.id === "cFrom" || ct.id === "cTo") && ct.value) {
