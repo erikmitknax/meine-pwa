@@ -1496,23 +1496,57 @@ function foodOfEntry(e) {
   return D.foods.find(x => x.name.toLowerCase() === nm && (!e.brand || (x.brand || "").toLowerCase() === String(e.brand).toLowerCase()));
 }
 function missingSheet(list, ek, back) {
-  const todo = list.filter(e => e.grams > 0 && !hasN(e[ek]));
   const lab = { s: "Zucker", fi: "Ballaststoffe", sa: "Gesättigte Fettsäuren", sl: "Salz" };
-  const anyFood = todo.some(foodOfEntry);
-  const items = todo.map(e => {
+  const same = (a, b) => String(a).toLowerCase() === String(b).toLowerCase();
+  const mk0 = MICRO.find(m => m.ek === ek);
+  const foodHas = (name, fk) => { const f = D.foods.find(x => same(x.name, name)); return f && hasN(f[fk]) ? f[fk] : null; };
+  // Vorab: Werte, die schon in „Meine Lebensmittel“ stehen, direkt in die Zutaten übernehmen
+  let pre = false;
+  list.forEach(e => {
+    if (hasN(e[ek]) || !(e.grams > 0)) return;
+    const ings = entryIngs(e); if (!ings) return;
+    const r = recipeFor(e);
+    ings.forEach(i => { if (i.off) return; MICRO.forEach(m => {
+      if (hasN(i[m.fk])) return; const v = foodHas(i.name, m.fk); if (v == null) return;
+      if (Array.isArray(e.ings)) e.ings.forEach(x => { if (same(x.name, i.name) && !hasN(x[m.fk])) { x[m.fk] = v; pre = true; } });
+      if (r) r.items.forEach(x => { if (same(x.name, i.name) && !hasN(x[m.fk])) { x[m.fk] = v; pre = true; } });
+    }); });
+  });
+  if (pre) { fillMissingMicro(D.entries); save(); }
+  const todo = list.filter(e => e.grams > 0 && !hasN(e[ek]));
+  // Rezepte: einzelne Zutaten abfragen (ein Wert pro Zutat, gilt für alle Rezepte und Einträge damit); sonst den Eintrag selbst
+  const recEntries = todo.filter(e => entryIngs(e)), plain = todo.filter(e => !entryIngs(e));
+  const ingMap = new Map();
+  recEntries.forEach(e => entryIngs(e).forEach(i => {
+    if (i.off || hasN(i[mk0.fk])) return;
+    const k = String(i.name).toLowerCase(), o = ingMap.get(k) || { name: i.name, grams: 0, ms: [], from: [] };
+    MICRO.filter(m => !hasN(i[m.fk])).forEach(m => { if (!o.ms.includes(m)) o.ms.push(m); });
+    o.grams += i.grams; if (!o.from.includes(e.name)) o.from.push(e.name); ingMap.set(k, o);
+  }));
+  const ingList = [...ingMap.values()].map(o => ({ ...o, ms: o.ms.sort((a, b) => (b.ek === ek) - (a.ek === ek)) }));
+  const anyFood = plain.some(foodOfEntry) || ingList.some(o => D.foods.some(f => same(f.name, o.name)));
+  const inRow = (m, attr, aria) => `<div class="ing" style="padding:6px 0"><div class="grow"><div class="t">${m.name}</div><div class="muted tiny">pro 100 g · <span data-calc="${attr}|${m.ek}">–</span></div></div><input type="text" inputmode="decimal" placeholder="–" ${attr.startsWith("i") ? `data-mi="${attr.slice(1)}"` : `data-me="${attr.slice(1)}"`} data-mk="${m.ek}" aria-label="${m.name} pro 100 g für ${esc(aria)}"></div>`;
+  const ingHtml = ingList.map((o, k) => `<div class="card" style="margin-bottom:10px"><div class="row between"><b style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(o.name)}</b><span class="muted small">${nde(o.grams, 2)} g</span></div>
+      <div class="muted tiny" style="margin-top:2px">Zutat in: ${o.from.map(esc).join(", ")}</div>${o.ms.map(m => inRow(m, "i" + k, o.name)).join("")}</div>`).join("");
+  const plainHtml = plain.map(e => {
     const ms = MICRO.filter(m => !hasN(e[m.ek])).sort((a, b) => (b.ek === ek) - (a.ek === ek));
     return `<div class="card" style="margin-bottom:10px"><div class="row between"><b style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(e.name)}</b><span class="muted small">${nde(e.grams, 2)} g</span></div>
-      ${ms.map(m => `<div class="ing" style="padding:6px 0"><div class="grow"><div class="t">${m.name}</div><div class="muted tiny">pro 100 g · <span data-calc="${e.id}|${m.ek}">–</span></div></div><input type="text" inputmode="decimal" placeholder="–" data-me="${e.id}" data-mk="${m.ek}" aria-label="${m.name} pro 100 g für ${esc(e.name)}"></div>`).join("")}</div>`;
+      ${ms.map(m => inRow(m, "e" + e.id, e.name)).join("")}</div>`;
   }).join("");
+  const items = (ingHtml ? (plainHtml ? `<h2 style="margin:4px 2px 8px">Zutaten aus Rezepten</h2>` : "") + ingHtml : "") + (plainHtml ? (ingHtml ? `<h2 style="margin:14px 2px 8px">Einzelne Lebensmittel</h2>` : "") + plainHtml : "");
   const s = sheet(`<button class="linkbtn" id="msBack" style="margin:-4px 0 6px">‹ Zurück</button><h3>${lab[ek]} nachtragen</h3>
-    <div class="muted small" style="margin:-6px 0 12px">Trage die Werte pro 100 g von der Verpackung ein. Felder, die du leer lässt, bleiben unbekannt.</div>
+    <div class="muted small" style="margin:-6px 0 12px">Trage die Werte pro 100 g von der Verpackung ein. Felder, die du leer lässt, bleiben unbekannt.${ingList.length ? " Bei Rezepten trägst du den Wert pro Zutat ein. Er gilt dann für alle Rezepte und Einträge mit dieser Zutat." : ""}</div>
     ${items || `<div class="muted center" style="padding:24px 10px">Hier fehlt nichts mehr.</div>`}
-    ${anyFood ? `<label style="display:flex;gap:10px;align-items:center;margin:10px 2px"><input type="checkbox" id="msFood" checked style="width:auto"> Auch im Lebensmittel speichern (gilt dann für alle Einträge davon)</label>` : ""}
+    ${anyFood ? `<label style="display:flex;gap:10px;align-items:center;margin:10px 2px"><input type="checkbox" id="msFood" checked style="width:auto"> Auch im Lebensmittel speichern (gilt dann überall, wo es vorkommt)</label>` : ""}
     <button class="btn block" style="margin-top:12px" id="msSave">Speichern</button><button class="btn sec block" style="margin-top:8px" id="msCancel">Abbrechen</button>`);
   const byId = id => list.find(e => e.id === id);
   $$("[data-me]", s).forEach(inp => inp.oninput = () => {
-    const e = byId(inp.dataset.me), out = $(`[data-calc="${inp.dataset.me}|${inp.dataset.mk}"]`, s);
+    const e = byId(inp.dataset.me), out = $(`[data-calc="e${inp.dataset.me}|${inp.dataset.mk}"]`, s);
     out.textContent = inp.value.trim() === "" ? "–" : "= " + nde(num(inp.value) * e.grams / 100, 2) + " g im Eintrag";
+  });
+  $$("[data-mi]", s).forEach(inp => inp.oninput = () => {
+    const o = ingList[+inp.dataset.mi], out = $(`[data-calc="i${inp.dataset.mi}|${inp.dataset.mk}"]`, s);
+    out.textContent = inp.value.trim() === "" ? "–" : "= " + nde(num(inp.value) * o.grams / 100, 2) + " g in deinen Einträgen";
   });
   $("#msBack", s).onclick = $("#msCancel", s).onclick = back;
   $("#msSave", s).onclick = () => {
@@ -1523,10 +1557,18 @@ function missingSheet(list, ek, back) {
       e[m.ek] = v * e.grams / 100; n++;
       const f = toFood && foodOfEntry(e); if (f && !hasN(f[m.fk])) f[m.fk] = v;
     });
+    $$("[data-mi]", s).forEach(inp => {
+      if (inp.value.trim() === "") return;
+      const o = ingList[+inp.dataset.mi], m = MICRO.find(x => x.ek === inp.dataset.mk), v = Math.max(0, num(inp.value));
+      D.entries.forEach(e => { if (Array.isArray(e.ings)) e.ings.forEach(x => { if (same(x.name, o.name) && !hasN(x[m.fk])) x[m.fk] = v; }); });
+      D.recipes.forEach(r => (r.items || []).forEach(x => { if (same(x.name, o.name) && !hasN(x[m.fk])) x[m.fk] = v; }));
+      const f = toFood && D.foods.find(x => same(x.name, o.name)); if (f && !hasN(f[m.fk])) f[m.fk] = v;
+      n++;
+    });
     if (n) { fillMissingMicro(D.entries); save(); render(); toast(n + (n === 1 ? " Wert gespeichert" : " Werte gespeichert")); }
     back();
   };
-  const first = $("[data-me]", s); if (first) first.focus();
+  const first = $("[data-mi], [data-me]", s); if (first) first.focus();
 }
 function wireMiss(s, list, back) {
   $$("[data-miss]", s).forEach(b => b.onclick = () => missingSheet(list, b.dataset.miss, back));
