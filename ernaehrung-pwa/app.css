@@ -331,3 +331,6 @@ textarea::placeholder{color:var(--muted);opacity:.8}
 .sortrow select{width:auto;max-width:60%;flex:none}
 .rarch{margin-top:14px;border-top:1px solid var(--line);padding-top:8px}
 .rarch summary{cursor:pointer;font-weight:600;color:var(--muted);padding:6px 2px}
+.catrow{display:flex;flex-wrap:wrap;gap:8px}
+.catchip{border:1px solid var(--line);border-radius:999px;padding:7px 13px;background:var(--card);color:var(--text);font:inherit;font-size:14px;font-weight:600;cursor:pointer}
+.catchip.on{background:var(--accent);color:var(--on-accent);border-color:transparent}

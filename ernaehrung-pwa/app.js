@@ -58,6 +58,18 @@ function sortList(list, mode) {
   else l.sort(nm);
   return l;
 }
+/* Rezept-Kategorien: Liste in den Einstellungen (frei erweiterbar), jedes Rezept kann mehrere haben (r.cats) */
+const CAT_DEFAULT = ["Frühstück", "Mittagessen", "Abendessen", "Snack", "Mealprep"];
+const recCats = () => { const base = Array.isArray(D.settings.recipeCats) ? D.settings.recipeCats.slice() : CAT_DEFAULT.slice(); D.recipes.forEach(r => (r.cats || []).forEach(c => { if (!base.some(x => x.toLowerCase() === String(c).toLowerCase())) base.push(c); })); return base; };
+const catChips = (list, sel, attr, extra) => list.map(c => `<button type="button" class="catchip ${sel(c) ? "on" : ""}" ${attr}="${esc(c)}">${esc(c)}${extra ? extra(c) : ""}</button>`).join("");
+/* Filterleiste über Rezeptlisten: nur Kategorien, die in aktiven Rezepten vorkommen */
+function catFilterHtml() {
+  const used = recCats().filter(c => D.recipes.some(r => !r.arch && (r.cats || []).includes(c)));
+  if (!used.length) { ui.recCat = ""; return ""; }
+  if (ui.recCat && !used.includes(ui.recCat)) ui.recCat = "";
+  return `<div class="catrow" style="margin:10px 0 2px"><button type="button" class="catchip ${ui.recCat ? "" : "on"}" data-fcat="">Alle</button>${catChips(used, c => c === ui.recCat, "data-fcat")}</div>`;
+}
+const catOk = r => !ui.recCat || (r.cats || []).includes(ui.recCat);
 /* Bild verkleinern und als JPEG-Datenadresse speichern (bleibt klein, wird mit synchronisiert) */
 async function imgToData(file, max = 560, q = 0.72) {
   let im;
@@ -1242,7 +1254,7 @@ function recipePortion(r) {
 }
 function recipeLine(r) {
   const p = recipePortion(r);
-  return `${r.img ? `<img class="rthumb" src="${r.img}" alt="">` : ""}<div class="grow"><div style="font-weight:600">${esc(r.name)}</div><div class="muted tiny">${r.items.length} ${r.items.length === 1 ? "Zutat" : "Zutaten"}, pro Portion ${r0(p.kcal)} kcal (E ${r0(p.p)} / KH ${r0(p.c)} / F ${r0(p.f)})</div></div>`;
+  return `${r.img ? `<img class="rthumb" src="${r.img}" alt="">` : ""}<div class="grow"><div style="font-weight:600">${esc(r.name)}</div><div class="muted tiny">${r.items.length} ${r.items.length === 1 ? "Zutat" : "Zutaten"}, pro Portion ${r0(p.kcal)} kcal (E ${r0(p.p)} / KH ${r0(p.c)} / F ${r0(p.f)})</div>${(r.cats || []).length ? `<div class="tiny" style="margin-top:3px;color:var(--accent);font-weight:600">${r.cats.map(esc).join(" · ")}</div>` : ""}</div>`;
 }
 function storeFood(f) {
   let st = D.foods.find(x => x.id === f.id) || (f.barcode && D.foods.find(x => x.barcode === f.barcode));
@@ -1252,12 +1264,13 @@ function storeFood(f) {
 }
 
 function bodyRecipes(b) {
-  const sm = D.settings.sortR || "used", list = sortList(D.recipes.filter(r => !r.arch), sm);
-  b.innerHTML = (D.recipes.some(r => !r.arch) ? `<div class="sortrow"><span class="muted small">Sortieren</span><select id="rSort" aria-label="Sortierung">${sortOpts(sm)}</select></div>` : "") + (list.length ? list.map(r => `<div class="res" data-rid="${r.id}">${recipeLine(r)}</div>`).join("")
+  const sm = D.settings.sortR || "used", list = sortList(D.recipes.filter(r => !r.arch && catOk(r)), sm);
+  b.innerHTML = (D.recipes.some(r => !r.arch) ? `<div class="sortrow"><span class="muted small">Sortieren</span><select id="rSort" aria-label="Sortierung">${sortOpts(sm)}</select></div>` : "") + catFilterHtml() + (list.length ? list.map(r => `<div class="res" data-rid="${r.id}">${recipeLine(r)}</div>`).join("")
     : `<div class="muted small center" style="padding:16px 8px">Noch keine Rezepte. Lege ein Gericht aus mehreren Zutaten an, danach trägst du es mit einem Tipp ein.</div>`) +
     `<button class="btn block" style="margin-top:14px" id="rNew">Neues Rezept</button>`;
   $$("[data-rid]", b).forEach(el => el.onclick = () => pickRecipe(D.recipes.find(r => r.id === el.dataset.rid)));
   const so = $("#rSort", b); if (so) so.onchange = () => { D.settings.sortR = so.value; save(); bodyRecipes(b); };
+  $$("[data-fcat]", b).forEach(el => el.onclick = () => { ui.recCat = el.dataset.fcat; bodyRecipes(b); });
   $("#rNew", b).onclick = () => recipeEditor(null, "add");
 }
 
@@ -1312,7 +1325,8 @@ function pickRecipe(r) {
 }
 
 function recipeEditor(r, back) {
-  rdraft = r ? JSON.parse(JSON.stringify(r)) : { id: null, name: "", servings: 1, items: [] };
+  rdraft = r ? JSON.parse(JSON.stringify(r)) : { id: null, name: "", servings: 1, items: [], cats: [] };
+  if (!Array.isArray(rdraft.cats)) rdraft.cats = []; ui.catEdit = false;
   rdraft.back = back || "add";
   drawRecipeEditor();
 }
@@ -1329,6 +1343,9 @@ function drawRecipeEditor() {
     <label>Bild (optional)</label>
     ${d.img ? `<img class="rpick" src="${d.img}" alt="Rezeptbild"><div class="row" style="gap:8px;margin-top:8px"><button class="btn sec" style="flex:1" id="rImgPick">Bild ändern</button><button class="btn sec" style="flex:1" id="rImgDel">Entfernen</button></div>` : `<button class="btn sec block" id="rImgPick">Bild hinzufügen</button>`}
     <input type="file" id="rImgFile" accept="image/*" hidden>
+    <div class="row between" style="margin-top:14px"><label style="margin:0">Kategorien</label><button class="linkbtn" id="rcEdit" style="margin:0">${ui.catEdit ? "Fertig" : "Liste bearbeiten"}</button></div>
+    <div class="catrow" style="margin-top:8px">${catChips(recCats(), c => d.cats.includes(c), "data-cat", c => ui.catEdit ? ` <span aria-label="Kategorie entfernen" data-catdel="${esc(c)}" style="margin-left:4px;font-weight:700">×</span>` : "")}</div>
+    <div class="row" style="gap:8px;margin-top:8px"><input type="text" id="rcNew" placeholder="Neue Kategorie" autocomplete="off" maxlength="30"><button class="btn sec" id="rcAdd" style="flex:none">Hinzufügen</button></div>
     <label>Ergibt Portionen</label><input type="text" inputmode="decimal" id="rs" value="${d.servings}">
     <label>Gesamtgewicht fertig (g, optional)</label><input type="text" inputmode="decimal" id="rw" value="${d.weight > 0 ? r0(d.weight) : ""}" placeholder="${r0(recipeTotals(d).grams) || "z. B. 850"}">
     <div class="muted tiny" style="margin:6px 2px 0">Gewicht des fertigen Gerichts auf der Waage. Damit trägst du später einfach ein, wie viel Gramm du genommen hast. Leer = Summe der Zutaten.</div>
@@ -1363,6 +1380,15 @@ function drawRecipeEditor() {
     foodPicker((food, grams) => { d.items.push({ name: food.name, grams, ...per100(food) }); drawRecipeEditor(); }, drawRecipeEditor);
   };
   $("#rCancel", s).onclick = recipeExit;
+  $$("[data-cat]", s).forEach(b => b.onclick = ev => {
+    const del = ev.target.closest("[data-catdel]");
+    if (del) { const c = del.dataset.catdel; capture(); D.settings.recipeCats = recCats().filter(x => x !== c); D.recipes.forEach(r => { if (r.cats) { r.cats = r.cats.filter(x => x !== c); if (!r.cats.length) delete r.cats; } }); d.cats = d.cats.filter(x => x !== c); save(); drawRecipeEditor(); return; }
+    if (ui.catEdit) return;
+    capture(); const c = b.dataset.cat; d.cats = d.cats.includes(c) ? d.cats.filter(x => x !== c) : d.cats.concat([c]); drawRecipeEditor();
+  });
+  $("#rcEdit", s).onclick = () => { capture(); ui.catEdit = !ui.catEdit; drawRecipeEditor(); };
+  const addCat = () => { const v = $("#rcNew", s).value.trim(); if (!v) return; capture(); const ex = recCats().find(x => x.toLowerCase() === v.toLowerCase()), c = ex || v; if (!ex) D.settings.recipeCats = recCats().concat([c]); if (!d.cats.includes(c)) d.cats.push(c); save(); drawRecipeEditor(); };
+  $("#rcAdd", s).onclick = addCat; $("#rcNew", s).onkeydown = ev => { if (ev.key === "Enter") { ev.preventDefault(); addCat(); } };
   $("#rImgPick", s).onclick = () => $("#rImgFile", s).click();
   $("#rImgFile", s).onchange = async ev => { const f = ev.target.files[0]; if (!f) return; try { capture(); d.img = await imgToData(f); drawRecipeEditor(); } catch (e) { toast("Bild konnte nicht gelesen werden"); } };
   if (d.img) $("#rImgDel", s).onclick = () => { capture(); delete d.img; drawRecipeEditor(); };
@@ -1374,9 +1400,9 @@ function drawRecipeEditor() {
     if (!d.items.length) return toast("Füge mindestens eine Zutat hinzu");
     if (d.items.some(i => i.grams <= 0)) return toast("Jede Zutat braucht eine Menge");
     const rec = { id: d.id || uid(), name: d.name, servings: d.servings, weight: d.weight > 0 ? d.weight : 0, items: d.items.map(i => ({ name: i.name, grams: i.grams, kcal: i.kcal, protein: i.protein, carbs: i.carbs, fat: i.fat, ...pick100(i) })), used: 0 };
-    if (d.img) rec.img = d.img; if (d.arch) rec.arch = true;
+    if (d.img) rec.img = d.img; if (d.arch) rec.arch = true; if (d.cats && d.cats.length) rec.cats = d.cats.slice();
     const ex = D.recipes.find(x => x.id === rec.id);
-    if (ex) { rec.used = ex.used || 0; Object.assign(ex, rec); if (!rec.img) delete ex.img; if (!rec.arch) delete ex.arch; } else D.recipes.push(rec);
+    if (ex) { rec.used = ex.used || 0; Object.assign(ex, rec); if (!rec.img) delete ex.img; if (!rec.arch) delete ex.arch; if (!rec.cats) delete ex.cats; } else D.recipes.push(rec);
     save(); toast("Rezept gespeichert"); recipeExit();
   };
 }
@@ -1451,15 +1477,17 @@ function pickAmount(food, onPick, onBack) {
 }
 
 function recipeManage() {
-  const s = sheet(`<h3>Meine Rezepte</h3><div class="sortrow"><span class="muted small">Sortieren</span><select id="rSort" aria-label="Sortierung"></select></div><div id="rl"></div><div id="ra"></div><button class="btn block" style="margin-top:14px" id="rNew">Neues Rezept</button>`);
+  const s = sheet(`<h3>Meine Rezepte</h3><div class="sortrow"><span class="muted small">Sortieren</span><select id="rSort" aria-label="Sortierung"></select></div><div id="rf"></div><div id="rl"></div><div id="ra"></div><button class="btn block" style="margin-top:14px" id="rNew">Neues Rezept</button>`);
   const sm = D.settings.sortR || "az"; $("#rSort", s).innerHTML = sortOpts(sm);
-  const act = sortList(D.recipes.filter(r => !r.arch), sm), arc = sortList(D.recipes.filter(r => r.arch), sm);
+  $("#rf", s).innerHTML = catFilterHtml();
+  const act = sortList(D.recipes.filter(r => !r.arch && catOk(r)), sm), arc = sortList(D.recipes.filter(r => r.arch), sm);
   const row = r => `<div class="res" data-rid="${r.id}">${recipeLine(r)}</div>`;
-  $("#rl", s).innerHTML = act.length ? act.map(row).join("") : `<div class="muted small center" style="padding:16px 8px">${arc.length ? "Alle Rezepte sind archiviert." : "Noch keine Rezepte."}</div>`;
+  $("#rl", s).innerHTML = act.length ? act.map(row).join("") : `<div class="muted small center" style="padding:16px 8px">${ui.recCat ? "Keine Rezepte in dieser Kategorie." : arc.length ? "Alle Rezepte sind archiviert." : "Noch keine Rezepte."}</div>`;
   $("#ra", s).innerHTML = arc.length ? `<details class="rarch" ${ui.archOpen ? "open" : ""}><summary>Archiv (${arc.length})</summary>${arc.map(row).join("")}</details>` : "";
   const det = $(".rarch", s); if (det) det.ontoggle = () => { ui.archOpen = det.open; };
   $$("[data-rid]", s).forEach(el => el.onclick = () => recipeEditor(D.recipes.find(r => r.id === el.dataset.rid), "manage"));
   $("#rSort", s).onchange = e => { D.settings.sortR = e.target.value; save(); recipeManage(); };
+  $$("[data-fcat]", s).forEach(el => el.onclick = () => { ui.recCat = el.dataset.fcat; recipeManage(); });
   $("#rNew", s).onclick = () => recipeEditor(null, "manage");
 }
 function mealToRecipe(meal) {
