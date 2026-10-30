@@ -44,6 +44,30 @@ const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+/* Anlegezeit aus der ID (Zeitstempel in den ersten 8 Zeichen); 0 = unbekannt */
+const createdOf = x => { const t = parseInt(String((x && x.id) || "").slice(0, 8), 36); return t > 1.5e12 && t < 4.1e12 ? t : 0; };
+const SORTS = [["az", "A–Z"], ["za", "Z–A"], ["new", "Neueste zuerst"], ["old", "Älteste zuerst"], ["used", "Häufig genutzt"]];
+const sortOpts = cur => SORTS.map(([v, n]) => `<option value="${v}" ${v === cur ? "selected" : ""}>${n}</option>`).join("");
+function sortList(list, mode) {
+  const nm = (a, b) => String(a.name).localeCompare(String(b.name), "de", { numeric: true, sensitivity: "base" });
+  const l = list.slice();
+  if (mode === "za") l.sort((a, b) => nm(b, a));
+  else if (mode === "new") l.sort((a, b) => (createdOf(b) - createdOf(a)) || nm(a, b));
+  else if (mode === "old") l.sort((a, b) => (createdOf(a) - createdOf(b)) || nm(a, b));
+  else if (mode === "used") l.sort((a, b) => ((b.used || 0) - (a.used || 0)) || nm(a, b));
+  else l.sort(nm);
+  return l;
+}
+/* Bild verkleinern und als JPEG-Datenadresse speichern (bleibt klein, wird mit synchronisiert) */
+async function imgToData(file, max = 560, q = 0.72) {
+  let im;
+  try { im = await createImageBitmap(file, { imageOrientation: "from-image" }); }
+  catch (e) { im = await new Promise((ok, no) => { const i = new Image(); i.onload = () => ok(i); i.onerror = no; i.src = URL.createObjectURL(file); }); }
+  const w = im.width || im.naturalWidth, h = im.height || im.naturalHeight; if (!w || !h) throw new Error("Bild nicht lesbar");
+  const k = Math.min(1, max / Math.max(w, h)), c = document.createElement("canvas"); c.width = Math.max(1, Math.round(w * k)); c.height = Math.max(1, Math.round(h * k));
+  const x = c.getContext("2d"); x.fillStyle = "#fff"; x.fillRect(0, 0, c.width, c.height); x.drawImage(im, 0, 0, c.width, c.height);
+  return c.toDataURL("image/jpeg", q);
+}
 /* Zahl aus Text lesen, auch aus Eingaben wie "<0,1", "ca. 2,5 g", "~3" oder "1,2 g" (erste Zahl zählt; "Spuren", "-", "k. A." ergeben 0) */
 const num = v => { const m = String(v ?? "").replace(",", ".").match(/-?\d*\.?\d+/); const n = m ? parseFloat(m[0]) : NaN; return isFinite(n) ? n : 0; };
 const r0 = n => Math.round(n);
@@ -518,7 +542,7 @@ function viewSettings() {
     <label>Gemini-API-Schlüssel</label><input type="password" id="sKey" value="${esc(s.geminiKey)}" placeholder="AIza…" autocomplete="off">
     <label>Modell</label><input type="text" id="sModel" value="${esc(s.geminiModel)}">
     <button class="btn sec block" style="margin-top:16px" data-act="saveAI">Speichern</button></div>`)}
-  ${acc("rec", `Rezepte`, `<div class="panel" style="padding-top:16px"><button class="btn sec block" data-act="recipes">Meine Rezepte (${D.recipes.length})</button></div>
+  ${acc("rec", `Rezepte`, `<div class="panel" style="padding-top:16px"><button class="btn sec block" data-act="recipes">Meine Rezepte (${D.recipes.filter(r => !r.arch).length}${D.recipes.some(r => r.arch) ? " + " + D.recipes.filter(r => r.arch).length + " im Archiv" : ""})</button></div>
   `)}
   ${acc("foods", `Meine Lebensmittel <span class="muted" style="font-weight:600">${D.foods.length}</span>`, `<div class="panel" style="padding-top:16px">
     <div class="grid2"><button class="btn sec" data-act="foodsManage">Verwalten</button><button class="btn sec" data-act="foodNew">Neu anlegen</button></div>
@@ -1218,7 +1242,7 @@ function recipePortion(r) {
 }
 function recipeLine(r) {
   const p = recipePortion(r);
-  return `<div class="grow"><div style="font-weight:600">${esc(r.name)}</div><div class="muted tiny">${r.items.length} ${r.items.length === 1 ? "Zutat" : "Zutaten"}, pro Portion ${r0(p.kcal)} kcal (E ${r0(p.p)} / KH ${r0(p.c)} / F ${r0(p.f)})</div></div>`;
+  return `${r.img ? `<img class="rthumb" src="${r.img}" alt="">` : ""}<div class="grow"><div style="font-weight:600">${esc(r.name)}</div><div class="muted tiny">${r.items.length} ${r.items.length === 1 ? "Zutat" : "Zutaten"}, pro Portion ${r0(p.kcal)} kcal (E ${r0(p.p)} / KH ${r0(p.c)} / F ${r0(p.f)})</div></div>`;
 }
 function storeFood(f) {
   let st = D.foods.find(x => x.id === f.id) || (f.barcode && D.foods.find(x => x.barcode === f.barcode));
@@ -1228,11 +1252,12 @@ function storeFood(f) {
 }
 
 function bodyRecipes(b) {
-  const list = D.recipes.slice().sort((a, c) => (c.used || 0) - (a.used || 0));
-  b.innerHTML = (list.length ? list.map(r => `<div class="res" data-rid="${r.id}">${recipeLine(r)}</div>`).join("")
+  const sm = D.settings.sortR || "used", list = sortList(D.recipes.filter(r => !r.arch), sm);
+  b.innerHTML = (D.recipes.some(r => !r.arch) ? `<div class="sortrow"><span class="muted small">Sortieren</span><select id="rSort" aria-label="Sortierung">${sortOpts(sm)}</select></div>` : "") + (list.length ? list.map(r => `<div class="res" data-rid="${r.id}">${recipeLine(r)}</div>`).join("")
     : `<div class="muted small center" style="padding:16px 8px">Noch keine Rezepte. Lege ein Gericht aus mehreren Zutaten an, danach trägst du es mit einem Tipp ein.</div>`) +
     `<button class="btn block" style="margin-top:14px" id="rNew">Neues Rezept</button>`;
   $$("[data-rid]", b).forEach(el => el.onclick = () => pickRecipe(D.recipes.find(r => r.id === el.dataset.rid)));
+  const so = $("#rSort", b); if (so) so.onchange = () => { D.settings.sortR = so.value; save(); bodyRecipes(b); };
   $("#rNew", b).onclick = () => recipeEditor(null, "add");
 }
 
@@ -1240,7 +1265,7 @@ function pickRecipe(r) {
   if (!r) return;
   const p = recipePortion(r), tot = recipeTotals(r), W0 = recipeWeight(r);
   let mode = "p";
-  const s = sheet(`<h3>${esc(r.name)}</h3><div class="muted small">Pro Portion: ${r0(p.kcal)} kcal, Eiweiß ${r1(p.p)} g, Kohlenhydrate ${r1(p.c)} g, Fett ${r1(p.f)} g</div>
+  const s = sheet(`<h3>${esc(r.name)}</h3>${r.img ? `<img class="rpick" src="${r.img}" alt="">` : ""}<div class="muted small">Pro Portion: ${r0(p.kcal)} kcal, Eiweiß ${r1(p.p)} g, Kohlenhydrate ${r1(p.c)} g, Fett ${r1(p.f)} g</div>
     <div class="seg" style="margin-top:14px"><button data-md="p" class="on">Portionen</button><button data-md="g">Gramm</button></div>
     <div id="mP"><label>Portionen</label><div class="row"><input type="text" inputmode="decimal" id="rp" value="1"><button class="chip" data-m="0.5">½</button><button class="chip" data-m="1">1</button><button class="chip" data-m="2">2</button></div></div>
     <div id="mG" style="display:none"><label>Gesamtgewicht des Gerichts (g)</label><input type="text" inputmode="decimal" id="rw" value="${r0(W0)}">
@@ -1301,6 +1326,9 @@ function drawRecipeEditor() {
   const d = rdraft;
   const s = sheet(`<h3>${d.id ? "Rezept bearbeiten" : "Neues Rezept"}</h3>
     <label style="margin-top:0">Name</label><input type="text" id="rn" value="${esc(d.name)}" placeholder="z. B. Overnight Oats">
+    <label>Bild (optional)</label>
+    ${d.img ? `<img class="rpick" src="${d.img}" alt="Rezeptbild"><div class="row" style="gap:8px;margin-top:8px"><button class="btn sec" style="flex:1" id="rImgPick">Bild ändern</button><button class="btn sec" style="flex:1" id="rImgDel">Entfernen</button></div>` : `<button class="btn sec block" id="rImgPick">Bild hinzufügen</button>`}
+    <input type="file" id="rImgFile" accept="image/*" hidden>
     <label>Ergibt Portionen</label><input type="text" inputmode="decimal" id="rs" value="${d.servings}">
     <label>Gesamtgewicht fertig (g, optional)</label><input type="text" inputmode="decimal" id="rw" value="${d.weight > 0 ? r0(d.weight) : ""}" placeholder="${r0(recipeTotals(d).grams) || "z. B. 850"}">
     <div class="muted tiny" style="margin:6px 2px 0">Gewicht des fertigen Gerichts auf der Waage. Damit trägst du später einfach ein, wie viel Gramm du genommen hast. Leer = Summe der Zutaten.</div>
@@ -1311,6 +1339,7 @@ function drawRecipeEditor() {
     <button class="btn sec block" id="rAdd">Zutat hinzufügen</button>
     <div class="card" style="margin-top:16px" id="rsum"></div>
     <button class="btn block" id="rSave">Rezept speichern</button>
+    ${d.id ? `<button class="btn sec block" style="margin-top:8px" id="rArch">${d.arch ? "Aus dem Archiv holen" : "Archivieren"}</button><div class="muted tiny" style="margin:4px 2px 0">${d.arch ? "Dieses Rezept liegt im Archiv und erscheint nicht beim Eintragen." : "Archivierte Rezepte verschwinden aus der Auswahl, bleiben aber gespeichert."}</div>` : ""}
     ${d.id ? `<button class="btn danger block" style="margin-top:8px" id="rDel">Rezept löschen</button>` : ""}
     <button class="btn sec block" style="margin-top:8px" id="rCancel">Abbrechen</button>`);
   const capture = () => { d.name = $("#rn", s).value.trim(); d.servings = num($("#rs", s).value) || 1; d.weight = Math.max(0, num($("#rw", s).value) || 0); };
@@ -1334,6 +1363,10 @@ function drawRecipeEditor() {
     foodPicker((food, grams) => { d.items.push({ name: food.name, grams, ...per100(food) }); drawRecipeEditor(); }, drawRecipeEditor);
   };
   $("#rCancel", s).onclick = recipeExit;
+  $("#rImgPick", s).onclick = () => $("#rImgFile", s).click();
+  $("#rImgFile", s).onchange = async ev => { const f = ev.target.files[0]; if (!f) return; try { capture(); d.img = await imgToData(f); drawRecipeEditor(); } catch (e) { toast("Bild konnte nicht gelesen werden"); } };
+  if (d.img) $("#rImgDel", s).onclick = () => { capture(); delete d.img; drawRecipeEditor(); };
+  if (d.id) $("#rArch", s).onclick = () => { const ex = D.recipes.find(x => x.id === d.id); if (!ex) return; if (ex.arch) delete ex.arch; else ex.arch = true; save(); toast(ex.arch ? "Archiviert" : "Wieder aktiv"); recipeExit(); };
   if (d.id) $("#rDel", s).onclick = () => { D.recipes = D.recipes.filter(x => x.id !== d.id); save(); toast("Rezept gelöscht"); recipeExit(); };
   $("#rSave", s).onclick = () => {
     capture();
@@ -1341,8 +1374,9 @@ function drawRecipeEditor() {
     if (!d.items.length) return toast("Füge mindestens eine Zutat hinzu");
     if (d.items.some(i => i.grams <= 0)) return toast("Jede Zutat braucht eine Menge");
     const rec = { id: d.id || uid(), name: d.name, servings: d.servings, weight: d.weight > 0 ? d.weight : 0, items: d.items.map(i => ({ name: i.name, grams: i.grams, kcal: i.kcal, protein: i.protein, carbs: i.carbs, fat: i.fat, ...pick100(i) })), used: 0 };
+    if (d.img) rec.img = d.img; if (d.arch) rec.arch = true;
     const ex = D.recipes.find(x => x.id === rec.id);
-    if (ex) { rec.used = ex.used || 0; Object.assign(ex, rec); } else D.recipes.push(rec);
+    if (ex) { rec.used = ex.used || 0; Object.assign(ex, rec); if (!rec.img) delete ex.img; if (!rec.arch) delete ex.arch; } else D.recipes.push(rec);
     save(); toast("Rezept gespeichert"); recipeExit();
   };
 }
@@ -1417,10 +1451,15 @@ function pickAmount(food, onPick, onBack) {
 }
 
 function recipeManage() {
-  const s = sheet(`<h3>Meine Rezepte</h3><div id="rl"></div><button class="btn block" style="margin-top:14px" id="rNew">Neues Rezept</button>`);
-  const list = D.recipes.slice().sort((a, b) => a.name.localeCompare(b.name, "de"));
-  $("#rl", s).innerHTML = list.length ? list.map(r => `<div class="res" data-rid="${r.id}">${recipeLine(r)}</div>`).join("") : `<div class="muted small center" style="padding:16px 8px">Noch keine Rezepte.</div>`;
+  const s = sheet(`<h3>Meine Rezepte</h3><div class="sortrow"><span class="muted small">Sortieren</span><select id="rSort" aria-label="Sortierung"></select></div><div id="rl"></div><div id="ra"></div><button class="btn block" style="margin-top:14px" id="rNew">Neues Rezept</button>`);
+  const sm = D.settings.sortR || "az"; $("#rSort", s).innerHTML = sortOpts(sm);
+  const act = sortList(D.recipes.filter(r => !r.arch), sm), arc = sortList(D.recipes.filter(r => r.arch), sm);
+  const row = r => `<div class="res" data-rid="${r.id}">${recipeLine(r)}</div>`;
+  $("#rl", s).innerHTML = act.length ? act.map(row).join("") : `<div class="muted small center" style="padding:16px 8px">${arc.length ? "Alle Rezepte sind archiviert." : "Noch keine Rezepte."}</div>`;
+  $("#ra", s).innerHTML = arc.length ? `<details class="rarch" ${ui.archOpen ? "open" : ""}><summary>Archiv (${arc.length})</summary>${arc.map(row).join("")}</details>` : "";
+  const det = $(".rarch", s); if (det) det.ontoggle = () => { ui.archOpen = det.open; };
   $$("[data-rid]", s).forEach(el => el.onclick = () => recipeEditor(D.recipes.find(r => r.id === el.dataset.rid), "manage"));
+  $("#rSort", s).onchange = e => { D.settings.sortR = e.target.value; save(); recipeManage(); };
   $("#rNew", s).onclick = () => recipeEditor(null, "manage");
 }
 function mealToRecipe(meal) {
@@ -1672,13 +1711,14 @@ function editEntry(id) {
 /* Lebensmittel verwalten */
 function foodsManage() {
   const s = sheet(`<h3>Meine Lebensmittel</h3><input type="search" id="fq" placeholder="Filtern …">
+    <div class="sortrow"><span class="muted small">Sortieren</span><select id="fSort" aria-label="Sortierung">${sortOpts(D.settings.sortF || "az")}</select></div>
     <div class="row between" style="margin:10px 2px 4px"><button class="linkbtn" id="fMode" style="margin:0">Auswählen</button><button class="linkbtn" id="fAll" style="margin:0;display:none">Alle auswählen</button></div>
     <div id="fl"></div><div id="fBar"></div>`);
   let selMode = false;
   const sel = new Set();
   const filtered = () => {
     const t = $("#fq", s).value.trim().toLowerCase();
-    return D.foods.filter(f => !t || (f.name + " " + f.brand + " " + f.barcode).toLowerCase().includes(t)).sort((a, b) => a.name.localeCompare(b.name, "de"));
+    return sortList(D.foods.filter(f => !t || (f.name + " " + f.brand + " " + f.barcode).toLowerCase().includes(t)), D.settings.sortF || "az");
   };
   const draw = () => {
     const all = filtered(), list = all.slice(0, 100);
@@ -1701,6 +1741,7 @@ function foodsManage() {
     };
   };
   $("#fq", s).oninput = draw;
+  $("#fSort", s).onchange = e => { D.settings.sortF = e.target.value; save(); draw(); };
   $("#fMode", s).onclick = () => { selMode = !selMode; if (!selMode) sel.clear(); draw(); };
   $("#fAll", s).onclick = () => { const all = filtered(), every = all.every(f => sel.has(f.id)); all.forEach(f => every ? sel.delete(f.id) : sel.add(f.id)); draw(); };
   draw();

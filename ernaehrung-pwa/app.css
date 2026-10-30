@@ -325,3 +325,9 @@ textarea::placeholder{color:var(--muted);opacity:.8}
 .cerow select{flex:1 1 100%;min-width:0}
 .cerow{flex-wrap:wrap}
 .cf-src select{width:auto;max-width:70%;flex:none}
+.rthumb{width:52px;height:52px;border-radius:12px;object-fit:cover;flex:none;background:var(--card)}
+.rpick{display:block;width:100%;max-height:210px;object-fit:cover;border-radius:14px;margin-top:8px}
+.sortrow{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:10px 2px 4px}
+.sortrow select{width:auto;max-width:60%;flex:none}
+.rarch{margin-top:14px;border-top:1px solid var(--line);padding-top:8px}
+.rarch summary{cursor:pointer;font-weight:600;color:var(--muted);padding:6px 2px}
