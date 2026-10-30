@@ -58,6 +58,30 @@ function sortList(list, mode) {
   else l.sort(nm);
   return l;
 }
+/* Wisch nach rechts auf einer Zeile (.swrap > .res): Zeile gleitet raus, danach onDone(id). Antippen bleibt normal möglich. */
+function swipeRows(root, onDone) {
+  $$(".swrap", root).forEach(w => {
+    const row = $(".res", w); let x0 = 0, y0 = 0, dx = 0, on = false, lock = null, swiped = false;
+    const reset = () => { row.style.transition = "transform .18s ease"; row.style.transform = ""; w.classList.remove("armed"); };
+    row.addEventListener("pointerdown", e => { if (e.pointerType === "mouse" && e.button !== 0) return; x0 = e.clientX; y0 = e.clientY; dx = 0; lock = null; on = true; swiped = false; });
+    row.addEventListener("pointermove", e => {
+      if (!on) return; const mx = e.clientX - x0, my = e.clientY - y0;
+      if (lock === null && (Math.abs(mx) > 8 || Math.abs(my) > 8)) { lock = Math.abs(mx) > Math.abs(my) * 1.3 ? "x" : "y"; if (lock === "x") { try { row.setPointerCapture(e.pointerId); } catch (er) { } } }
+      if (lock !== "x") return;
+      dx = Math.max(0, mx); row.style.transition = "none"; row.style.transform = "translateX(" + dx + "px)"; w.classList.toggle("armed", dx > 90);
+    });
+    const end = () => {
+      if (!on) return; on = false;
+      if (lock === "x") { swiped = true; setTimeout(() => { swiped = false; }, 400); }
+      if (lock === "x" && dx > 90) { row.style.transition = "transform .18s ease"; row.style.transform = "translateX(110%)"; setTimeout(() => onDone(row.dataset.rid), 170); }
+      else reset();
+    };
+    row.addEventListener("pointerup", end); row.addEventListener("pointercancel", end);
+    row.addEventListener("click", e => { if (swiped) { e.stopImmediatePropagation(); e.preventDefault(); swiped = false; } }, true);
+  });
+}
+const swRow = (r, label) => `<div class="swrap"><div class="swbg">${icon("archive", 18)} ${label}</div><div class="res" data-rid="${r.id}">${recipeLine(r)}</div></div>`;
+const archiveRecipe = (id, on) => { const r = D.recipes.find(x => x.id === id); if (!r) return; if (on) r.arch = true; else delete r.arch; save(); };
 /* Rezept-Kategorien: Liste in den Einstellungen (frei erweiterbar), jedes Rezept kann mehrere haben (r.cats) */
 const CAT_DEFAULT = ["Frühstück", "Mittagessen", "Abendessen", "Snack", "Mealprep"];
 const recCats = () => { const base = Array.isArray(D.settings.recipeCats) ? D.settings.recipeCats.slice() : CAT_DEFAULT.slice(); D.recipes.forEach(r => (r.cats || []).forEach(c => { if (!base.some(x => x.toLowerCase() === String(c).toLowerCase())) base.push(c); })); return base; };
@@ -356,6 +380,7 @@ const IC = {
   search: '<circle cx="11" cy="11" r="6.5"/><path d="m16 16 4 4"/>',
   scan: '<path d="M4 8V6a2 2 0 0 1 2-2h2M16 4h2a2 2 0 0 1 2 2v2M20 16v2a2 2 0 0 1-2 2h-2M8 20H6a2 2 0 0 1-2-2v-2M7 12h10"/>',
   cal: '<rect x="4" y="5" width="16" height="15" rx="3"/><path d="M8 3v4M16 3v4M4 10h16"/>',
+  archive: '<rect x="3" y="4" width="18" height="4.5" rx="1.2"/><path d="M5 8.5V19a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8.5"/><path d="M10 12.5h4"/>',
   pen: '<path d="M4 20h4L19 9a2.8 2.8 0 0 0-4-4L4 16z"/><path d="m13.5 6.5 4 4"/>',
   trash: '<path d="M5 7h14M10 11v6M14 11v6M6.5 7l1 12a1.5 1.5 0 0 0 1.5 1.4h6a1.5 1.5 0 0 0 1.5-1.4l1-12M9.5 7V5a1.5 1.5 0 0 1 1.5-1.5h2A1.5 1.5 0 0 1 14.5 5v2"/>',
 };
@@ -1265,10 +1290,11 @@ function storeFood(f) {
 
 function bodyRecipes(b) {
   const sm = D.settings.sortR || "used", list = sortList(D.recipes.filter(r => !r.arch && catOk(r)), sm);
-  b.innerHTML = (D.recipes.some(r => !r.arch) ? `<div class="sortrow"><span class="muted small">Sortieren</span><select id="rSort" aria-label="Sortierung">${sortOpts(sm)}</select></div>` : "") + catFilterHtml() + (list.length ? list.map(r => `<div class="res" data-rid="${r.id}">${recipeLine(r)}</div>`).join("")
+  b.innerHTML = (D.recipes.some(r => !r.arch) ? `<div class="sortrow"><span class="muted small">Sortieren</span><select id="rSort" aria-label="Sortierung">${sortOpts(sm)}</select></div>` : "") + catFilterHtml() + (list.length ? list.map(r => swRow(r, "Archivieren")).join("")
     : `<div class="muted small center" style="padding:16px 8px">Noch keine Rezepte. Lege ein Gericht aus mehreren Zutaten an, danach trägst du es mit einem Tipp ein.</div>`) +
     `<button class="btn block" style="margin-top:14px" id="rNew">Neues Rezept</button>`;
   $$("[data-rid]", b).forEach(el => el.onclick = () => pickRecipe(D.recipes.find(r => r.id === el.dataset.rid)));
+  swipeRows(b, id => { archiveRecipe(id, true); toast("Archiviert"); bodyRecipes(b); });
   const so = $("#rSort", b); if (so) so.onchange = () => { D.settings.sortR = so.value; save(); bodyRecipes(b); };
   $$("[data-fcat]", b).forEach(el => el.onclick = () => { ui.recCat = el.dataset.fcat; bodyRecipes(b); });
   $("#rNew", b).onclick = () => recipeEditor(null, "add");
@@ -1334,6 +1360,7 @@ function recipeExit() {
   const b = rdraft.back;
   if (b === "add") { addTab = "recipes"; openAdd(); }
   else if (b === "manage") recipeManage();
+  else if (b === "arch") recipeArchive();
   else { closeSheet(); render(); }
 }
 function drawRecipeEditor() {
@@ -1477,18 +1504,30 @@ function pickAmount(food, onPick, onBack) {
 }
 
 function recipeManage() {
-  const s = sheet(`<h3>Meine Rezepte</h3><div class="sortrow"><span class="muted small">Sortieren</span><select id="rSort" aria-label="Sortierung"></select></div><div id="rf"></div><div id="rl"></div><div id="ra"></div><button class="btn block" style="margin-top:14px" id="rNew">Neues Rezept</button>`);
+  const nArc = D.recipes.filter(r => r.arch).length;
+  const s = sheet(`<div class="row between" style="margin-bottom:12px"><h3 style="margin:0">Meine Rezepte</h3><button class="iconbtn" id="rArchBtn" aria-label="Archiv öffnen (${nArc})" style="position:relative">${icon("archive", 20)}${nArc ? `<span class="cnt">${nArc}</span>` : ""}</button></div>
+    <div class="sortrow"><span class="muted small">Sortieren</span><select id="rSort" aria-label="Sortierung"></select></div><div id="rf"></div><div id="rl"></div><div class="muted tiny center" id="rHint" style="margin-top:8px"></div><button class="btn block" style="margin-top:14px" id="rNew">Neues Rezept</button>`);
   const sm = D.settings.sortR || "az"; $("#rSort", s).innerHTML = sortOpts(sm);
   $("#rf", s).innerHTML = catFilterHtml();
-  const act = sortList(D.recipes.filter(r => !r.arch && catOk(r)), sm), arc = sortList(D.recipes.filter(r => r.arch), sm);
-  const row = r => `<div class="res" data-rid="${r.id}">${recipeLine(r)}</div>`;
-  $("#rl", s).innerHTML = act.length ? act.map(row).join("") : `<div class="muted small center" style="padding:16px 8px">${ui.recCat ? "Keine Rezepte in dieser Kategorie." : arc.length ? "Alle Rezepte sind archiviert." : "Noch keine Rezepte."}</div>`;
-  $("#ra", s).innerHTML = arc.length ? `<details class="rarch" ${ui.archOpen ? "open" : ""}><summary>Archiv (${arc.length})</summary>${arc.map(row).join("")}</details>` : "";
-  const det = $(".rarch", s); if (det) det.ontoggle = () => { ui.archOpen = det.open; };
+  const act = sortList(D.recipes.filter(r => !r.arch && catOk(r)), sm);
+  $("#rl", s).innerHTML = act.length ? act.map(r => swRow(r, "Archivieren")).join("") : `<div class="muted small center" style="padding:16px 8px">${ui.recCat ? "Keine Rezepte in dieser Kategorie." : nArc ? "Alle Rezepte sind archiviert." : "Noch keine Rezepte."}</div>`;
+  if (act.length) $("#rHint", s).textContent = "Nach rechts wischen = archivieren";
   $$("[data-rid]", s).forEach(el => el.onclick = () => recipeEditor(D.recipes.find(r => r.id === el.dataset.rid), "manage"));
+  swipeRows(s, id => { archiveRecipe(id, true); toast("Archiviert. Oben rechts im Archiv wiederherstellbar"); recipeManage(); });
   $("#rSort", s).onchange = e => { D.settings.sortR = e.target.value; save(); recipeManage(); };
   $$("[data-fcat]", s).forEach(el => el.onclick = () => { ui.recCat = el.dataset.fcat; recipeManage(); });
+  $("#rArchBtn", s).onclick = recipeArchive;
   $("#rNew", s).onclick = () => recipeEditor(null, "manage");
+}
+/* Archiv: archivierte Rezepte, nach rechts wischen = wiederherstellen */
+function recipeArchive() {
+  const sm = D.settings.sortR || "az", list = sortList(D.recipes.filter(r => r.arch), sm);
+  const s = sheet(`<button class="linkbtn" id="raBack" style="margin:-4px 0 6px">‹ Meine Rezepte</button><h3>Archiv</h3>
+    <div id="rl">${list.length ? list.map(r => swRow(r, "Wiederherstellen")).join("") : `<div class="muted small center" style="padding:24px 8px">Das Archiv ist leer. In „Meine Rezepte“ kannst du ein Rezept nach rechts wischen, um es zu archivieren.</div>`}</div>
+    ${list.length ? `<div class="muted tiny center" style="margin-top:8px">Nach rechts wischen = wiederherstellen · Antippen = öffnen</div>` : ""}`);
+  $$("[data-rid]", s).forEach(el => el.onclick = () => recipeEditor(D.recipes.find(r => r.id === el.dataset.rid), "arch"));
+  swipeRows(s, id => { archiveRecipe(id, false); toast("Wiederhergestellt"); recipeArchive(); });
+  $("#raBack", s).onclick = recipeManage;
 }
 function mealToRecipe(meal) {
   const es = dayEntries(ui.date).filter(e => e.meal === meal && e.grams > 0);
