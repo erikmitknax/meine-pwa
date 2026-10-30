@@ -543,8 +543,27 @@ function viewWeight() {
   const kpis = cur ? `<div class="kpis"><div class="kpi"><b>${diff(cur.w, wAgo(30))}</b><span>30 Tage</span></div><div class="kpi"><b>${diff(cur.w, first.w)}</b><span>seit Start</span></div>
     <div class="kpi"><b>${goal ? diff(cur.w, goal).replace("+", "") : "–"}</b><span>bis zum Ziel</span></div></div>` : "";
   const rev = all.slice().reverse().slice(0, 30);
-  return `<h1>Gewicht</h1>${hero}
+  /* Ø der letzten 7 Tage und Wochenvergleich (Ø der 7 Tage zu Ø der 7 Tage davor), blättert wochenweise zurück */
+  const avgIn = (a, b) => { const l = all.filter(p => p.d >= a && p.d <= b); return { n: l.length, w: l.length ? l.reduce((x, y) => x + y.w, 0) / l.length : null }; };
+  const fk1 = v => v.toLocaleString("de-DE", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+  const a7 = avgIn(addDays(today, -6), today);
+  const heroAvg = a7.w != null ? `<div class="muted small" style="margin:-6px 4px 12px">Ø letzte 7 Tage: <b style="color:var(--text)">${fk1(a7.w,)} kg</b> <span class="tiny">(${a7.n} ${a7.n === 1 ? "Messung" : "Messungen"})</span></div>` : "";
+  const wOff = Math.max(0, ui.wcOff || 0), endB = addDays(today, -7 * wOff), startB = addDays(endB, -6), endA = addDays(startB, -1), startA = addDays(endA, -6);
+  const wA = avgIn(startA, endA), wB = avgIn(startB, endB), hasOlder = all.length && all[0].d < startA;
+  const dm = x => fromIso(x).toLocaleDateString("de-DE", { day: "numeric", month: "short" }), rng = (a, b) => dm(a) + " – " + dm(b);
+  let wcmp = `<div class="muted center small" style="padding:14px 8px">Für diesen Vergleich fehlen Messungen. Wiege dich in beiden Wochen mindestens ein paar Mal.</div>`;
+  if (wA.w != null && wB.w != null) {
+    const dd = wB.w - wA.w, want = goal && cur ? Math.sign(goal - cur.w) : 0, cls = want && Math.abs(dd) >= 0.05 ? (dd * want > 0 ? "good" : "bad") : "";
+    const sg = Math.abs(dd) < 0.05 ? "±" : dd > 0 ? "+" : "−", kc = Math.round(dd * 7700 / 7 / 10) * 10, few = wA.n < 3 || wB.n < 3;
+    wcmp = `<div class="wcmp"><div><span>${rng(startA, endA)}</span><b>${fk1(wA.w,)} kg</b><i>Ø aus ${wA.n} ${wA.n === 1 ? "Messung" : "Messungen"}</i></div><div class="wc-arrow" aria-hidden="true">${icon("right", 22)}</div><div><span>${rng(startB, endB)}</span><b>${fk1(wB.w,)} kg</b><i>Ø aus ${wB.n} ${wB.n === 1 ? "Messung" : "Messungen"}</i></div></div>
+      <div class="wc-delta"><span class="pill ${cls}">${sg} ${fk1(Math.abs(dd),)} kg</span><span class="muted small">Veränderung von Woche zu Woche${Math.abs(dd) >= 0.05 ? "" : " (kaum Veränderung)"}</span></div>
+      ${Math.abs(kc) >= 50 ? `<div class="muted tiny" style="margin-top:6px">Das entspricht grob ${kc > 0 ? "+" : "−"}${Math.abs(kc)} kcal pro Tag ${kc > 0 ? "Überschuss" : "Defizit"} (7700 kcal ≈ 1 kg, nur eine Schätzung).</div>` : ""}
+      ${few ? `<div class="muted tiny" style="margin-top:6px">Wenig Messungen in einer der Wochen, daher weniger aussagekräftig. Ab etwa 3 Messungen pro Woche wird der Durchschnitt zuverlässig.</div>` : ""}`;
+  }
+  const wcBox = `<h2>Wochenvergleich</h2><div class="surface"><div class="row between" style="margin-bottom:12px"><button class="iconbtn" data-act="wcmp" data-d="1" aria-label="Eine Woche früher" ${hasOlder ? "" : "disabled"}>${icon("left", 18)}</button><b class="small">${wOff === 0 ? "Letzte 14 Tage" : rng(startA, endB)}</b><button class="iconbtn" data-act="wcmp" data-d="-1" aria-label="Eine Woche später" ${wOff === 0 ? "disabled" : ""}>${icon("right", 18)}</button></div>${wcmp}</div>`;
+  return `<h1>Gewicht</h1>${hero}${heroAvg}
   <div class="surface"><div class="seg">${[[30, "30 Tage"], [90, "90 Tage"], [365, "1 Jahr"], [0, "Alles"]].map(([v, l]) => `<button data-act="wRange" data-v="${v}" class="${ui.wRange === v ? "on" : ""}">${l}</button>`).join("")}</div>${chart}${kpis}</div>
+  ${wcBox}
   <h2>Neuer Eintrag</h2>
   <div class="panel"><div class="row" style="gap:10px"><div class="grow"><label>Datum</label><input type="date" id="wDate" value="${today}"></div>
     <div class="grow"><label>Gewicht in kg</label><input type="text" inputmode="decimal" id="wVal" placeholder="${cur ? r1(cur.w).toLocaleString("de-DE") : "z. B. 80,5"}"></div></div>
@@ -2451,6 +2470,7 @@ document.addEventListener("click", async ev => {
   }
   else if (a === "goDay") { ui.date = t.dataset.d; setTab("today"); render(); }
   else if (a === "wRange") { ui.wRange = +t.dataset.v; render(); }
+  else if (a === "wcmp") { ui.wcOff = Math.max(0, (ui.wcOff || 0) + (+t.dataset.d)); render(); }
   else if (a === "saveWeight") {
     const w = num($("#wVal").value), d = $("#wDate").value || iso(new Date());
     if (w < 20 || w > 400) return toast("Bitte ein gültiges Gewicht eingeben");
