@@ -1,0 +1,1068 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#faf9f7" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#171614" media="(prefers-color-scheme: dark)">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Kippen">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon-192.png" type="image/png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<title>Kippen-Tracker</title>
+<style>
+:root {
+  --bg: #faf9f7; --panel: #ffffff; --fg: #1f1d1a; --muted: #6b665f; --line: #e4e0d9;
+  --accent: #c96442; --accent-soft: #f4e3dc; --ok: #2f7d4f; --bad: #b3372b; --grid: #ece8e1; --b: #4f7a94;
+  --radius: 12px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) { --bg: #171614; --panel: #211f1c; --fg: #f1eee8; --muted: #a39d93; --line: #35322d;
+    --accent: #e0805f; --accent-soft: #3a2a23; --ok: #5cc08a; --bad: #ef7a6c; --grid: #2d2a26; --b: #8cb4cc; color-scheme: dark; }
+}
+:root[data-theme="dark"] { --bg: #171614; --panel: #211f1c; --fg: #f1eee8; --muted: #a39d93; --line: #35322d;
+  --accent: #e0805f; --accent-soft: #3a2a23; --ok: #5cc08a; --bad: #ef7a6c; --grid: #2d2a26; --b: #8cb4cc; color-scheme: dark; }
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body { margin: 0; min-height: 100%; background: var(--bg); color: var(--fg); font: 15px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; font-variant-numeric: tabular-nums; }
+.wrap { max-width: 1000px; margin: 0 auto; padding: 20px 16px 60px; }
+header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 6px; }
+h1 { font-family: Georgia, "Times New Roman", serif; font-weight: 400; font-size: 2rem; margin: 0; }
+.lead { color: var(--muted); margin: 0 0 18px; }
+.lead b { color: var(--fg); font-weight: 600; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; margin-bottom: 14px; min-width: 0; }
+.card h2 { font-size: 1rem; font-weight: 600; margin: 0 0 2px; }
+.sub { color: var(--muted); font-size: .8rem; margin: 0 0 12px; }
+.grid { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 170px), 1fr)); margin-bottom: 14px; }
+.grid .card { margin: 0; }
+.grid2 { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr)); margin-bottom: 14px; }
+.grid2 .card { margin: 0; }
+.kpi .l { color: var(--muted); font-size: .8rem; }
+.kpi .v { font-family: Georgia, "Times New Roman", serif; font-size: 2.2rem; line-height: 1.15; }
+.kpi .n { color: var(--muted); font-size: .78rem; }
+button, select, input { font: inherit; color: var(--fg); }
+button { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 6px 12px; cursor: pointer; }
+button:hover { border-color: var(--accent); }
+button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+button.small { padding: 3px 9px; font-size: .82rem; }
+button.danger:hover { border-color: var(--bad); color: var(--bad); }
+select, input[type=date], input[type=number] { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; }
+label { color: var(--muted); font-size: .85rem; display: inline-flex; align-items: center; gap: 6px; }
+.row { display: flex; flex-wrap: wrap; gap: 10px; align-items: end; }
+.row .f { display: flex; flex-direction: column; gap: 3px; }
+.toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.chart { position: relative; }
+.chart svg { display: block; width: 100%; height: auto; }
+.chart text { fill: var(--muted); font-size: 11px; }
+.chart .val { fill: var(--fg); }
+.empty { color: var(--muted); padding: 20px 0; text-align: center; }
+table { width: 100%; border-collapse: collapse; }
+th { text-align: left; font-size: .78rem; color: var(--muted); font-weight: 600; padding: 6px 8px; border-bottom: 1px solid var(--line); }
+td { padding: 6px 8px; border-bottom: 1px solid var(--line); }
+th.r, td.r { text-align: right; }
+td.act { text-align: right; white-space: nowrap; }
+td.act button { margin-left: 4px; }
+.tablebox { max-height: 28rem; overflow: auto; }
+#tip { position: fixed; display: none; pointer-events: none; z-index: 20; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 5px 9px; font-size: .8rem; box-shadow: 0 4px 14px rgba(0,0,0,.18); white-space: nowrap; }
+#toast { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); background: var(--fg); color: var(--bg); padding: 9px 14px; border-radius: 10px; display: none; z-index: 30; max-width: 92vw; }
+#toast button { margin-left: 10px; background: transparent; color: inherit; border-color: currentColor; padding: 2px 8px; }
+.warn { background: var(--accent-soft); border: 1px solid var(--accent); border-radius: 10px; padding: 8px 12px; margin-bottom: 14px; font-size: .88rem; }
+.printonly { display: none; }
+.head2 { display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 8px; }
+.seg { display: inline-flex; }
+.seg button { border-radius: 0; padding: 4px 12px; }
+.seg button:first-child { border-radius: 8px 0 0 8px; }
+.seg button:last-child { border-radius: 0 8px 8px 0; margin-left: -1px; }
+.seg button.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+.cmp th .rng { font-weight: 400; font-size: .75rem; color: var(--muted); }
+.dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 6px; }
+.dot.a { background: var(--accent); }
+.dot.b { background: var(--b); }
+.good { color: var(--ok); font-weight: 600; }
+.bad { color: var(--bad); font-weight: 600; }
+.h3 { font-size: .85rem; font-weight: 600; color: var(--muted); margin: 0 0 6px; }
+.cmpgrid { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr)); margin-top: 14px; }
+.cmpgrid > div { min-width: 0; }
+.tablewrap { overflow-x: auto; }
+#modal { position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 40; align-items: center; justify-content: center; padding: 16px; }
+#modal .mbox { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 18px; max-width: 360px; width: 100%; }
+#modal p { margin: 0 0 14px; }
+#modal .mbtns { display: flex; justify-content: flex-end; gap: 8px; }
+@media print {
+  @page { size: A4; margin: 14mm; }
+  body { background: #fff; color: #000; font-size: 12px; }
+  .noprint { display: none !important; }
+  .printonly { display: block; color: #555; margin: 0 0 10px; }
+  .card { break-inside: avoid; border-color: #ccc; background: #fff; }
+  .tablebox { max-height: none; overflow: visible; }
+  td.act, th.act { display: none; }
+  :root { --panel: #fff; --fg: #000; --muted: #555; --line: #ddd; --grid: #eee; --accent: #c96442; }
+}
+
+.pwabar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+#btnInstall[hidden] { display: none; }
+.syncpill { display: inline-flex; align-items: center; gap: 6px; font-size: .8rem; color: var(--muted); border: 1px solid var(--line); border-radius: 999px; padding: 3px 10px; background: var(--panel); cursor: pointer; }
+.syncpill i { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); display: inline-block; }
+.syncpill.ok i { background: var(--ok); } .syncpill.wait i { background: #d9a400; } .syncpill.err i { background: var(--bad); }
+#syncCard textarea { width: 100%; min-height: 110px; font: 12px/1.4 ui-monospace, Menlo, monospace; color: var(--fg); background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 8px; }
+#syncCard input[type=email], #syncCard input[type=password] { width: 100%; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); }
+#syncCard .stack { display: grid; gap: 8px; max-width: 420px; }
+#syncCard details summary { cursor: pointer; color: var(--muted); font-size: .85rem; margin-top: 10px; }
+#syncCard .who { font-weight: 600; }
+body { padding-bottom: env(safe-area-inset-bottom); }
+.wrap { padding-top: max(20px, env(safe-area-inset-top)); }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <div class="warn" id="storewarn" hidden><span id="storewarnText"></span> <button id="btnWarnBackup">Jetzt sichern</button></div>
+
+  <header>
+    <div class="toolbar"><h1>Kippen-Tracker</h1><span class="syncpill" id="syncPill" role="button" tabindex="0"><i></i><span id="syncPillText">Nur auf diesem Gerät</span></span></div>
+    <div class="toolbar noprint">
+      <label>Zeitraum <select id="month" aria-label="Zeitraum"></select></label>
+      <span class="toolbar" id="lastbox" hidden>
+        <label>Letzte <input type="number" id="lastN" min="1" max="3650" step="1" value="30" style="width:76px"> Tage bis heute</label>
+        <button class="small" data-last="7">7</button><button class="small" data-last="14">14</button><button class="small" data-last="30">30</button><button class="small" data-last="90">90</button><button class="small" data-last="365">365</button>
+      </span>
+    </div>
+  </header>
+  <p class="lead" id="lead"></p>
+  <p class="printonly" id="printinfo"></p>
+
+  <div class="card noprint" id="addcard">
+    <h2>Eintragen</h2>
+    <p class="sub">Datum und Anzahl wählen. Gibt es für den Tag schon einen Eintrag, wird er überschrieben.</p>
+    <div class="row">
+      <div class="f"><label for="inDate">Datum</label><input type="date" id="inDate"></div>
+      <div class="f"><label for="inCount">Kippen</label><input type="number" id="inCount" min="0" max="500" step="1" value="1" style="width:90px"></div>
+      <button class="primary" id="btnAdd">Eintragen</button>
+      <button id="btnPlus" title="Erhöht den Wert für heute um 1">+1 heute</button>
+    </div>
+  </div>
+
+  <div class="grid" id="kpis"></div>
+
+  <div class="card">
+    <h2>Kippen pro Tag</h2>
+    <p class="sub">Tage ohne Balken waren rauchfrei (0).</p>
+    <div class="chart" id="chDaily"></div>
+  </div>
+
+  <div class="grid2">
+    <div class="card">
+      <h2>Summe im Verlauf</h2>
+      <p class="sub" id="cumSub"></p>
+      <div class="chart" id="chCum"></div>
+    </div>
+    <div class="card">
+      <h2>Ø nach Wochentag</h2>
+      <p class="sub">Pro Tag inkl. rauchfreier Tage; Zahl in Klammern = Anzahl Tage.</p>
+      <div class="chart" id="chWd"></div>
+    </div>
+  </div>
+
+  <div class="card" id="monthsCard">
+    <div class="head2">
+      <div><h2>Entwicklung pro Monat</h2><p class="sub" id="monthsSub"></p></div>
+      <div class="seg noprint"><button id="mAvg">Ø pro Tag</button><button id="mTotal">Summe</button><button id="mCost">Kosten</button></div>
+    </div>
+    <div class="chart" id="chMonths"></div>
+  </div>
+
+  <div class="card" id="cmpCard">
+    <h2>Vergleich</h2>
+    <p class="sub">Zwei Zeiträume gegenüberstellen. Weniger Kippen sind besser.</p>
+    <div class="row noprint" style="margin-bottom:12px">
+      <div class="f"><label for="cmpA"><span class="dot a"></span>Zeitraum A</label><select id="cmpA"></select></div>
+      <div class="f"><label for="cmpB"><span class="dot b"></span>Zeitraum B</label><select id="cmpB"></select></div>
+    </div>
+    <div class="tablewrap"><table class="cmp" id="cmpTable"></table></div>
+    <p class="sub" id="cmpNote" style="margin-top:8px"></p>
+    <div class="cmpgrid">
+      <div><h3 class="h3">Summe im Verlauf (Tag im Zeitraum)</h3><div class="chart" id="chCmpCum"></div></div>
+      <div><h3 class="h3">Ø nach Wochentag</h3><div class="chart" id="chCmpWd"></div></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Einträge</h2>
+    <p class="sub">Neueste zuerst. Löschen entfernt den Eintrag sofort (mit „Rückgängig“) – der Tag zählt dann als 0.</p>
+    <div class="tablebox"><table>
+      <thead><tr><th>Datum</th><th class="r">Kippen</th><th class="r">Kosten</th><th class="act r noprint"></th></tr></thead>
+      <tbody id="tbody"></tbody>
+    </table></div>
+  </div>
+
+  <div class="card noprint" id="syncCard">
+    <h2>Synchronisieren</h2>
+    <p class="sub" id="syncSub"></p>
+    <div id="syncNoCfg" hidden>
+      <div class="stack">
+        <label for="inCfg" style="display:block">Firebase-Konfiguration (den Block <code>const firebaseConfig = {…}</code> aus der Firebase-Konsole hier einfügen)</label>
+        <textarea id="inCfg" spellcheck="false" autocapitalize="off" placeholder='const firebaseConfig = {
+  apiKey: "…",
+  authDomain: "….firebaseapp.com",
+  projectId: "…",
+  appId: "…"
+};'></textarea>
+        <div class="toolbar"><button class="primary" id="btnCfgSave">Verbinden</button></div>
+      </div>
+    </div>
+    <div id="syncLogin" hidden>
+      <div class="stack">
+        <input type="email" id="inMail" placeholder="E-Mail" autocomplete="username" autocapitalize="off">
+        <input type="password" id="inPass" placeholder="Passwort (mind. 6 Zeichen)" autocomplete="current-password">
+        <div class="toolbar">
+          <button class="primary" id="btnLogin">Anmelden</button>
+          <button id="btnSignup">Konto erstellen</button>
+          <button class="small" id="btnReset">Passwort vergessen</button>
+        </div>
+      </div>
+    </div>
+    <div id="syncIn" hidden>
+      <p style="margin:0 0 10px">Angemeldet als <span class="who" id="syncWho"></span></p>
+      <div class="toolbar"><button id="btnLogout">Abmelden</button></div>
+    </div>
+    <details id="syncAdv" hidden><summary>Firebase-Verbindung</summary>
+      <p class="sub" id="syncProj" style="margin:8px 0"></p>
+      <button class="small danger" id="btnCfgDel">Verbindung entfernen</button>
+    </details>
+  </div>
+
+  <div class="card noprint">
+    <h2>Daten &amp; Einstellungen</h2>
+    <p class="sub" id="dataSub"></p>
+    <div class="toolbar" style="margin-bottom:10px">
+      <button id="btnInstall" hidden>App installieren</button>
+      <button id="btnCsv">CSV exportieren</button>
+      <button id="btnJson">Backup (JSON)</button>
+      <button id="btnImport">Importieren …</button>
+      <input type="file" id="fileImport" accept=".csv,.json,.txt" hidden>
+    </div>
+    <div class="row" style="margin-bottom:10px">
+      <div class="f"><label for="inPrice">Preis pro Kippe (€)</label><input type="number" id="inPrice" min="0" max="10" step="0.01" style="width:110px"></div>
+      <span class="sub" id="priceHint" style="margin:0 0 6px"></span>
+    </div>
+    <label><input type="checkbox" id="optToday"> Tage bis heute mitzählen (sonst bis zum letzten Eintrag)</label>
+  </div>
+</div>
+<div id="modal" hidden><div class="mbox"><p id="mmsg"></p><div class="mbtns"><button id="mno">Abbrechen</button><button class="primary" id="myes">OK</button></div></div></div>
+<div id="tip"></div>
+<div id="toast"></div>
+
+<script src="firebase-kfb.js"></script>
+<script>
+(function () {
+  'use strict';
+  var DOW = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'];
+  var WD_ORDER = [1, 2, 3, 4, 5, 6, 0];
+  var MONTHS = ['Januar', 'Februar', 'März', 'April', 'Mai', 'Juni', 'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember'];
+
+  var state = { entries: {}, untilToday: true, price: 0.4 };
+  var view = { month: 'all', lastN: 30, metric: 'avg', cmpA: 'l:30', cmpB: 'p:30', editing: null };
+  var storeOk = true;
+  var undoSnap = null, toastTimer = null;
+
+  var $ = function (id) { return document.getElementById(id); };
+  var pad = function (n) { return (n < 10 ? '0' : '') + n; };
+  var isoOf = function (d) { return d.getUTCFullYear() + '-' + pad(d.getUTCMonth() + 1) + '-' + pad(d.getUTCDate()); };
+  var parse = function (s) { return new Date(s + 'T00:00:00Z'); };
+  var addDays = function (d, n) { return new Date(d.getTime() + n * 864e5); };
+  var todayIso = function () { var n = new Date(); return n.getFullYear() + '-' + pad(n.getMonth() + 1) + '-' + pad(n.getDate()); };
+  var short = function (s) { var p = s.split('-'); return Number(p[2]) + '.' + Number(p[1]) + '.'; };
+  var long = function (s) { return DOW[parse(s).getUTCDay()] + ', ' + short(s) + s.slice(0, 4); };
+  var monthLabel = function (k) { return MONTHS[Number(k.slice(5)) - 1] + ' ' + k.slice(0, 4); };
+  var eur = function (x) { return x.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' }); };
+  var f1 = function (x) { return x.toLocaleString('de-DE', { minimumFractionDigits: 1, maximumFractionDigits: 1 }); };
+  var validIso = function (s) { return /^\d{4}-\d{2}-\d{2}$/.test(s) && isoOf(parse(s)) === s; };
+  var plural = function (n, a, b) { return n + ' ' + (n === 1 ? a : b); };
+
+  /* ---------- storage ---------- */
+  var db = null, dl = null, mode = 'local', loaded = false;
+  var LS_BACKUP = 'kippen-app-lastbackup', LS_SEEDED = 'kippen-app-seeded';
+  var LS_CFG = 'kippen-app-firebase', BUILTIN_CFG = null;
+  var fb = null, user = null, unsubE = null, unsubP = null, cloudLoaded = false;
+  var sync = { st: 'off', msg: '' };
+  var SEED = {};
+  var LS_ENT = 'kippen-app-eintraege', LS_PREF = 'kippen-app-prefs';
+  function lsRead(k) { try { return JSON.parse(localStorage.getItem(k) || 'null'); } catch (e) { return null; } }
+  function lsWrite(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { /* ignore */ } }
+  function persistPrefs() { lsWrite(LS_PREF, { untilToday: state.untilToday, month: view.month, lastN: view.lastN, price: state.price, metric: view.metric, cmpA: view.cmpA, cmpB: view.cmpB }); }
+  function snapshot() { undoSnap = JSON.stringify(state.entries); }
+  function toast(msg, withUndo) {
+    var t = $('toast');
+    t.textContent = msg;
+    if (withUndo && undoSnap) {
+      var b = document.createElement('button');
+      b.textContent = 'Rückgängig';
+      b.onclick = function () {
+        var target = JSON.parse(undoSnap), muts = [];
+        undoSnap = null;
+        Object.keys(target).forEach(function (k) { if (state.entries[k] !== target[k]) muts.push({ date: k, n: target[k] }); });
+        Object.keys(state.entries).forEach(function (k) { if (!(k in target)) muts.push({ date: k, n: null }); });
+        t.style.display = 'none';
+        commit(muts);
+      };
+      t.appendChild(b);
+    }
+    t.style.display = 'block';
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { t.style.display = 'none'; }, 8000);
+  }
+  function writeOne(m) {
+    if (mode === 'db') {
+      var ref = db.collection('eintraege').doc(m.date);
+      return m.n === null ? ref.delete() : ref.set({ n: m.n });
+    }
+    lsWrite(LS_ENT, state.entries);
+    return Promise.resolve();
+  }
+  function commit(muts) {
+    var before = JSON.parse(JSON.stringify(state.entries));
+    muts.forEach(function (m) { if (m.n === null) delete state.entries[m.date]; else state.entries[m.date] = m.n; });
+    render();
+    if (mode === 'cloud') {
+      /* Firestore merkt sich die Änderung sofort lokal und schickt sie, sobald Netz da ist */
+      window.KFB.write(fb, user.uid, muts).catch(function (err) {
+        toast('Speichern in der Cloud fehlgeschlagen: ' + fbErr(err));
+      });
+      return Promise.resolve();
+    }
+    var chain = Promise.resolve();
+    muts.forEach(function (m) { chain = chain.then(function () { return writeOne(m); }); });
+    return chain.catch(function () {
+      state.entries = before;
+      if (mode === 'local') lsWrite(LS_ENT, state.entries);
+      render();
+      toast('Speichern fehlgeschlagen. Bitte noch einmal versuchen.');
+    });
+  }
+  function useLocal() {
+    mode = 'local';
+    if (typeof sync !== 'undefined' && !fb) sync.st = 'off';
+    var o = lsRead(LS_ENT);
+    state.entries = o && typeof o === 'object' ? o : {};
+    loaded = true;
+    render();
+  }
+
+  /* ---------- data ---------- */
+  function allDays() {
+    var keys = Object.keys(state.entries).sort();
+    if (!keys.length) return [];
+    var start = parse(keys[0]);
+    var end = parse(keys[keys.length - 1]);
+    if (state.untilToday) { var t = parse(todayIso()); if (t > end) end = t; }
+    var out = [];
+    for (var d = start; d <= end; d = addDays(d, 1)) {
+      var k = isoOf(d);
+      out.push({ date: k, n: state.entries[k] || 0, logged: k in state.entries });
+    }
+    return out;
+  }
+  function lastDays(n) {
+    var end = parse(todayIso()), out = [];
+    for (var i = n - 1; i >= 0; i--) {
+      var k = isoOf(addDays(end, -i));
+      out.push({ date: k, n: state.entries[k] || 0, logged: k in state.entries });
+    }
+    return out;
+  }
+  function monthsOf(days) {
+    var s = {};
+    days.forEach(function (d) { s[d.date.slice(0, 7)] = 1; });
+    return Object.keys(s).sort();
+  }
+  function stats(days) {
+    var total = 0, sm = 0, max = null, streak = 0, best = { len: 0, from: '', to: '' }, cur = null;
+    days.forEach(function (d) {
+      total += d.n;
+      if (d.n > 0) { sm++; cur = null; } else {
+        if (!cur) cur = { len: 0, from: d.date, to: d.date };
+        cur.len++; cur.to = d.date;
+        if (cur.len > best.len) best = { len: cur.len, from: cur.from, to: cur.to };
+      }
+      if (!max || d.n > max.n) max = d;
+    });
+    var sorted = days.map(function (d) { return d.n; }).sort(function (a, b) { return a - b; });
+    var k = days.length, m = Math.floor(k / 2);
+    var median = k ? (k % 2 ? sorted[m] : (sorted[m - 1] + sorted[m]) / 2) : 0;
+    return { total: total, days: k, smoke: sm, free: k - sm, avg: k ? total / k : 0, avgSmoke: sm ? total / sm : 0,
+      median: median, max: max, best: best };
+  }
+
+  /* ---------- charts ---------- */
+  function svgOpen(w, h, label) { return '<svg viewBox="0 0 ' + w + ' ' + h + '" role="img" aria-label="' + label + '">'; }
+  function text(x, y, s, anchor, cls) {
+    return '<text x="' + x + '" y="' + y + '" text-anchor="' + (anchor || 'middle') + '"' + (cls ? ' class="' + cls + '"' : '') + '>' + s + '</text>';
+  }
+  function niceStep(v) { var raw = Math.max(1, v / 5), mag = Math.pow(10, Math.floor(Math.log10(raw))), f = raw / mag; return (f <= 1 ? 1 : f <= 2 ? 2 : f <= 5 ? 5 : 10) * mag; }
+  function niceMax(v) { if (v <= 5) return 5; var step = niceStep(v); return Math.ceil(v / step) * step; }
+  function yTicks(max) { var step = niceStep(max); var t = []; for (var v = 0; v <= max + 1e-9; v += step) t.push(Math.round(v * 100) / 100); return t; }
+  function axisDate(days) { var multi = days.length && days[0].date.slice(0, 4) !== days[days.length - 1].date.slice(0, 4); return function (iso) { return multi ? short(iso) + iso.slice(2, 4) : short(iso); }; }
+
+  function drawDaily(days) {
+    var box = $('chDaily');
+    if (!days.length) { box.innerHTML = '<div class="empty">Noch keine Daten.</div>'; return; }
+    var W = Math.max(box.clientWidth, 300), H = 260, m = { t: 12, r: 8, b: 28, l: 32 };
+    var ymax = niceMax(Math.max.apply(null, days.map(function (d) { return d.n; })));
+    var bw = (W - m.l - m.r) / days.length;
+    var y = function (v) { return H - m.b - (v / ymax) * (H - m.t - m.b); };
+    var s = svgOpen(W, H, 'Balkendiagramm: Kippen pro Tag');
+    yTicks(ymax).forEach(function (v) {
+      s += '<line x1="' + m.l + '" x2="' + (W - m.r) + '" y1="' + y(v) + '" y2="' + y(v) + '" stroke="var(--grid)"/>' + text(m.l - 6, y(v) + 4, v, 'end');
+    });
+    var ad = axisDate(days), step = Math.ceil(days.length / Math.max(3, Math.floor((W - m.l) / 62)));
+    days.forEach(function (d, i) {
+      var x = m.l + i * bw;
+      if (d.n > 0) s += '<rect x="' + (x + bw * 0.12) + '" y="' + y(d.n) + '" width="' + Math.max(1, bw * 0.76) + '" height="' + (H - m.b - y(d.n)) + '" rx="' + Math.min(3, bw * 0.3) + '" fill="var(--accent)"/>';
+      if (i % step === 0) s += text(x + bw / 2, H - 9, ad(d.date));
+      s += '<rect x="' + x + '" y="' + m.t + '" width="' + bw + '" height="' + (H - m.t - m.b) + '" fill="transparent" data-tip="' + long(d.date) + ': ' + (d.n === 0 ? 'rauchfrei' : plural(d.n, 'Kippe', 'Kippen')) + '"/>';
+    });
+    s += '<line x1="' + m.l + '" x2="' + (W - m.r) + '" y1="' + (H - m.b) + '" y2="' + (H - m.b) + '" stroke="var(--muted)"/></svg>';
+    box.innerHTML = s;
+  }
+
+  function drawCum(days) {
+    var box = $('chCum');
+    if (!days.length) { box.innerHTML = '<div class="empty">Noch keine Daten.</div>'; return; }
+    var W = Math.max(box.clientWidth, 280), H = 240, m = { t: 14, r: 34, b: 28, l: 34 };
+    var run = 0, pts = days.map(function (d) { run += d.n; return { date: d.date, s: run }; });
+    var ymax = niceMax(run);
+    var n = pts.length;
+    var x = function (i) { return n === 1 ? m.l : m.l + (i / (n - 1)) * (W - m.l - m.r); };
+    var y = function (v) { return H - m.b - (v / ymax) * (H - m.t - m.b); };
+    var s = svgOpen(W, H, 'Liniendiagramm: laufende Summe');
+    yTicks(ymax).forEach(function (v) {
+      s += '<line x1="' + m.l + '" x2="' + (W - m.r) + '" y1="' + y(v) + '" y2="' + y(v) + '" stroke="var(--grid)"/>' + text(m.l - 6, y(v) + 4, v, 'end');
+    });
+    var step = Math.ceil(n / Math.max(2, Math.floor((W - m.l - m.r) / 70)));
+    var ad = axisDate(days);
+    pts.forEach(function (p, i) { if (i % step === 0) s += text(x(i), H - 9, ad(p.date)); });
+    var d = pts.map(function (p, i) { return (i ? 'L' : 'M') + x(i).toFixed(1) + ' ' + y(p.s).toFixed(1); }).join(' ');
+    s += '<path d="' + d + ' L' + x(n - 1).toFixed(1) + ' ' + y(0) + ' L' + x(0).toFixed(1) + ' ' + y(0) + ' Z" fill="var(--accent)" opacity=".12"/>';
+    s += '<path d="' + d + '" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>';
+    s += '<circle cx="' + x(n - 1) + '" cy="' + y(run) + '" r="3.5" fill="var(--accent)"/>' + text(x(n - 1) + 7, y(run) + 4, run, 'start', 'val');
+    var hw = (W - m.l - m.r) / Math.max(1, n);
+    pts.forEach(function (p, i) {
+      s += '<rect x="' + (x(i) - hw / 2) + '" y="' + m.t + '" width="' + hw + '" height="' + (H - m.t - m.b) + '" fill="transparent" data-tip="' + long(p.date) + ': Summe ' + p.s + '"/>';
+    });
+    s += '<line x1="' + m.l + '" x2="' + (W - m.r) + '" y1="' + (H - m.b) + '" y2="' + (H - m.b) + '" stroke="var(--muted)"/></svg>';
+    box.innerHTML = s;
+  }
+
+  function drawWd(days) {
+    var box = $('chWd');
+    if (!days.length) { box.innerHTML = '<div class="empty">Noch keine Daten.</div>'; return; }
+    var W = Math.max(box.clientWidth, 280), H = 240, m = { t: 24, r: 8, b: 32, l: 8 };
+    var agg = {};
+    days.forEach(function (d) { var w = parse(d.date).getUTCDay(); (agg[w] = agg[w] || { sum: 0, k: 0 }); agg[w].sum += d.n; agg[w].k++; });
+    var rows = WD_ORDER.map(function (w) { var a = agg[w]; return { name: DOW[w], k: a ? a.k : 0, sum: a ? a.sum : 0, avg: a ? a.sum / a.k : 0 }; });
+    var ymax = Math.max(1, Math.max.apply(null, rows.map(function (r) { return r.avg; })));
+    var bw = (W - m.l - m.r) / 7;
+    var y = function (v) { return H - m.b - (v / ymax) * (H - m.t - m.b); };
+    var s = svgOpen(W, H, 'Balkendiagramm: Durchschnitt nach Wochentag');
+    rows.forEach(function (r, i) {
+      var x = m.l + i * bw, cx = x + bw / 2;
+      if (r.k > 0) {
+        s += '<rect x="' + (x + bw * 0.18) + '" y="' + y(r.avg) + '" width="' + (bw * 0.64) + '" height="' + Math.max(0, H - m.b - y(r.avg)) + '" rx="4" fill="var(--accent)"/>';
+        s += text(cx, y(r.avg) - 6, f1(r.avg), 'middle', 'val');
+      } else s += text(cx, H - m.b - 6, '–');
+      s += text(cx, H - 12, r.name + ' (' + r.k + ')');
+      s += '<rect x="' + x + '" y="' + m.t + '" width="' + bw + '" height="' + (H - m.t - m.b) + '" fill="transparent" data-tip="' + r.name + ': Ø ' + f1(r.avg) + ' · ' + r.sum + ' an ' + plural(r.k, 'Tag', 'Tagen') + '"/>';
+    });
+    s += '<line x1="' + m.l + '" x2="' + (W - m.r) + '" y1="' + (H - m.b) + '" y2="' + (H - m.b) + '" stroke="var(--muted)"/></svg>';
+    box.innerHTML = s;
+  }
+
+  function baseline(W, H, m) { return '<line x1="' + m.l + '" x2="' + (W - m.r) + '" y1="' + (H - m.b) + '" y2="' + (H - m.b) + '" stroke="var(--muted)"/>'; }
+
+  function drawMonths(days) {
+    var box = $('chMonths'), ms = monthsOf(days);
+    if (!ms.length) { box.innerHTML = '<div class="empty">Noch keine Daten.</div>'; return; }
+    var avgMode = view.metric === 'avg', costMode = view.metric === 'cost';
+    var rows = ms.map(function (k) {
+      var st = stats(days.filter(function (d) { return d.date.slice(0, 7) === k; }));
+      return { k: k, total: st.total, avg: st.avg, days: st.days, v: avgMode ? st.avg : costMode ? st.total * state.price : st.total };
+    });
+    $('mAvg').className = avgMode ? 'on' : '';
+    $('mTotal').className = view.metric === 'total' ? 'on' : '';
+    $('mCost').className = costMode ? 'on' : '';
+    $('monthsSub').textContent = avgMode ? 'Durchschnitt pro Tag je Monat. Im Tooltip die Summe.' : costMode ? 'Kosten je Monat bei ' + eur(state.price) + ' pro Kippe.' : 'Summe je Monat. Im Tooltip der Schnitt pro Tag.';
+    var W = Math.max(box.clientWidth, 280), H = 230, m = { t: 22, r: 8, b: 34, l: 8 };
+    var ymax = Math.max(0.1, Math.max.apply(null, rows.map(function (r) { return r.v; })));
+    var bw = (W - m.l - m.r) / rows.length;
+    var y = function (v) { return H - m.b - (v / ymax) * (H - m.t - m.b); };
+    var step = Math.max(1, Math.ceil(46 / bw));
+    var s = svgOpen(W, H, 'Balkendiagramm: Entwicklung pro Monat');
+    rows.forEach(function (r, i) {
+      var x = m.l + i * bw, cx = x + bw / 2, w = Math.max(2, Math.min(bw * 0.7, 56));
+      s += '<rect x="' + (cx - w / 2) + '" y="' + y(r.v) + '" width="' + w + '" height="' + Math.max(0, H - m.b - y(r.v)) + '" rx="' + Math.min(4, w / 3) + '" fill="var(--accent)"/>';
+      if (bw >= (costMode ? 30 : 26)) s += text(cx, y(r.v) - 6, avgMode ? f1(r.v) : costMode ? Math.round(r.v) + ' €' : r.v, 'middle', 'val');
+      if (i % step === 0) s += text(cx, H - 12, MONTHS[Number(r.k.slice(5)) - 1].slice(0, 3) + ' ' + r.k.slice(2, 4));
+      s += '<rect x="' + x + '" y="' + m.t + '" width="' + bw + '" height="' + (H - m.t - m.b) + '" fill="transparent" data-tip="' + monthLabel(r.k) + ': Ø ' + f1(r.avg) + ' pro Tag · ' + r.total + ' Kippen (' + eur(r.total * state.price) + ') in ' + plural(r.days, 'Tag', 'Tagen') + '"/>';
+    });
+    box.innerHTML = s + baseline(W, H, m) + '</svg>';
+  }
+
+  /* ---------- compare ---------- */
+  function endingAt(end, n) {
+    var out = [];
+    for (var i = n - 1; i >= 0; i--) {
+      var k = isoOf(addDays(end, -i));
+      out.push({ date: k, n: state.entries[k] || 0, logged: k in state.entries });
+    }
+    return out;
+  }
+  function periodDays(key, days) {
+    var p = key.split(':'), n = Number(p[1]);
+    if (p[0] === 'm') return days.filter(function (d) { return d.date.slice(0, 7) === p[1]; });
+    var today = parse(todayIso());
+    return p[0] === 'l' ? endingAt(today, n) : endingAt(addDays(today, -n), n);
+  }
+  function periodLabel(key) {
+    var p = key.split(':');
+    return p[0] === 'm' ? monthLabel(p[1]) : p[0] === 'l' ? 'Letzte ' + p[1] + ' Tage' : p[1] + ' Tage davor';
+  }
+  var cmpSig = '';
+  function fillCmpSelects(days) {
+    var o = [];
+    [7, 14, 30, 90, 365].forEach(function (n) { o.push(['l:' + n, 'Letzte ' + n + ' Tage']); o.push(['p:' + n, n + ' Tage davor']); });
+    monthsOf(days).reverse().forEach(function (k) { o.push(['m:' + k, monthLabel(k)]); });
+    var sig = JSON.stringify(o);
+    if (sig !== cmpSig) {
+      var html = o.map(function (x) { return '<option value="' + x[0] + '">' + x[1] + '</option>'; }).join('');
+      $('cmpA').innerHTML = html; $('cmpB').innerHTML = html; cmpSig = sig;
+    }
+    $('cmpA').value = view.cmpA;
+    if ($('cmpA').value !== view.cmpA) { view.cmpA = 'l:30'; $('cmpA').value = 'l:30'; }
+    $('cmpB').value = view.cmpB;
+    if ($('cmpB').value !== view.cmpB) { view.cmpB = 'p:30'; $('cmpB').value = 'p:30'; }
+  }
+  function cmpDelta(a, b, lowerGood, fmt, pct) {
+    var diff = a - b;
+    var cls = diff === 0 ? '' : ((diff < 0) === lowerGood ? 'good' : 'bad');
+    var txt = diff === 0 ? '±0' : (diff > 0 ? '+' : '−') + fmt(Math.abs(diff));
+    if (pct && b > 0 && diff !== 0) txt += ' (' + (diff > 0 ? '+' : '−') + Math.round(Math.abs(diff) / b * 100) + ' %)';
+    return '<span class="' + cls + '">' + txt + '</span>';
+  }
+  function legend(la, lb, W) {
+    return '<circle cx="' + 10 + '" cy="10" r="4.5" fill="var(--accent)"/>' + text(20, 14, la, 'start') +
+      '<circle cx="' + Math.round(W / 2) + '" cy="10" r="4.5" fill="var(--b)"/>' + text(Math.round(W / 2) + 10, 14, lb, 'start');
+  }
+  function drawCmpCum(A, B, la, lb) {
+    var box = $('chCmpCum');
+    var run = 0, ca = A.map(function (d) { run += d.n; return run; });
+    run = 0; var cb = B.map(function (d) { run += d.n; return run; });
+    var L = Math.max(ca.length, cb.length);
+    if (!L) { box.innerHTML = '<div class="empty">Keine Daten.</div>'; return; }
+    var W = Math.max(box.clientWidth, 260), H = 250, m = { t: 30, r: 34, b: 28, l: 34 };
+    var top = Math.max(ca.length ? ca[ca.length - 1] : 0, cb.length ? cb[cb.length - 1] : 0);
+    var ymax = niceMax(top);
+    var x = function (i) { return L === 1 ? m.l : m.l + (i / (L - 1)) * (W - m.l - m.r); };
+    var y = function (v) { return H - m.b - (v / ymax) * (H - m.t - m.b); };
+    var s = svgOpen(W, H, 'Liniendiagramm: Vergleich der laufenden Summe') + legend(la, lb, W);
+    yTicks(ymax).forEach(function (v) {
+      s += '<line x1="' + m.l + '" x2="' + (W - m.r) + '" y1="' + y(v) + '" y2="' + y(v) + '" stroke="var(--grid)"/>' + text(m.l - 6, y(v) + 4, v, 'end');
+    });
+    var step = Math.max(1, Math.ceil(L / Math.max(2, Math.floor((W - m.l - m.r) / 60))));
+    for (var i = 0; i < L; i += step) s += text(x(i), H - 9, i + 1);
+    var path = function (c) { return c.map(function (v, k) { return (k ? 'L' : 'M') + x(k).toFixed(1) + ' ' + y(v).toFixed(1); }).join(' '); };
+    if (cb.length) s += '<path d="' + path(cb) + '" fill="none" stroke="var(--b)" stroke-width="2" stroke-dasharray="6 4" stroke-linejoin="round" stroke-linecap="round"/>';
+    if (ca.length) s += '<path d="' + path(ca) + '" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>';
+    if (ca.length) s += '<circle cx="' + x(ca.length - 1) + '" cy="' + y(ca[ca.length - 1]) + '" r="3.5" fill="var(--accent)"/>' + text(x(ca.length - 1) + 7, y(ca[ca.length - 1]) + (cb.length && ca[ca.length - 1] < cb[cb.length - 1] ? 12 : -2), ca[ca.length - 1], 'start', 'val');
+    if (cb.length) s += '<circle cx="' + x(cb.length - 1) + '" cy="' + y(cb[cb.length - 1]) + '" r="3.5" fill="var(--b)"/>' + text(x(cb.length - 1) + 7, y(cb[cb.length - 1]) + (ca.length && cb[cb.length - 1] <= ca[ca.length - 1] ? 12 : -2), cb[cb.length - 1], 'start', 'val');
+    var hw = (W - m.l - m.r) / Math.max(1, L);
+    for (var k = 0; k < L; k++) {
+      s += '<rect x="' + (x(k) - hw / 2) + '" y="' + m.t + '" width="' + hw + '" height="' + (H - m.t - m.b) + '" fill="transparent" data-tip="Tag ' + (k + 1) + ': A ' + (k < ca.length ? ca[k] : '–') + ' · B ' + (k < cb.length ? cb[k] : '–') + '"/>';
+    }
+    box.innerHTML = s + baseline(W, H, m) + '</svg>';
+  }
+  function wdAvgs(ds) {
+    var agg = {};
+    ds.forEach(function (d) { var w = parse(d.date).getUTCDay(); agg[w] = agg[w] || { sum: 0, k: 0 }; agg[w].sum += d.n; agg[w].k++; });
+    return WD_ORDER.map(function (w) { var a = agg[w]; return a ? a.sum / a.k : null; });
+  }
+  function drawCmpWd(A, B, la, lb) {
+    var box = $('chCmpWd');
+    if (!A.length && !B.length) { box.innerHTML = '<div class="empty">Keine Daten.</div>'; return; }
+    var wa = wdAvgs(A), wb = wdAvgs(B);
+    var W = Math.max(box.clientWidth, 260), H = 250, m = { t: 36, r: 8, b: 28, l: 8 };
+    var vals = wa.concat(wb).filter(function (v) { return v !== null; });
+    var ymax = Math.max(1, Math.max.apply(null, vals));
+    var gw = (W - m.l - m.r) / 7, bw = Math.min(gw * 0.34, 26);
+    var y = function (v) { return H - m.b - (v / ymax) * (H - m.t - m.b); };
+    var s = svgOpen(W, H, 'Balkendiagramm: Vergleich nach Wochentag') + legend(la, lb, W);
+    WD_ORDER.forEach(function (w, i) {
+      var cx = m.l + i * gw + gw / 2;
+      [[wa[i], 'var(--accent)', -bw - 1], [wb[i], 'var(--b)', 1]].forEach(function (b) {
+        if (b[0] === null) return;
+        s += '<rect x="' + (cx + b[2]) + '" y="' + y(b[0]) + '" width="' + bw + '" height="' + Math.max(0, H - m.b - y(b[0])) + '" rx="3" fill="' + b[1] + '"/>';
+        if (gw >= 46) s += text(cx + b[2] + bw / 2, y(b[0]) - 4, f1(b[0]), 'middle', 'val');
+      });
+      s += text(cx, H - 9, DOW[w]);
+      s += '<rect x="' + (m.l + i * gw) + '" y="' + m.t + '" width="' + gw + '" height="' + (H - m.t - m.b) + '" fill="transparent" data-tip="' + DOW[w] + ': A Ø ' + (wa[i] === null ? '–' : f1(wa[i])) + ' · B Ø ' + (wb[i] === null ? '–' : f1(wb[i])) + '"/>';
+    });
+    box.innerHTML = s + baseline(W, H, m) + '</svg>';
+  }
+  function renderCompare(days) {
+    fillCmpSelects(days);
+    var A = periodDays(view.cmpA, days), B = periodDays(view.cmpB, days);
+    var la = periodLabel(view.cmpA), lb = periodLabel(view.cmpB);
+    var sa = stats(A), sb = stats(B);
+    var rng = function (ds) { return ds.length ? short(ds[0].date) + '–' + short(ds[ds.length - 1].date) : 'keine Tage'; };
+    var mx = function (st) { return st.max ? st.max.n : 0; };
+    var int = function (v) { return String(v); };
+    var rows = [
+      ['Tage', sa.days, sb.days, ''],
+      ['Gesamt', sa.total, sb.total, cmpDelta(sa.total, sb.total, true, int, true)],
+      ['Ø pro Tag', f1(sa.avg), f1(sb.avg), cmpDelta(Math.round(sa.avg * 10) / 10, Math.round(sb.avg * 10) / 10, true, f1, true)],
+      ['Kosten', eur(sa.total * state.price), eur(sb.total * state.price), cmpDelta(Math.round(sa.total * state.price * 100) / 100, Math.round(sb.total * state.price * 100) / 100, true, eur, true)],
+      ['Rauchfreie Tage', sa.free, sb.free, cmpDelta(sa.free, sb.free, false, int, false)],
+      ['Höchster Tag', mx(sa), mx(sb), cmpDelta(mx(sa), mx(sb), true, int, false)]
+    ];
+    $('cmpTable').innerHTML = '<thead><tr><th></th><th class="r"><span class="dot a"></span>' + la + '<div class="rng">' + rng(A) + '</div></th><th class="r"><span class="dot b"></span>' + lb + '<div class="rng">' + rng(B) + '</div></th><th class="r">A gegenüber B</th></tr></thead><tbody>' +
+      rows.map(function (r) { return '<tr><td>' + r[0] + '</td><td class="r">' + r[1] + '</td><td class="r">' + r[2] + '</td><td class="r">' + r[3] + '</td></tr>'; }).join('') + '</tbody>';
+    $('cmpNote').textContent = sa.days !== sb.days ? 'Die Zeiträume sind unterschiedlich lang. Der faire Vergleich ist der Ø pro Tag.' : '';
+    drawCmpCum(A, B, la, lb);
+    drawCmpWd(A, B, la, lb);
+  }
+
+  /* ---------- UI ---------- */
+  function renderKpis(st, days) {
+    var el = $('kpis');
+    if (!days.length) { el.innerHTML = ''; return; }
+    var best = st.best.len ? plural(st.best.len, 'Tag', 'Tage') : '–';
+    var bestNote = st.best.len ? (st.best.len > 1 ? short(st.best.from) + '–' + short(st.best.to) : short(st.best.from)) : 'keine rauchfreien Tage';
+    var cards = [
+      ['Gesamt', st.total, 'in ' + plural(st.days, 'Tag', 'Tagen')],
+      ['Ø pro Tag', f1(st.avg), 'Median ' + String(st.median).replace('.', ',') + ' · an Rauchtagen Ø ' + f1(st.avgSmoke)],
+      ['Höchster Tag', st.max ? st.max.n : 0, st.max && st.max.n > 0 ? 'am ' + short(st.max.date) : '–'],
+      ['Kosten', eur(st.total * state.price), 'bei ' + eur(state.price) + ' pro Kippe · ≈ ' + eur(st.avg * 365 * state.price) + ' pro Jahr'],
+      ['Rauchfreie Tage', st.free, 'von ' + st.days + ' Tagen'],
+      ['Längste rauchfreie Serie', best, bestNote]
+    ];
+    el.innerHTML = cards.map(function (c) {
+      return '<div class="card kpi"><div class="l">' + c[0] + '</div><div class="v">' + c[1] + '</div><div class="n">' + c[2] + '</div></div>';
+    }).join('');
+  }
+
+  function renderTable(days) {
+    var rows = days.filter(function (d) { return d.logged; }).sort(function (a, b) { return a.date < b.date ? 1 : -1; });
+    var tb = $('tbody');
+    if (!rows.length) { tb.innerHTML = '<tr><td colspan="4" class="empty">Keine Einträge.</td></tr>'; return; }
+    tb.innerHTML = rows.map(function (d) {
+      if (view.editing === d.date) {
+        return '<tr><td><input type="date" id="edDate" value="' + d.date + '"></td>' +
+          '<td class="r"><input type="number" id="edCount" min="0" max="500" step="1" value="' + d.n + '" style="width:80px"></td><td class="r"></td>' +
+          '<td class="act"><button class="small primary" data-act="save" data-key="' + d.date + '">Speichern</button><button class="small" data-act="cancel">Abbrechen</button></td></tr>';
+      }
+      return '<tr><td>' + long(d.date) + '</td><td class="r">' + d.n + '</td><td class="r">' + eur(d.n * state.price) + '</td>' +
+        '<td class="act"><button class="small" data-act="edit" data-key="' + d.date + '">Bearbeiten</button>' +
+        '<button class="small danger" data-act="del" data-key="' + d.date + '">Löschen</button></td></tr>';
+    }).join('');
+  }
+
+  function render() {
+    var days = allDays();
+    var ms = monthsOf(days);
+    if (view.month !== 'all' && view.month !== 'last' && ms.indexOf(view.month) < 0) view.month = 'all';
+    var sel = $('month');
+    sel.innerHTML = '<option value="all">Alle Monate</option>' + ms.map(function (k) { return '<option value="' + k + '">' + monthLabel(k) + '</option>'; }).join('') + '<option value="last">Letzte Tage …</option>';
+    sel.value = view.month;
+    $('lastbox').hidden = view.month !== 'last';
+    if (document.activeElement !== $('lastN')) $('lastN').value = view.lastN;
+    $('optToday').checked = state.untilToday;
+    if (document.activeElement !== $('inPrice')) $('inPrice').value = state.price;
+    $('priceHint').textContent = '≈ ' + eur(state.price * 20) + ' pro 20er-Schachtel';
+    renderBackupWarn();
+    $('dataSub').textContent = mode === 'cloud' ? 'Alles wird automatisch in deinem Konto gespeichert und auf allen Geräten abgeglichen, auch offline Eingetragenes. ' + backupLine() : 'Alles wird automatisch auf diesem Gerät gespeichert. Melde dich oben an, um zwischen Geräten zu synchronisieren. ' + backupLine();
+    renderSync();
+
+    var vd = view.month === 'all' ? days : view.month === 'last' ? lastDays(view.lastN) : days.filter(function (d) { return d.date.slice(0, 7) === view.month; });
+    var st = stats(vd);
+    var lead = $('lead');
+    if (!loaded) lead.textContent = 'Lade Einträge …';
+    else if (!vd.length) lead.textContent = 'Noch keine Einträge. Trage oben deinen ersten Tag ein.';
+    else lead.innerHTML = '<b>' + st.total + '</b> ' + (st.total === 1 ? 'Kippe' : 'Kippen') + ' in <b>' + st.days + '</b> ' + (st.days === 1 ? 'Tag' : 'Tagen') + ' (' + short(vd[0].date) + '–' + short(vd[vd.length - 1].date) + '), im Schnitt <b>' + f1(st.avg) +
+      '</b> pro Tag. An <b>' + st.smoke + '</b> ' + (st.smoke === 1 ? 'Tag' : 'Tagen') + ' geraucht, <b>' + st.free + '</b> ' + (st.free === 1 ? 'Tag' : 'Tage') + ' rauchfrei.';
+    $('printinfo').textContent = 'Kippen-Tracker · ' + (view.month === 'all' ? 'Alle Monate' : view.month === 'last' ? 'Letzte ' + view.lastN + ' Tage' : monthLabel(view.month)) + ' · Stand ' + short(todayIso()) + todayIso().slice(0, 4);
+    $('cumSub').textContent = view.month === 'all' ? 'Alle Kippen seit dem ersten Eintrag.' : view.month === 'last' ? 'Alle Kippen seit Beginn des Zeitraums.' : 'Alle Kippen seit Monatsbeginn.';
+
+    renderKpis(st, vd);
+    drawDaily(vd);
+    drawCum(vd);
+    drawWd(vd);
+    drawMonths(days);
+    renderCompare(days);
+    renderTable(vd);
+  }
+
+  /* ---------- actions ---------- */
+  function setEntry(date, n) {
+    if (!validIso(date)) { toast('Bitte ein gültiges Datum wählen.'); return false; }
+    if (!(n >= 0) || n !== Math.floor(n) || n > 500) { toast('Bitte eine ganze Zahl von 0 bis 500 eingeben.'); return false; }
+    snapshot();
+    var had = date in state.entries ? state.entries[date] : null;
+    commit([{ date: date, n: n }]);
+    toast(had === null ? 'Eingetragen: ' + short(date) + ' → ' + n : short(date) + ' überschrieben (vorher ' + had + ', jetzt ' + n + ')', true);
+    return true;
+  }
+
+  $('btnAdd').onclick = function () {
+    var n = Number($('inCount').value);
+    if ($('inCount').value === '') { toast('Bitte eine Anzahl eingeben.'); return; }
+    if (setEntry($('inDate').value, n)) render();
+  };
+  $('btnPlus').onclick = function () {
+    var t = todayIso();
+    if (setEntry(t, (state.entries[t] || 0) + 1)) render();
+  };
+  $('month').onchange = function (e) { view.month = e.target.value; persistPrefs(); render(); };
+  $('lastN').oninput = function (e) {
+    var n = parseInt(e.target.value, 10);
+    if (n >= 1 && n <= 3650) { view.lastN = n; persistPrefs(); render(); }
+  };
+  $('lastbox').addEventListener('click', function (e) {
+    var b = e.target.closest('button[data-last]');
+    if (!b) return;
+    view.lastN = Number(b.getAttribute('data-last'));
+    persistPrefs(); render();
+  });
+  $('mCost').onclick = function () { view.metric = 'cost'; persistPrefs(); render(); };
+  $('inPrice').onchange = function (e) {
+    var v = Number(String(e.target.value).replace(',', '.'));
+    if (!(v >= 0 && v <= 10) || e.target.value === '') { toast('Bitte einen Preis zwischen 0 und 10 € eingeben.'); e.target.value = state.price; return; }
+    v = Math.round(v * 100) / 100;
+    state.price = v;
+    persistPrefs();
+    if (mode === 'cloud') window.KFB.setPrice(fb, user.uid, v).catch(function (err) { toast('Preis nicht gespeichert: ' + fbErr(err)); });
+    render();
+  };
+  $('mAvg').onclick = function () { view.metric = 'avg'; persistPrefs(); render(); };
+  $('mTotal').onclick = function () { view.metric = 'total'; persistPrefs(); render(); };
+  $('cmpA').onchange = function (e) { view.cmpA = e.target.value; persistPrefs(); render(); };
+  $('cmpB').onchange = function (e) { view.cmpB = e.target.value; persistPrefs(); render(); };
+  $('optToday').onchange = function (e) { state.untilToday = e.target.checked; persistPrefs(); render(); };
+
+  $('tbody').addEventListener('click', function (e) {
+    var b = e.target.closest('button[data-act]');
+    if (!b) return;
+    var act = b.getAttribute('data-act'), key = b.getAttribute('data-key');
+    if (act === 'edit') { view.editing = key; render(); }
+    else if (act === 'cancel') { view.editing = null; render(); }
+    else if (act === 'del') {
+      snapshot();
+      view.editing = null;
+      commit([{ date: key, n: null }]);
+      toast('Eintrag gelöscht: ' + short(key), true);
+    } else if (act === 'save') {
+      var nd = $('edDate').value, nn = Number($('edCount').value);
+      if ($('edCount').value === '') { toast('Bitte eine Anzahl eingeben.'); return; }
+      if (!validIso(nd) || !(nn >= 0) || nn !== Math.floor(nn) || nn > 500) { toast('Bitte Datum und eine ganze Zahl von 0 bis 500 eingeben.'); return; }
+      var apply = function () {
+        snapshot();
+        view.editing = null;
+        var mm = [{ date: nd, n: nn }];
+        if (nd !== key) mm.push({ date: key, n: null });
+        commit(mm);
+        toast('Gespeichert: ' + short(nd) + ' → ' + nn, true);
+      };
+      if (nd !== key && nd in state.entries) ask('Für ' + short(nd) + ' gibt es schon einen Eintrag. Überschreiben?', 'Überschreiben', apply);
+      else apply();
+    }
+  });
+
+  function ask(msg, okLabel, cb) {
+    var m = $('modal');
+    $('mmsg').textContent = msg;
+    $('myes').textContent = okLabel || 'OK';
+    m.hidden = false;
+    var close = function () { m.hidden = true; $('myes').onclick = null; $('mno').onclick = null; };
+    $('myes').onclick = function () { close(); cb(); };
+    $('mno').onclick = close;
+  }
+
+  function copyFallback(text) {
+    var done = function () { toast('In die Zwischenablage kopiert. Füge es in eine Datei ein.'); };
+    var fail = function () { toast('Export ist in diesem Fenster nicht möglich.'); };
+    try { navigator.clipboard.writeText(text).then(done, fail); } catch (e) { fail(); }
+  }
+  function exportFile(name, text, isBackup) {
+    if (window.AndroidBridge && window.AndroidBridge.saveFile) {
+      window.__kippenSaved = function (ok) {
+        if (ok) { if (isBackup) { lsWrite(LS_BACKUP, todayIso()); render(); } toast('Datei gespeichert: ' + name); }
+        else toast('Nicht gespeichert.');
+      };
+      window.AndroidBridge.saveFile(name, /\.json$/.test(name) ? 'application/json' : 'text/csv', text);
+      return;
+    }
+    var type = /\.json$/.test(name) ? 'application/json' : 'text/csv';
+    var blob = new Blob([text], { type: type });
+    var mark = function () { if (isBackup) { lsWrite(LS_BACKUP, todayIso()); render(); } };
+    try {
+      var file = new File([blob], name, { type: type });
+      if (navigator.canShare && navigator.canShare({ files: [file] }) && /Android|iPhone|iPad/i.test(navigator.userAgent)) {
+        navigator.share({ files: [file], title: name }).then(function () { mark(); toast('Datei geteilt: ' + name); }, function (e) {
+          if (e && e.name === 'AbortError') return;
+          downloadBlob(blob, name); mark();
+        });
+        return;
+      }
+    } catch (e) { /* fall through */ }
+    downloadBlob(blob, name); mark();
+  }
+  function downloadBlob(blob, name) {
+    try {
+      var url = URL.createObjectURL(blob), a = document.createElement('a');
+      a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(function () { URL.revokeObjectURL(url); }, 4000);
+      toast('Datei gespeichert: ' + name);
+    } catch (e) { toast('Export ist hier nicht möglich.'); }
+  }
+  function backupJson() {
+    exportFile('kippen-backup_' + todayIso() + '.json', JSON.stringify({ app: 'kippen-tracker', version: 1, price: state.price, entries: state.entries }, null, 2), true);
+  }
+  function daysSinceBackup() {
+    var b = lsRead(LS_BACKUP);
+    if (!b || !validIso(b)) return null;
+    return Math.round((parse(todayIso()) - parse(b)) / 864e5);
+  }
+  function backupLine() {
+    var d = daysSinceBackup();
+    return d === null ? 'Noch kein Backup gemacht.' : d === 0 ? 'Letztes Backup: heute.' : 'Letztes Backup: vor ' + plural(d, 'Tag', 'Tagen') + '.';
+  }
+  function renderBackupWarn() {
+    var d = daysSinceBackup(), n = Object.keys(state.entries).length;
+    var show = mode !== 'cloud' && loaded && n > 0 && (d === null || d >= 14);
+    $('storewarn').hidden = !show;
+    if (show) $('storewarnText').textContent = (d === null ? 'Du hast noch kein Backup gemacht.' : 'Dein letztes Backup ist ' + d + ' Tage alt.') +
+      ' Die Daten liegen nur auf diesem Gerät. Wenn du die App löschst, sind sie weg. Mit Anmeldung (Synchronisieren) sind sie in deinem Konto gesichert.';
+  }
+  $('btnCsv').onclick = function () {
+    var days = allDays();
+    if (!days.length) { toast('Keine Daten zum Exportieren.'); return; }
+    exportFile('kippen_' + todayIso() + '.csv', 'datum,kippen\n' + days.map(function (d) { return d.date + ',' + d.n; }).join('\n') + '\n');
+  };
+  $('btnJson').onclick = backupJson;
+  $('btnWarnBackup').onclick = backupJson;
+  $('btnImport').onclick = function () { $('fileImport').click(); };
+  $('fileImport').onchange = function (e) {
+    var file = e.target.files[0];
+    e.target.value = '';
+    if (!file) return;
+    var r = new FileReader();
+    r.onload = function () {
+      var found = {}, count = 0, txt = String(r.result);
+      try {
+        var o = JSON.parse(txt);
+        var src = o && o.entries ? o.entries : o;
+        if (o && Number(o.price) >= 0 && Number(o.price) <= 10 && o.entries) { state.price = Number(o.price); persistPrefs(); }
+        Object.keys(src).forEach(function (k) { var v = Number(src[k]); if (validIso(k) && v >= 0 && v === Math.floor(v)) { found[k] = v; count++; } });
+      } catch (err) {
+        txt.split(/\r?\n/).forEach(function (line) {
+          var p = line.split(/[;,\t]/).map(function (x) { return x.trim(); });
+          if (p.length < 2) return;
+          var d = p[0], g = d.match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})$/);
+          if (g) d = g[3] + '-' + pad(Number(g[2])) + '-' + pad(Number(g[1]));
+          var v = Number(p[1]);
+          if (validIso(d) && p[1] !== '' && v >= 0 && v === Math.floor(v)) { found[d] = v; count++; }
+        });
+      }
+      if (!count) { toast('Keine gültigen Einträge gefunden (erwartet: datum,kippen).'); return; }
+      ask(count + ' Einträge importieren? Bestehende Einträge für dieselben Tage werden überschrieben.', 'Importieren', function () {
+        snapshot();
+        commit(Object.keys(found).map(function (k) { return { date: k, n: found[k] }; }));
+        toast(count + ' Einträge importiert.', true);
+      });
+    };
+    r.readAsText(file);
+  };
+
+  /* tooltip */
+  var tip = $('tip');
+  document.addEventListener('mousemove', function (e) {
+    var el = e.target.closest ? e.target.closest('[data-tip]') : null;
+    if (!el) { tip.style.display = 'none'; return; }
+    tip.textContent = el.getAttribute('data-tip');
+    tip.style.display = 'block';
+    var w = tip.offsetWidth;
+    tip.style.left = Math.max(4, Math.min(e.clientX + 14, window.innerWidth - w - 4)) + 'px';
+    tip.style.top = Math.max(4, e.clientY - 40) + 'px';
+  });
+  var rt; window.addEventListener('resize', function () { clearTimeout(rt); rt = setTimeout(render, 120); });
+
+  var pref = lsRead(LS_PREF);
+  if (pref && pref.untilToday === false) state.untilToday = false;
+  if (pref && typeof pref.month === 'string') view.month = pref.month;
+  var keyOk = function (k) { return typeof k === 'string' && /^(m:\d{4}-\d{2}|[lp]:\d{1,4})$/.test(k); };
+  if (pref && (pref.metric === 'total' || pref.metric === 'cost')) view.metric = pref.metric;
+  if (pref && pref.price >= 0 && pref.price <= 10) state.price = pref.price;
+  if (pref && keyOk(pref.cmpA)) view.cmpA = pref.cmpA;
+  if (pref && keyOk(pref.cmpB)) view.cmpB = pref.cmpB;
+  if (pref && pref.lastN >= 1 && pref.lastN <= 3650) view.lastN = Math.floor(pref.lastN);
+  $('inDate').value = todayIso();
+  render();
+  useLocal();
+  try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch (e) { /* ignore */ }
+  document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'hidden' && mode === 'local') lsWrite(LS_ENT, state.entries); });
+
+  /* ---------- Firebase ---------- */
+  function fbErr(e) {
+    var c = (e && e.code) || '';
+    var map = {
+      'auth/invalid-credential': 'E-Mail oder Passwort stimmt nicht.',
+      'auth/wrong-password': 'Passwort stimmt nicht.',
+      'auth/user-not-found': 'Zu dieser E-Mail gibt es kein Konto.',
+      'auth/email-already-in-use': 'Für diese E-Mail gibt es schon ein Konto. Melde dich an.',
+      'auth/weak-password': 'Das Passwort braucht mindestens 6 Zeichen.',
+      'auth/invalid-email': 'Die E-Mail-Adresse ist ungültig.',
+      'auth/missing-password': 'Bitte ein Passwort eingeben.',
+      'auth/network-request-failed': 'Keine Verbindung zum Internet.',
+      'auth/too-many-requests': 'Zu viele Versuche. Warte kurz.',
+      'auth/operation-not-allowed': 'In Firebase ist die Anmeldung mit E-Mail/Passwort noch nicht eingeschaltet.',
+      'auth/configuration-not-found': 'In Firebase ist Authentication noch nicht eingerichtet (E-Mail/Passwort einschalten).',
+      'auth/api-key-not-valid.-please-pass-a-valid-api-key.': 'Der apiKey in der Firebase-Konfiguration ist ungültig.',
+      'auth/invalid-api-key': 'Der apiKey in der Firebase-Konfiguration ist ungültig.',
+      'permission-denied': 'Kein Zugriff. Prüfe die Firestore-Regeln.',
+      'unavailable': 'Firestore ist gerade nicht erreichbar.',
+      'not-found': 'Die Firestore-Datenbank fehlt. Lege sie in der Firebase-Konsole an.'
+    };
+    return map[c] || (e && e.message ? e.message.replace(/^Firebase:\s*/, '') : 'Unbekannter Fehler');
+  }
+  function parseCfg(txt) {
+    var cfg = {}, m, re = /["']?(apiKey|authDomain|projectId|storageBucket|messagingSenderId|appId|measurementId)["']?\s*:\s*["']([^"']+)["']/g;
+    while ((m = re.exec(txt))) cfg[m[1]] = m[2];
+    if (!cfg.apiKey || !cfg.projectId || !cfg.appId) return null;
+    if (!cfg.authDomain) cfg.authDomain = cfg.projectId + '.firebaseapp.com';
+    return cfg;
+  }
+  function currentCfg() { var c = lsRead(LS_CFG); return c && c.apiKey ? c : BUILTIN_CFG; }
+  function setSync(st, msg) { sync.st = st; sync.msg = msg || ''; renderSync(); }
+  function renderSync() {
+    var cfg = currentCfg();
+    var pill = $('syncPill'), txt = $('syncPillText');
+    var label = { off: 'Nur auf diesem Gerät', out: 'Nicht angemeldet', load: 'Lädt …', ok: 'Synchronisiert', wait: 'Wird synchronisiert …', offline: 'Offline – wird später abgeglichen', err: 'Sync-Fehler' }[sync.st] || '';
+    txt.textContent = label;
+    pill.className = 'syncpill ' + (sync.st === 'ok' ? 'ok' : (sync.st === 'wait' || sync.st === 'offline' || sync.st === 'load') ? 'wait' : sync.st === 'err' ? 'err' : '');
+    $('syncNoCfg').hidden = !!cfg;
+    $('syncLogin').hidden = !cfg || !!user;
+    $('syncIn').hidden = !user;
+    $('syncAdv').hidden = !cfg || !!BUILTIN_CFG && !lsRead(LS_CFG);
+    if (user) $('syncWho').textContent = user.email || '';
+    if (cfg) $('syncProj').textContent = 'Projekt: ' + cfg.projectId;
+    $('syncSub').textContent = !cfg ? 'Verbinde die App einmal mit deinem Firebase-Projekt. Danach meldest du dich auf jedem Handy mit derselben E-Mail an, und die Einträge werden abgeglichen.'
+      : !user ? 'Melde dich an oder erstelle ein Konto. Deine Einträge liegen dann in deinem Konto und sind auf jedem Gerät gleich.'
+      : (sync.st === 'err' ? sync.msg : sync.st === 'offline' ? 'Kein Netz. Neue Einträge werden gespeichert und automatisch hochgeladen, sobald du wieder online bist.' : 'Neue Einträge landen sofort in deinem Konto.');
+  }
+  function stopCloud() {
+    if (unsubE) { unsubE(); unsubE = null; }
+    if (unsubP) { unsubP(); unsubP = null; }
+    cloudLoaded = false;
+  }
+  function askMigrate() {
+    var local = lsRead(LS_ENT) || {}, keys = Object.keys(local), flag = 'kippen-app-migrated-' + user.uid;
+    if (!keys.length || lsRead(flag)) return;
+    var neu = keys.filter(function (k) { return state.entries[k] !== local[k]; });
+    if (!neu.length) { lsWrite(flag, true); return; }
+    ask(plural(neu.length, 'Eintrag', 'Einträge') + ' von diesem Gerät in dein Konto übernehmen? Tage, die es im Konto schon gibt, werden dabei überschrieben.', 'Übernehmen', function () {
+      lsWrite(flag, true);
+      snapshot();
+      commit(neu.map(function (k) { return { date: k, n: local[k] }; }));
+      lsWrite(LS_ENT, {});
+      toast(plural(neu.length, 'Eintrag', 'Einträge') + ' übernommen.', true);
+    });
+    $('mno').addEventListener('click', function () { lsWrite(flag, true); }, { once: true });
+  }
+  function startCloud(u) {
+    stopCloud();
+    mode = 'cloud';
+    loaded = false;
+    state.entries = {};
+    setSync('load');
+    render();
+    unsubE = window.KFB.watchEntries(fb, u.uid, function (e, meta) {
+      state.entries = e;
+      loaded = true;
+      setSync(meta.pending ? (navigator.onLine === false ? 'offline' : 'wait') : meta.cache ? (navigator.onLine === false ? 'offline' : 'load') : 'ok');
+      render();
+      if (!cloudLoaded && !meta.cache) { cloudLoaded = true; askMigrate(); }
+    }, function (err) {
+      setSync('err', fbErr(err));
+      toast(fbErr(err));
+    });
+    unsubP = window.KFB.watchPrice(fb, u.uid, function (v) {
+      if (v && Number(v.preis) >= 0 && Number(v.preis) <= 10) { state.price = Number(v.preis); persistPrefs(); render(); }
+    });
+  }
+  function initFirebase() {
+    var cfg = currentCfg();
+    if (!cfg || !window.KFB) { setSync('off'); return; }
+    try { fb = window.KFB.start(cfg); } catch (e) { fb = null; setSync('err', 'Firebase-Konfiguration fehlerhaft: ' + fbErr(e)); return; }
+    setSync('out');
+    window.KFB.onAuth(fb, function (u) {
+      user = u || null;
+      if (user) startCloud(user);
+      else { stopCloud(); useLocal(); setSync('out'); }
+    });
+  }
+  window.addEventListener('online', function () { if (mode === 'cloud' && sync.st === 'offline') setSync('wait'); });
+  window.addEventListener('offline', function () { if (mode === 'cloud') setSync('offline'); });
+
+  $('syncPill').onclick = function () { $('syncCard').scrollIntoView({ behavior: 'smooth', block: 'start' }); };
+  $('btnCfgSave').onclick = function () {
+    var cfg = parseCfg($('inCfg').value);
+    if (!cfg) { toast('apiKey, projectId und appId nicht gefunden. Kopiere den ganzen firebaseConfig-Block.'); return; }
+    lsWrite(LS_CFG, cfg);
+    location.reload();
+  };
+  $('btnCfgDel').onclick = function () {
+    ask('Firebase-Verbindung auf diesem Gerät entfernen? Die Daten in deinem Konto bleiben erhalten.', 'Entfernen', function () {
+      var go = function () { try { localStorage.removeItem(LS_CFG); } catch (e) { /* ignore */ } location.reload(); };
+      if (fb && user) window.KFB.signOut(fb).then(go, go); else go();
+    });
+  };
+  function creds() {
+    var e = $('inMail').value.trim(), p = $('inPass').value;
+    if (!e || !p) { toast('Bitte E-Mail und Passwort eingeben.'); return null; }
+    return [e, p];
+  }
+  $('btnLogin').onclick = function () {
+    var c = creds(); if (!c) return;
+    setSync('load');
+    window.KFB.signIn(fb, c[0], c[1]).then(function () { $('inPass').value = ''; toast('Angemeldet.'); }, function (e) { setSync('out'); toast(fbErr(e)); });
+  };
+  $('btnSignup').onclick = function () {
+    var c = creds(); if (!c) return;
+    setSync('load');
+    window.KFB.signUp(fb, c[0], c[1]).then(function () { $('inPass').value = ''; toast('Konto erstellt und angemeldet.'); }, function (e) { setSync('out'); toast(fbErr(e)); });
+  };
+  $('btnReset').onclick = function () {
+    var e = $('inMail').value.trim();
+    if (!e) { toast('Bitte zuerst die E-Mail eingeben.'); return; }
+    window.KFB.reset(fb, e).then(function () { toast('E-Mail zum Zurücksetzen verschickt.'); }, function (err) { toast(fbErr(err)); });
+  };
+  $('btnLogout').onclick = function () {
+    ask('Abmelden? Deine Einträge bleiben in deinem Konto. Auf diesem Gerät siehst du danach nur noch, was ohne Anmeldung eingetragen wurde.', 'Abmelden', function () {
+      window.KFB.signOut(fb).then(function () { toast('Abgemeldet.'); });
+    });
+  };
+  initFirebase();
+  renderSync();
+  /* Installieren + Offline (nur in der Web-Version, die App hat das nicht nötig) */
+  var installEvt = null;
+  window.addEventListener('beforeinstallprompt', function (e) { e.preventDefault(); installEvt = e; $('btnInstall').hidden = false; });
+  window.addEventListener('appinstalled', function () { $('btnInstall').hidden = true; toast('App installiert.'); });
+  $('btnInstall').onclick = function () { if (!installEvt) return; installEvt.prompt(); installEvt.userChoice.then(function () { installEvt = null; $('btnInstall').hidden = true; }); };
+  if ('serviceWorker' in navigator && location.protocol !== 'file:') {
+    window.addEventListener('load', function () { navigator.serviceWorker.register('sw.js').catch(function () { /* Offline-Cache ist optional */ }); });
+  }
+})();
+</script>
+
+</body>
+</html>
