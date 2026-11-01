@@ -82,6 +82,9 @@ function swipeRows(root, onDone) {
 }
 const swRow = (r, label) => `<div class="swrap"><div class="swbg">${icon("archive", 18)} ${label}</div><div class="res" data-rid="${r.id}">${recipeLine(r)}</div></div>`;
 const archiveRecipe = (id, on) => { const r = D.recipes.find(x => x.id === id); if (!r) return; if (on) r.arch = true; else delete r.arch; save(); };
+/* Ausnahmetage (z. B. Feier): zählen nicht in Durchschnitte, bleiben aber normal gespeichert. D.settings.exclDays = { Datum: true } */
+const isExcl = d => !!((D.settings.exclDays || {})[d]);
+function setExcl(d, on) { const m = D.settings.exclDays = D.settings.exclDays || {}; if (on) m[d] = true; else delete m[d]; save(); }
 /* Rezept-Kategorien: Liste in den Einstellungen (frei erweiterbar), jedes Rezept kann mehrere haben (r.cats) */
 const CAT_DEFAULT = ["Frühstück", "Mittagessen", "Abendessen", "Snack", "Mealprep"];
 const recCats = () => { const base = Array.isArray(D.settings.recipeCats) ? D.settings.recipeCats.slice() : CAT_DEFAULT.slice(); D.recipes.forEach(r => (r.cats || []).forEach(c => { if (!base.some(x => x.toLowerCase() === String(c).toLowerCase())) base.push(c); })); return base; };
@@ -430,6 +433,7 @@ function viewToday() {
   ${coffeeCard(ui.date)}
   <button class="btn sec block gapbtn" data-act="nutri">Nährstoffe im Detail</button>
   <button class="btn block gapbtn" data-act="gaps">${icon("plus", 18, 2.4)}KI-Vorschläge für eine Mahlzeit</button>
+  <label class="xrow" style="margin-top:14px"><input type="checkbox" id="exclDay" ${isExcl(ui.date) ? "checked" : ""}><span class="grow"><b>Ausnahmetag</b><div class="muted tiny">Zählt nicht in Durchschnitte (z. B. Feier). Einträge bleiben erhalten.</div></span></label>
   <section class="exportcard"><b>Tag exportieren</b><div class="muted small">Alles, was du an diesem Tag gegessen hast, inkl. Rezept-Zutaten, als Textdatei – z. B. für eine KI-Analyse.</div>
     <div class="grid2"><button class="btn" data-act="exportDay">Als Datei</button><button class="btn sec" data-act="copyDay">Kopieren</button></div></section>
   <section class="exportcard"><b>Kosten des Tages</b><div class="muted small">Was dein Tag gekostet hat, berechnet aus den Preisen deiner Lebensmittel (bei Rezepten anteilig pro Zutat).</div>
@@ -458,7 +462,7 @@ function curDays() {
 function viewWeek() {
   const g = goals(), days = curDays(), N = days.length, custom = ui.period === 0, todayIso0 = iso(new Date());
   const rows = days.map(d => ({ d, ...sum(dayEntries(d)), n: dayEntries(d).length }));
-  const logged = rows.filter(r => r.n), L = logged.length || 1;
+  const logged0 = rows.filter(r => r.n), logged = logged0.filter(r => !isExcl(r.d)), exN = logged0.length - logged.length, L = logged.length || 1;
   const avg = logged.reduce((a, r) => ({ kcal: a.kcal + r.kcal, p: a.p + r.p, c: a.c + r.c, f: a.f + r.f }), { kcal: 0, p: 0, c: 0, f: 0 });
   const hit = logged.filter(r => Math.abs(r.kcal - g.kcal) <= g.kcal * 0.1).length;
   const avgK = avg.kcal / L, diff = avgK - g.kcal;
@@ -476,13 +480,13 @@ function viewWeek() {
     else if (N > 100 && N <= 366 && custom) lab = (dd.getDate() === 1 && dd.getMonth() % (N > 200 ? 2 : 1) === 0) ? dd.toLocaleDateString("de-DE", { month: "short" }) : "";
     else lab = (dd.getDate() === 1) ? dd.toLocaleDateString("de-DE", { month: "short" }) : "";
     const val = N <= 7 && r.n ? (h > 44 ? `<text x="${x + bw / 2}" y="${H - pad - h + 15}" text-anchor="middle" style="fill:#fff;font-weight:700;font-size:10px">${fmt(r.kcal)}</text>` : `<text x="${x + bw / 2}" y="${H - pad - h - 6}" text-anchor="middle" style="fill:var(--text)">${fmt(r.kcal)}</text>`) : "";
-    return `<g data-act="goDay" data-d="${r.d}" style="cursor:pointer"><rect x="${x}" y="${H - pad - (r.n ? h : (N <= 7 ? 4 : 2))}" width="${bw}" height="${r.n ? h : (N <= 7 ? 4 : 2)}" rx="${rx}" fill="${r.n ? (over ? "var(--danger)" : "var(--accent)") : "var(--card2)"}"/>
+    return `<g data-act="goDay" data-d="${r.d}" style="cursor:pointer"><rect x="${x}" y="${H - pad - (r.n ? h : (N <= 7 ? 4 : 2))}" width="${bw}" height="${r.n ? h : (N <= 7 ? 4 : 2)}" rx="${rx}" fill="${r.n ? (isExcl(r.d) ? "var(--muted)" : over ? "var(--danger)" : "var(--accent)") : "var(--card2)"}" ${r.n && isExcl(r.d) ? 'opacity=".5"' : ""}/>
     ${lab ? `<text x="${x + bw / 2}" y="${H - 6}" text-anchor="middle" ${r.d === todayIso ? 'style="fill:var(--text)"' : ""}>${lab}</text>` : ""}${val}</g>`;
   }).join("");
-  const chart = `<svg viewBox="0 0 ${W} ${H}" width="100%"><line x1="0" x2="${W}" y1="${y(g.kcal)}" y2="${y(g.kcal)}" stroke="var(--muted)" stroke-dasharray="3 5" opacity=".6"/>${bars}</svg><div class="goalkey"><i></i>Ziel ${fmt(g.kcal)} kcal</div>`;
+  const chart = `<svg viewBox="0 0 ${W} ${H}" width="100%"><line x1="0" x2="${W}" y1="${y(g.kcal)}" y2="${y(g.kcal)}" stroke="var(--muted)" stroke-dasharray="3 5" opacity=".6"/>${bars}</svg><div class="goalkey"><i></i>Ziel ${fmt(g.kcal)} kcal${exN ? ` &nbsp;·&nbsp; <span style="opacity:.7">Grau = Ausnahmetag</span>` : ""}</div>`;
   // Typische Wochentage (letzte 8 Wochen)
   const today = iso(new Date()), byWd = {};
-  for (let i = 0; i < 56; i++) { const d = addDays(today, -i), es = dayEntries(d); if (es.length) (byWd[fromIso(d).getDay()] = byWd[fromIso(d).getDay()] || []).push(sum(es).kcal); }
+  for (let i = 0; i < 56; i++) { const d = addDays(today, -i), es = dayEntries(d); if (es.length && !isExcl(d)) (byWd[fromIso(d).getDay()] = byWd[fromIso(d).getDay()] || []).push(sum(es).kcal); }
   const avgWd = w => byWd[w] ? byWd[w].reduce((a, b) => a + b, 0) / byWd[w].length : 0;
   const wdMax = Math.max(g.kcal * 1.2, ...WD_ORDER.map(avgWd), 1);
   const wdBars = WD_ORDER.map(w => { const v = avgWd(w); return `<div class="col ${v ? "" : "none"}">${v ? `<b>${fmt(v)}</b>` : ""}<i style="height:${v ? v / wdMax * 70 : 4}px;${v > g.kcal * 1.1 ? "background:var(--danger)" : ""}"></i>${WD[w]}</div>`; }).join("");
@@ -494,10 +498,11 @@ function viewWeek() {
   <div class="row between" style="margin-bottom:14px"><button class="iconbtn" data-act="wk" data-d="-1" aria-label="Vorheriger Zeitraum">${icon("left", 20)}</button><b>${label}</b><button class="iconbtn" data-act="wk" data-d="1" aria-label="Nächster Zeitraum" ${(custom ? ui.cTo >= todayIso0 : ui.weekOffset >= 0) ? "disabled" : ""}>${icon("right", 20)}</button></div>
   ${custom ? `<div class="grid2" style="margin:-4px 0 14px"><div><label style="margin-top:0">Von</label><input type="date" id="cFrom" value="${ui.cFrom}" max="${todayIso0}"></div><div><label style="margin-top:0">Bis</label><input type="date" id="cTo" value="${ui.cTo}" max="${todayIso0}"></div></div>
   <div class="row" style="gap:8px;flex-wrap:wrap;margin:-6px 0 14px">${[["Diese Woche", "w"], ["Dieser Monat", "m"], ["Letzte 14 Tage", "14"], ["Dieses Jahr", "y"]].map(([l, k]) => `<button class="tcchip" data-act="cpreset" data-k="${k}">${l}</button>`).join("")}</div>` : ""}
-  ${logged.length ? `<div class="bignum"><b>${fmt(avgK)}</b><span>kcal pro Tag</span><span class="pill ${Math.abs(diff) <= g.kcal * .1 ? "good" : diff > 0 ? "bad" : ""}">${diff >= 0 ? "+" : "−"}${fmt(Math.abs(diff))} zum Ziel</span></div>` : `<div class="muted" style="margin:0 4px 14px">In diesem Zeitraum gibt es noch keine Einträge.</div>`}
+  ${logged.length ? `<div class="bignum"><b>${fmt(avgK)}</b><span>kcal pro Tag</span><span class="pill ${Math.abs(diff) <= g.kcal * .1 ? "good" : diff > 0 ? "bad" : ""}">${diff >= 0 ? "+" : "−"}${fmt(Math.abs(diff))} zum Ziel</span></div>` : `<div class="muted" style="margin:0 4px 14px">${logged0.length ? "Alle Tage dieses Zeitraums sind als Ausnahmetage markiert." : "In diesem Zeitraum gibt es noch keine Einträge."}</div>`}
   <div class="surface">${chart}</div>
-  ${logged.length ? `<div class="muted small" style="margin:12px 4px 0">${hit} von ${logged.length} ${logged.length === 1 ? "Tag" : "Tagen"} im Zielbereich (±10 %)</div>
-  ${(() => { const tot = days.reduce((a, d) => a + mlOf(d), 0), mg = days.reduce((a, d) => a + mgOfDay(d), 0); return tot ? `<div class="muted small" style="margin:6px 4px 0">☕ Koffein: ${fmtMl(tot)} Getränke im Zeitraum, Ø ${r0(mg / L)} mg pro erfasstem Tag</div>` : ""; })()}
+  ${logged0.length ? `<button class="btn sec block" style="margin-top:12px" data-act="exclSheet">Tage aus dem Durchschnitt nehmen${exN ? " (" + exN + ")" : ""}</button>` : ""}
+  ${logged.length ? `<div class="muted small" style="margin:12px 4px 0">${exN ? "Durchschnitt ohne " + exN + (exN === 1 ? " Ausnahmetag. " : " Ausnahmetage. ") : ""}${hit} von ${logged.length} ${logged.length === 1 ? "Tag" : "Tagen"} im Zielbereich (±10 %)</div>
+  ${(() => { const dv = days.filter(d => !isExcl(d)), tot = dv.reduce((a, d) => a + mlOf(d), 0), mg = dv.reduce((a, d) => a + mgOfDay(d), 0); return tot ? `<div class="muted small" style="margin:6px 4px 0">☕ Koffein: ${fmtMl(tot)} Getränke im Zeitraum, Ø ${r0(mg / L)} mg pro erfasstem Tag</div>` : ""; })()}
   <section class="macros" style="margin-top:20px">${macroCol("Ø Eiweiß", avg.p / L, g.p, "p")}${macroCol("Ø Kohlenh.", avg.c / L, g.c, "c")}${macroCol("Ø Fett", avg.f / L, g.f, "f")}</section>` : ""}
   <section class="exportcard"><b>Zeitraum exportieren</b><div class="muted small">${label}: alle Tage mit Mahlzeiten, Nährwerten und Rezept-Zutaten als Textdatei, z. B. für eine KI-Analyse.</div>
     <div class="grid2"><button class="btn" data-act="exportRange">Als Datei</button><button class="btn sec" data-act="copyRange">Kopieren</button></div></section>
@@ -507,6 +512,15 @@ function viewWeek() {
 
 /* ---- Gewicht ---- */
 function weightList() { return Object.entries(D.weights).map(([d, w]) => ({ d, w })).sort((a, b) => a.d.localeCompare(b.d)); }
+/* Tage eines Zeitraums als Ausnahmetage markieren (Haken = nicht im Durchschnitt) */
+function exclSheet() {
+  const days = curDays().filter(d => dayEntries(d).length), g = goals();
+  const s = sheet(`<h3>Tage aus dem Durchschnitt nehmen</h3><div class="muted small" style="margin:-6px 0 12px">Hake Tage an, die nicht zählen sollen, z. B. wenn du feiern warst. Das gilt dauerhaft für alle Durchschnitte. Die Einträge selbst bleiben erhalten.</div><div id="xl"></div><button class="btn block" style="margin-top:14px" id="xDone">Fertig</button>`);
+  const draw = () => { $("#xl", s).innerHTML = days.length ? days.map(d => { const k = sum(dayEntries(d)).kcal; return `<label class="xrow"><input type="checkbox" data-xd="${d}" ${isExcl(d) ? "checked" : ""}><span class="grow"><b>${fromIso(d).toLocaleDateString("de-DE", { weekday: "short", day: "numeric", month: "long" })}</b></span><span class="muted small">${fmt(k)} kcal${k > g.kcal * 1.1 ? " · über Ziel" : ""}</span></label>`; }).join("") : `<div class="muted small center" style="padding:18px">Keine Tage mit Einträgen in diesem Zeitraum.</div>`;
+    $$("[data-xd]", s).forEach(c => c.onchange = () => { setExcl(c.dataset.xd, c.checked); render(); }); };
+  draw();
+  $("#xDone", s).onclick = () => { closeSheet(); render(); };
+}
 function viewWeight() {
   const all = weightList(), today = iso(new Date());
   const from = ui.wRange ? addDays(today, -ui.wRange) : "0000-00-00";
@@ -2055,7 +2069,7 @@ function buildReport(from, to) {
   const g = goals(), s = D.settings, days = [];
   for (let d = from; d <= to; d = addDays(d, 1)) days.push(d);
   const rows = days.map(d => { const es = dayEntries(d); return { d, es, t: sum(es) }; });
-  const logged = rows.filter(r => r.es.length);
+  const loggedAll = rows.filter(r => r.es.length), logged = loggedAll.filter(r => !isExcl(r.d));
   const out = [];
   out.push("# FoodPro – Ernährungsprotokoll");
   out.push(from === to ? `Tag: ${dLong(from)}` : `Zeitraum: ${dLong(from)} bis ${dLong(to)} (${days.length} Tage)`);
@@ -2069,7 +2083,8 @@ function buildReport(from, to) {
   if (days.length > 1) {
     const a = sum(logged.flatMap(r => r.es)), L = logged.length || 1;
     out.push("", "## Zusammenfassung");
-    out.push(`- Erfasste Tage: ${logged.length} von ${days.length}`);
+    out.push(`- Erfasste Tage: ${loggedAll.length} von ${days.length}`);
+    { const ex = loggedAll.filter(r => isExcl(r.d)); if (ex.length) out.push(`- Ausnahmetage (z. B. Feier), in den Durchschnitten NICHT mitgezählt: ${ex.map(r => fromIso(r.d).toLocaleDateString("de-DE", { weekday: "short", day: "2-digit", month: "2-digit" })).join(", ")}`); }
     if (logged.length) {
       out.push(`- Durchschnitt pro erfasstem Tag: ${nde(a.kcal / L, 0)} kcal · Eiweiß ${nde(a.p / L, 0)} g · Kohlenhydrate ${nde(a.c / L, 0)} g · Fett ${nde(a.f / L, 0)} g`);
       { const mm = microSum(logged.flatMap(r => r.es)); out.push(`- Durchschnitt weitere Nährstoffe pro erfasstem Tag: Zucker ${nde(mm.s / L, 2)} g · Ballaststoffe ${nde(mm.fi / L, 2)} g · gesättigte Fettsäuren ${nde(mm.sa / L, 2)} g · Salz ${nde(mm.sl / L, 2)} g${microMissNote(mm)}`); }
@@ -2082,7 +2097,7 @@ function buildReport(from, to) {
   }
   const order = MEALS.map(m => m.id);
   rows.forEach(r => {
-    out.push("", `## ${dLong(r.d)}`);
+    out.push("", `## ${dLong(r.d)}${isExcl(r.d) && r.es.length ? " (Ausnahmetag, nicht im Durchschnitt)" : ""}`);
     if (!r.es.length) { out.push("Keine Einträge."); if (D.weights[r.d] != null) out.push(`Gewicht: ${nde(D.weights[r.d])} kg`); { const cl = coffeeLine(r.d); if (cl) out.push(cl); } return; }
     out.push(`Summe: ${nde(r.t.kcal, 0)} kcal (Ziel ${nde(g.kcal, 0)}) · Eiweiß ${nde(r.t.p, 0)} g (Ziel ${nde(g.p, 0)}) · Kohlenhydrate ${nde(r.t.c, 0)} g (Ziel ${nde(g.c, 0)}) · Fett ${nde(r.t.f, 0)} g (Ziel ${nde(g.f, 0)})`);
     { const q = microSum(r.es); out.push(`Weitere Nährstoffe: Zucker ${nde(q.s, 2)} g · Ballaststoffe ${nde(q.fi, 2)} g · gesättigte Fettsäuren ${nde(q.sa, 2)} g · Salz ${nde(q.sl, 2)} g${microMissNote(q)}`); }
@@ -2469,6 +2484,7 @@ document.addEventListener("click", async ev => {
     else { ui.weekOffset = Math.min(0, ui.weekOffset + +t.dataset.d); render(); }
   }
   else if (a === "goDay") { ui.date = t.dataset.d; setTab("today"); render(); }
+  else if (a === "exclSheet") exclSheet();
   else if (a === "wRange") { ui.wRange = +t.dataset.v; render(); }
   else if (a === "wcmp") { ui.wcOff = Math.max(0, (ui.wcOff || 0) + (+t.dataset.d)); render(); }
   else if (a === "saveWeight") {
@@ -2542,6 +2558,7 @@ document.addEventListener("click", async ev => {
 document.addEventListener("keydown", ev => { if ((ev.key === "Enter" || ev.key === " ") && ev.target.matches && ev.target.matches("[role=button][data-act]")) { ev.preventDefault(); ev.target.click(); } });
 document.addEventListener("change", async ev => {
   const ct = ev.target;
+  if (ct && ct.id === "exclDay") { setExcl(ui.date, ct.checked); render(); return; }
   if (ct && ct.id === "cfSrc") { ui.cfSrc = ct.value; D.settings.cfLast = ct.value; save(); render(); return; }
   if (ct && ["cfSleep", "cfMl", "cfMg"].includes(ct.id)) {
     if (ct.id !== "cfSleep") ui.cfOpen = true;
