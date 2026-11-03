@@ -11,6 +11,7 @@ var NATIVE = (function () {
   return (C.Plugins && C.Plugins.AufgabenNative) || (typeof C.registerPlugin === 'function' ? C.registerPlugin('AufgabenNative') : null);
 })();
 var nativeSent = '';
+var repeatMs = REPEAT_MS;
 var nativeGranted = true;
 
 function fmt(ms) {
@@ -146,9 +147,9 @@ async function nativeTick() {
     for (var i = 0; i < items.length; i++) await completeTask(items[i].id, items[i].ts, items[i].due);
     if (items.length) { await render(); pushSoon(); }
     var list = (await openTasks()).map(function (t) { return { id: t.id, title: t.title, due: t.due, rep: t.rep || '' }; });
-    var key = JSON.stringify(list);
+    var key = JSON.stringify(list) + '|' + repeatMs;
     if (key !== nativeSent) {
-      await NATIVE.setTasks({ tasks: list });
+      await NATIVE.setTasks({ tasks: list, repeatMs: repeatMs });
       nativeSent = key;
     }
     $('perm').hidden = !needsPermission();
@@ -183,6 +184,12 @@ $('f').addEventListener('submit', async function (ev) {
 
 $('cancelEdit').addEventListener('click', stopEdit);
 
+$('repeatSel').addEventListener('change', async function () {
+  repeatMs = Number($('repeatSel').value) * 60000;
+  try { await setRepeatMs(repeatMs); } catch (e) { /* ohne Cache-API weiter */ }
+  tick();
+});
+
 $('permBtn').addEventListener('click', async function () {
   if (NATIVE) {
     try { await NATIVE.requestPermission(); } catch (e) { /* egal */ }
@@ -213,6 +220,8 @@ async function registerPeriodic() {
       }
     } catch (e) { /* ohne Service Worker weiter */ }
   }
+  try { repeatMs = await getRepeatMs(); } catch (e) { /* Standard */ }
+  $('repeatSel').value = String(Math.round(repeatMs / 60000));
   await render();
   tick();
   setInterval(tick, NATIVE ? 4000 : 15000);

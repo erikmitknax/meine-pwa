@@ -84,12 +84,26 @@ button.link { background: none; color: var(--accent); padding: 4px 0; text-align
   <h2 id="doneH" hidden>Erledigt</h2>
   <ul id="doneList" class="doneList"></ul>
 
+  <details id="opts">
+    <summary>Einstellungen</summary>
+    <label style="margin-top:12px">Weggewischte Benachrichtigung kommt wieder nach
+      <select id="repeatSel">
+        <option value="5">5 Minuten</option>
+        <option value="10">10 Minuten</option>
+        <option value="15">15 Minuten</option>
+        <option value="30">30 Minuten</option>
+        <option value="60">1 Stunde</option>
+      </select>
+    </label>
+    <p class="hint" style="margin-top:8px">Gilt für dieses Gerät. Solange die Benachrichtigung sichtbar ist, kommt nichts doppelt. Android kann die Wiederkehr im Energiesparmodus um einige Minuten verzögern.</p>
+  </details>
+
   <details id="acct">
     <summary id="sySum">Konto &amp; Sync</summary>
     <div id="syBox"></div>
   </details>
 
-  <p class="hint">Die Benachrichtigung bleibt lautlos stehen, bis du „Erledigt“ tippst. Wischst du sie weg, kommt sie nach 15 Minuten wieder (in der Android-App auch bei geschlossener App, im Browser sobald die App geöffnet ist). Tippe auf ✎, um eine Aufgabe zu ändern.</p>
+  <p class="hint">Die Benachrichtigung bleibt lautlos stehen, bis du „Erledigt“ tippst. Wischst du sie weg, kommt sie nach der eingestellten Zeit wieder (in der Android-App auch bei geschlossener App, im Browser sobald die App geöffnet ist). Tippe auf ✎, um eine Aufgabe zu ändern.</p>
 </main>
 <script src="store.js"></script>
 <script src="app.js"></script>

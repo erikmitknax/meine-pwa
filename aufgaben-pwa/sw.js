@@ -1,7 +1,7 @@
 /* Aufgaben Service Worker: Offline-Cache und Benachrichtigungen. */
 importScripts('store.js');
 
-const CACHE = 'aufgaben-v4';
+const CACHE = 'aufgaben-v5';
 const FILES = ['./', './index.html', './app.js', './store.js', './sync.js', './manifest.webmanifest', './icons/icon-192.png', './icons/icon-512.png', './icons/icon-maskable-512.png'];
 
 self.addEventListener('install', e => {
@@ -9,7 +9,7 @@ self.addEventListener('install', e => {
 });
 
 self.addEventListener('activate', e => {
-  e.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k)))).then(() => self.clients.claim()));
+  e.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(k => k.startsWith('aufgaben-v') && k !== CACHE).map(k => caches.delete(k)))).then(() => self.clients.claim()));
 });
 
 /* Netz zuerst (damit Updates ankommen), sonst aus dem Cache */
@@ -46,7 +46,7 @@ self.addEventListener('notificationclose', e => {
   e.waitUntil((async () => {
     const t = await getTask(id);
     if (t) {
-      t.nextShow = Date.now() + REPEAT_MS;
+      t.nextShow = Date.now() + (await getRepeatMs());
       await putTask(t);
     }
   })());

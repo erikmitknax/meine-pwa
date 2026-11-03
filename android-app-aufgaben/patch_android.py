@@ -300,6 +300,16 @@ final class NStore {
         saveTasks(c, a);
     }
 
+    /** Einstellung: nach dem Wegwischen wiederkommen nach ... (Standard 15 Minuten). */
+    static long repeatMs(Context c) {
+        long v = p(c).getLong("repeatMs", 15L * 60L * 1000L);
+        return v < 60000L ? 15L * 60L * 1000L : v;
+    }
+
+    static void setRepeatMs(Context c, long ms) {
+        if (ms >= 60000L) p(c).edit().putLong("repeatMs", ms).apply();
+    }
+
     private static JSONArray doneList(Context c) {
         try {
             return new JSONArray(p(c).getString("done", "[]"));
@@ -489,7 +499,7 @@ public class AufgabenReceiver extends BroadcastReceiver {
         } else if (Notifier.ACT_DISMISSED.equals(action)) {
             // Weggewischt: in 15 Minuten wieder anzeigen, falls noch offen
             if (NStore.find(c, id) != null) {
-                long next = System.currentTimeMillis() + Notifier.REPEAT_MS;
+                long next = System.currentTimeMillis() + NStore.repeatMs(c);
                 NStore.setNext(c, id, next);
                 Notifier.schedule(c, id, next);
             }
@@ -644,6 +654,7 @@ public class AufgabenPlugin extends Plugin {
         }
         Context c = getContext();
         try {
+            NStore.setRepeatMs(c, call.getData().optLong("repeatMs", 0));
             // Gerade abgehakte, noch nicht abgeholte Aufgaben: den Stand der App-Seite behalten
             Set<String> skip = new HashSet<>();
             JSONArray pend = NStore.pendingDone(c);

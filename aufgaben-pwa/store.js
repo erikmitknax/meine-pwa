@@ -29,6 +29,21 @@ function allTasks() { return run('readonly', function (s) { return s.getAll(); }
 function getTask(id) { return run('readonly', function (s) { return s.get(id); }); }
 function putTask(t) { return run('readwrite', function (s) { return s.put(t); }); }
 
+/* Einstellung "Nach dem Wegwischen wiederkommen nach …" (Standard 15 Minuten).
+   Liegt in der Cache-API, weil sie sowohl die Seite als auch der Service Worker lesen können. */
+async function getRepeatMs() {
+  try {
+    var c = await caches.open('aufgaben-settings');
+    var r = await c.match('repeat');
+    if (r) { var v = Number(await r.text()); if (v >= 60000) return v; }
+  } catch (e) { /* Standard */ }
+  return REPEAT_MS;
+}
+async function setRepeatMs(ms) {
+  var c = await caches.open('aufgaben-settings');
+  await c.put('repeat', new Response(String(ms)));
+}
+
 /* Nur offene Aufgaben (erledigte bleiben als Löschvermerk gespeichert, damit der Abgleich sie überall entfernt). */
 async function openTasks() {
   return (await allTasks()).filter(function (t) { return !t.del; });
