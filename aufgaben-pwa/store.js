@@ -1,5 +1,6 @@
 /* Gemeinsamer Code für Seite und Service Worker: Speicher (IndexedDB) und Benachrichtigungen.
-   Aufgabe: { id, title, due, nextShow, u (Änderungszeit), del (erledigt = Löschvermerk), dirty (noch nicht hochgeladen) } */
+   Aufgabe: { id, title, due, rep (Wiederholung: '', daily, weekdays, weekly, monthly), nextShow,
+              u (Änderungszeit), del (erledigt = Löschvermerk), dirty (noch nicht hochgeladen) } */
 var FAR = Number.MAX_SAFE_INTEGER;
 var REPEAT_MS = 15 * 60 * 1000;
 
@@ -32,18 +33,59 @@ async function openTasks() {
   return (await allTasks()).filter(function (t) { return !t.del; });
 }
 
+/* Nächster Zeitpunkt einer Wiederholung (gleiche Uhrzeit, Ortszeit). */
+function addPeriod(ms, rep) {
+  var d = new Date(ms);
+  if (rep === 'weekly') d.setDate(d.getDate() + 7);
+  else if (rep === 'weekdays') { do { d.setDate(d.getDate() + 1); } while (d.getDay() === 0 || d.getDay() === 6); }
+  else if (rep === 'monthly') {
+    var day = d.getDate();
+    d.setDate(1);
+    d.setMonth(d.getMonth() + 1);
+    d.setDate(Math.min(day, new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate()));
+  } else d.setDate(d.getDate() + 1);
+  return d.getTime();
+}
+
+/* Erster Termin nach "jetzt" (und nach dem bisherigen Termin). */
+function nextOccurrence(due, rep, now) {
+  var base = Math.max(now, due), d = due;
+  for (var i = 0; i < 5000; i++) { d = addPeriod(d, rep); if (d > base) break; }
+  return d;
+}
+
 /* Neue Aufgabe lokal anlegen. */
-function newTask(title, due) {
+function newTask(title, due, rep) {
   var now = Date.now();
-  var t = { id: now.toString(36) + Math.random().toString(36).slice(2, 6), title: title, due: due, nextShow: due, u: now, del: false, dirty: true };
+  var t = { id: now.toString(36) + Math.random().toString(36).slice(2, 6), title: title, due: due, rep: rep || '', nextShow: due, u: now, del: false, dirty: true };
   return putTask(t).then(function () { return t; });
 }
 
-/* Aufgabe abhaken: Löschvermerk setzen, wird beim nächsten Abgleich hochgeladen. */
-async function completeTask(id) {
+/* Bestehende Aufgabe ändern. */
+async function updateTask(id, title, due, rep) {
   var t = await getTask(id);
   if (!t || t.del) return;
-  t.del = true;
+  t.title = title;
+  t.due = due;
+  t.rep = rep || '';
+  t.nextShow = due;
+  t.u = Math.max(Date.now(), (t.u || 0) + 1);
+  t.dirty = true;
+  await putTask(t);
+}
+
+/* Aufgabe abhaken. Ohne Wiederholung: Löschvermerk (wird beim nächsten Abgleich hochgeladen).
+   Mit Wiederholung: sie rückt auf den nächsten Termin und kommt dann wieder.
+   ts/newDue kommen aus der Android-App, wenn dort abgehakt wurde. */
+async function completeTask(id, ts, newDue) {
+  var t = await getTask(id);
+  if (!t || t.del) return;
+  if (t.rep) {
+    t.due = newDue || nextOccurrence(t.due, t.rep, ts || Date.now());
+    t.nextShow = t.due;
+  } else {
+    t.del = true;
+  }
   t.u = Math.max(Date.now(), (t.u || 0) + 1);
   t.dirty = true;
   await putTask(t);

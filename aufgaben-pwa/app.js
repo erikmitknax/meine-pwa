@@ -17,6 +17,41 @@ function fmt(ms) {
   return new Date(ms).toLocaleString('de-DE', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
 }
 
+var REPS = { daily: 'täglich', weekdays: 'Mo–Fr', weekly: 'wöchentlich', monthly: 'monatlich' };
+var editId = null;
+
+function toLocalInput(ms) {
+  var d = new Date(ms);
+  function p(n) { return String(n).padStart(2, '0'); }
+  return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) + 'T' + p(d.getHours()) + ':' + p(d.getMinutes());
+}
+
+async function closeNotif(id) {
+  if (!reg) return;
+  var open = await reg.getNotifications({ tag: 'task-' + id });
+  open.forEach(function (n) { n.close(); });
+}
+
+function startEdit(t) {
+  editId = t.id;
+  $('title').value = t.title;
+  $('due').value = toLocalInput(t.due);
+  $('rep').value = t.rep || '';
+  $('saveBtn').textContent = 'Speichern';
+  $('cancelEdit').hidden = false;
+  window.scrollTo(0, 0);
+  $('title').focus();
+}
+
+function stopEdit() {
+  editId = null;
+  $('title').value = '';
+  $('due').value = '';
+  $('rep').value = '';
+  $('saveBtn').textContent = 'Hinzufügen';
+  $('cancelEdit').hidden = true;
+}
+
 function needsPermission() {
   if (NATIVE) return !nativeGranted;
   return 'Notification' in window && Notification.permission !== 'granted';
@@ -33,12 +68,21 @@ async function render() {
     var title = document.createElement('span');
     title.textContent = t.title;
     var when = document.createElement('small');
-    when.textContent = fmt(t.due) + (t.due <= Date.now() ? ' · fällig' : '');
+    when.textContent = fmt(t.due) + (t.due <= Date.now() ? ' · fällig' : '') + (t.rep ? ' · ' + REPS[t.rep] : '');
     box.append(title, when);
+    var acts = document.createElement('div');
+    acts.className = 'acts';
+    var edit = document.createElement('button');
+    edit.className = 'ghost';
+    edit.textContent = '✎';
+    edit.setAttribute('aria-label', 'Bearbeiten');
+    edit.onclick = function () { startEdit(t); };
     var btn = document.createElement('button');
-    btn.textContent = '✓ Erledigt';
+    btn.textContent = '✓';
+    btn.setAttribute('aria-label', 'Erledigt');
     btn.onclick = function () { complete(t.id); };
-    li.append(box, btn);
+    acts.append(edit, btn);
+    li.append(box, acts);
     ul.append(li);
   });
   $('perm').hidden = !needsPermission();
@@ -48,10 +92,7 @@ function pushSoon() { if (window.syPush) window.syPush(); }
 
 async function complete(id) {
   await completeTask(id);
-  if (reg) {
-    var open = await reg.getNotifications({ tag: 'task-' + id });
-    open.forEach(function (n) { n.close(); });
-  }
+  await closeNotif(id);
   await render();
   await tick();
   pushSoon();
@@ -63,10 +104,10 @@ async function nativeTick() {
     var p = await NATIVE.permissionState();
     nativeGranted = !!p.granted;
     var done = await NATIVE.takeDone();
-    var ids = (done && done.ids) || [];
-    for (var i = 0; i < ids.length; i++) await completeTask(ids[i]);
-    if (ids.length) { await render(); pushSoon(); }
-    var list = (await openTasks()).map(function (t) { return { id: t.id, title: t.title, due: t.due }; });
+    var items = (done && done.items) || [];
+    for (var i = 0; i < items.length; i++) await completeTask(items[i].id, items[i].ts, items[i].due);
+    if (items.length) { await render(); pushSoon(); }
+    var list = (await openTasks()).map(function (t) { return { id: t.id, title: t.title, due: t.due, rep: t.rep || '' }; });
     var key = JSON.stringify(list);
     if (key !== nativeSent) {
       await NATIVE.setTasks({ tasks: list });
@@ -89,13 +130,20 @@ $('f').addEventListener('submit', async function (ev) {
   if (!title) return;
   var v = $('due').value;
   var due = v ? new Date(v).getTime() : Date.now();
-  await newTask(title, due);
-  $('title').value = '';
-  $('due').value = '';
+  var rep = $('rep').value;
+  if (editId) {
+    await updateTask(editId, title, due, rep);
+    await closeNotif(editId);
+  } else {
+    await newTask(title, due, rep);
+  }
+  stopEdit();
   await render();
   await tick();
   pushSoon();
 });
+
+$('cancelEdit').addEventListener('click', stopEdit);
 
 $('permBtn').addEventListener('click', async function () {
   if (NATIVE) {

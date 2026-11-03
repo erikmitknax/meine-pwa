@@ -25,12 +25,14 @@ h1 { font-size: 24px; margin: 8px 0 16px; }
 form, li, #perm { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px; }
 form { display: grid; gap: 10px; margin-bottom: 16px; }
 label { display: grid; gap: 4px; color: var(--muted); font-size: 14px; }
-input { font: inherit; color: var(--fg); background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 10px; width: 100%; }
+input, select { font: inherit; color: var(--fg); background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 10px; width: 100%; }
 button { font: inherit; border: 0; border-radius: 8px; padding: 10px 14px; background: var(--accent); color: #fff; }
 ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
 li { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-li div { display: grid; min-width: 0; }
+li > div:first-child { display: grid; min-width: 0; }
 li small { color: var(--muted); }
+li .acts { display: flex; gap: 6px; flex-shrink: 0; }
+li .acts button.ghost { padding: 10px 12px; }
 #perm { margin-bottom: 16px; display: grid; gap: 8px; }
 details { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px; margin-top: 20px; }
 summary { cursor: pointer; font-weight: 600; }
@@ -58,7 +60,19 @@ button.link { background: none; color: var(--accent); padding: 4px 0; text-align
     <label>Wann (leer = sofort)
       <input id="due" type="datetime-local">
     </label>
-    <button type="submit">Hinzufügen</button>
+    <label>Wiederholen (kommt nach dem Abhaken zur nächsten Zeit wieder)
+      <select id="rep">
+        <option value="">Nie</option>
+        <option value="daily">Täglich</option>
+        <option value="weekdays">Montag bis Freitag</option>
+        <option value="weekly">Wöchentlich</option>
+        <option value="monthly">Monatlich</option>
+      </select>
+    </label>
+    <div class="row">
+      <button type="submit" id="saveBtn">Hinzufügen</button>
+      <button type="button" id="cancelEdit" class="ghost" hidden>Abbrechen</button>
+    </div>
   </form>
 
   <ul id="list"></ul>
@@ -69,7 +83,7 @@ button.link { background: none; color: var(--accent); padding: 4px 0; text-align
     <div id="syBox"></div>
   </details>
 
-  <p class="hint">Die Benachrichtigung bleibt lautlos stehen, bis du „Erledigt“ tippst. Wischst du sie weg, kommt sie nach 15 Minuten wieder, sobald die App geöffnet ist oder Chrome sie im Hintergrund prüft.</p>
+  <p class="hint">Die Benachrichtigung bleibt lautlos stehen, bis du „Erledigt“ tippst. Wischst du sie weg, kommt sie nach 15 Minuten wieder (in der Android-App auch bei geschlossener App, im Browser sobald die App geöffnet ist). Tippe auf ✎, um eine Aufgabe zu ändern.</p>
 </main>
 <script src="store.js"></script>
 <script src="app.js"></script>

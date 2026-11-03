@@ -14,3 +14,8 @@ Download: Releases -> "Aufgaben-App (APK)" -> aufgaben.apk
 
 Signiert wird mit demselben festen Debug-Schlüssel wie die anderen Apps
 (`android-app/resources/debug.keystore`), damit Updates über die installierte App gehen.
+
+## Widget
+Das Widget "Aufgaben" zeigt bis zu 5 offene Aufgaben mit Haken zum Abhaken.
+Hinzufügen: Startbildschirm oder Sperrbildschirm lange drücken -> Widgets -> Aufgaben.
+Wiederholende Aufgaben rücken nach dem Abhaken auf den nächsten Termin und kommen dann wieder.

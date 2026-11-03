@@ -61,7 +61,7 @@ if 'signingConfigs' not in g:
     open(bg, 'w', encoding='utf-8').write(g)
     print('Signaturschluessel eingetragen')
 
-# 4) Manifest: Benachrichtigungs-Berechtigung, Neustart-Empfaenger
+# 4) Manifest: Benachrichtigungs-Berechtigung, Neustart-Empfaenger, Widget
 mf = os.path.join(MAIN, 'AndroidManifest.xml')
 m = open(mf, encoding='utf-8').read()
 assert '</application>' in m and '</manifest>' in m, 'Manifest unerwartet'
@@ -70,7 +70,13 @@ receiver = (
     '            <intent-filter>\n'
     '                <action android:name="android.intent.action.BOOT_COMPLETED" />\n'
     '            </intent-filter>\n'
-    '        </receiver>\n' % PKG
+    '        </receiver>\n'
+    '        <receiver android:name="%s.AufgabenWidget" android:exported="false">\n'
+    '            <intent-filter>\n'
+    '                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />\n'
+    '            </intent-filter>\n'
+    '            <meta-data android:name="android.appwidget.provider" android:resource="@xml/aufgaben_widget_info" />\n'
+    '        </receiver>\n' % (PKG, PKG)
 )
 perms = (
     '    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />\n'
@@ -81,7 +87,105 @@ m = m.replace('</manifest>', perms + '</manifest>', 1)
 open(mf, 'w', encoding='utf-8').write(m)
 print('Manifest angepasst')
 
-# 5) Java: Speicher, Benachrichtigungen, Empfaenger, Plug-in, MainActivity
+# 5) Widget-Ressourcen (Startbildschirm und Sperrbildschirm)
+for sub in ('layout', 'drawable', 'xml'):
+    os.makedirs(os.path.join(MAIN, 'res', sub), exist_ok=True)
+
+
+def write_res(sub, name, text):
+    open(os.path.join(MAIN, 'res', sub, name), 'w', encoding='utf-8').write(text)
+
+
+write_res('drawable', 'aufgaben_widget_bg.xml', """<?xml version="1.0" encoding="utf-8"?>
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <solid android:color="#E61F1D1A" />
+    <corners android:radius="22dp" />
+</shape>
+""")
+
+rows = ''
+for i in range(1, 6):
+    rows += """    <LinearLayout
+        android:id="@+id/row%d"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="2dp"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+        <TextView
+            android:id="@+id/t%d"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:textColor="#FFFFFF"
+            android:textSize="15sp" />
+        <TextView
+            android:id="@+id/c%d"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:paddingLeft="14dp"
+            android:paddingTop="6dp"
+            android:paddingRight="4dp"
+            android:paddingBottom="6dp"
+            android:text="✓"
+            android:textColor="#7FD6BF"
+            android:textSize="22sp"
+            android:textStyle="bold" />
+    </LinearLayout>
+""" % (i, i, i)
+
+write_res('layout', 'aufgaben_widget.xml', """<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/aufgaben_widget_bg"
+    android:orientation="vertical"
+    android:padding="14dp">
+    <TextView
+        android:id="@+id/header"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Aufgaben"
+        android:textColor="#9FA39B"
+        android:textSize="13sp"
+        android:textStyle="bold" />
+    <TextView
+        android:id="@+id/empty"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:paddingTop="6dp"
+        android:text="Alles erledigt ✓"
+        android:textColor="#FFFFFF"
+        android:textSize="16sp" />
+""" + rows + """    <TextView
+        android:id="@+id/more"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:paddingTop="4dp"
+        android:textColor="#9FA39B"
+        android:textSize="12sp" />
+</LinearLayout>
+""")
+
+write_res('xml', 'aufgaben_widget_info.xml', """<?xml version="1.0" encoding="utf-8"?>
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:initialLayout="@layout/aufgaben_widget"
+    android:minWidth="250dp"
+    android:minHeight="110dp"
+    android:minResizeWidth="180dp"
+    android:minResizeHeight="80dp"
+    android:resizeMode="horizontal|vertical"
+    android:targetCellWidth="4"
+    android:targetCellHeight="2"
+    android:updatePeriodMillis="0"
+    android:widgetCategory="home_screen|keyguard" />
+""")
+print('Widget-Ressourcen angelegt')
+
+# 6) Java: Speicher, Wiederholung, Benachrichtigungen, Empfaenger, Widget, Plug-in, MainActivity
 jdir = os.path.join(MAIN, 'java', *PKG.split('.'))
 assert os.path.isdir(jdir), 'Java-Ordner fehlt: ' + jdir
 
@@ -89,6 +193,43 @@ assert os.path.isdir(jdir), 'Java-Ordner fehlt: ' + jdir
 def write_java(name, src):
     open(os.path.join(jdir, name + '.java'), 'w', encoding='utf-8').write(src.replace('PKG', PKG))
 
+
+write_java('Recur', r"""package PKG;
+
+import java.util.Calendar;
+
+/** Naechster Termin einer Wiederholung (gleiche Uhrzeit, Ortszeit) - gleiche Regeln wie in der Seite. */
+final class Recur {
+    private Recur() {}
+
+    static long next(long due, String rep, long now) {
+        long base = Math.max(now, due);
+        long d = due;
+        for (int i = 0; i < 5000; i++) {
+            d = add(d, rep);
+            if (d > base) break;
+        }
+        return d;
+    }
+
+    private static long add(long ms, String rep) {
+        Calendar c = Calendar.getInstance();
+        c.setTimeInMillis(ms);
+        if ("weekly".equals(rep)) {
+            c.add(Calendar.DAY_OF_MONTH, 7);
+        } else if ("monthly".equals(rep)) {
+            c.add(Calendar.MONTH, 1);
+        } else if ("weekdays".equals(rep)) {
+            do {
+                c.add(Calendar.DAY_OF_MONTH, 1);
+            } while (c.get(Calendar.DAY_OF_WEEK) == Calendar.SATURDAY || c.get(Calendar.DAY_OF_WEEK) == Calendar.SUNDAY);
+        } else {
+            c.add(Calendar.DAY_OF_MONTH, 1);
+        }
+        return c.getTimeInMillis();
+    }
+}
+""")
 
 write_java('NStore', r"""package PKG;
 
@@ -139,12 +280,18 @@ final class NStore {
 
     /** Zeitpunkt, vor dem die Aufgabe nicht wieder angezeigt wird (nach dem Wegwischen). */
     static void setNext(Context c, String id, long next) {
+        update(c, id, -1, next);
+    }
+
+    /** Neuer Termin (due >= 0) und/oder neue "nicht vor"-Zeit (next >= 0). */
+    static void update(Context c, String id, long due, long next) {
         JSONArray a = tasks(c);
         for (int i = 0; i < a.length(); i++) {
             JSONObject o = a.optJSONObject(i);
             if (o != null && id.equals(o.optString("id"))) {
                 try {
-                    o.put("next", next);
+                    if (due >= 0) o.put("due", due);
+                    if (next >= 0) o.put("next", next);
                 } catch (Exception ignored) {
                     // egal
                 }
@@ -161,10 +308,19 @@ final class NStore {
         }
     }
 
-    /** In der Benachrichtigung abgehakt: merken, bis die Seite es abholt. */
-    static void addDone(Context c, String id) {
+    /** In der Benachrichtigung oder im Widget abgehakt: merken, bis die Seite es abholt.
+        due = neuer Termin bei Wiederholung, sonst 0. */
+    static void addDone(Context c, String id, long ts, long due) {
         JSONArray d = doneList(c);
-        d.put(id);
+        try {
+            JSONObject o = new JSONObject();
+            o.put("id", id);
+            o.put("ts", ts);
+            o.put("due", due);
+            d.put(o);
+        } catch (Exception ignored) {
+            // egal
+        }
         p(c).edit().putString("done", d.toString()).apply();
     }
 
@@ -222,13 +378,18 @@ final class Notifier {
         return PendingIntent.getBroadcast(c, nid(id) * 4 + slot, i, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
     }
 
+    /** "Erledigt": gleicher Knopf in Benachrichtigung und Widget. */
+    static PendingIntent doneIntent(Context c, String id) {
+        return receiverIntent(c, ACT_DONE, id, 0);
+    }
+
     /** Zeigt die Benachrichtigung: lautlos, "laufend", mit Erledigt-Knopf. */
     static void show(Context c, String id, String title) {
         ensureChannel(c);
         Notification.Action done = new Notification.Action.Builder(
                 Icon.createWithResource(c, android.R.drawable.checkbox_on_background),
                 "Erledigt",
-                receiverIntent(c, ACT_DONE, id, 0)).build();
+                doneIntent(c, id)).build();
 
         PendingIntent open = null;
         Intent launch = c.getPackageManager().getLaunchIntentForPackage(c.getPackageName());
@@ -283,6 +444,7 @@ final class Notifier {
             long at = Math.max(t.optLong("due", 0), t.optLong("next", 0));
             if (at <= now) show(c, id, t.optString("title")); else schedule(c, id, at);
         }
+        AufgabenWidget.refreshAll(c);
     }
 }
 """)
@@ -308,11 +470,22 @@ public class AufgabenReceiver extends BroadcastReceiver {
         if (id == null) return;
 
         if (Notifier.ACT_DONE.equals(action)) {
-            // "Erledigt" getippt: merken, bis die Seite es abholt und mit Firebase abgleicht
-            NStore.addDone(c, id);
-            NStore.remove(c, id);
+            // Abgehakt (Benachrichtigung oder Widget). Wiederholende Aufgaben rutschen auf den naechsten Termin,
+            // die anderen verschwinden. Die Seite holt es beim naechsten Oeffnen ab und gleicht mit Firebase ab.
+            JSONObject t = NStore.find(c, id);
+            long now = System.currentTimeMillis();
+            String rep = t == null ? "" : t.optString("rep", "");
             Notifier.cancelAlarm(c, id);
             Notifier.cancelNotification(c, id);
+            if (t != null && !rep.isEmpty()) {
+                long nd = Recur.next(t.optLong("due"), rep, now);
+                NStore.update(c, id, nd, 0);
+                Notifier.schedule(c, id, nd);
+                NStore.addDone(c, id, now, nd);
+            } else {
+                NStore.remove(c, id);
+                NStore.addDone(c, id, now, 0);
+            }
         } else if (Notifier.ACT_DISMISSED.equals(action)) {
             // Weggewischt: in 15 Minuten wieder anzeigen, falls noch offen
             if (NStore.find(c, id) != null) {
@@ -327,6 +500,106 @@ public class AufgabenReceiver extends BroadcastReceiver {
                 Notifier.show(c, id, t.optString("title"));
             }
         }
+        AufgabenWidget.refreshAll(c);
+    }
+}
+""")
+
+write_java('AufgabenWidget', r"""package PKG;
+
+import android.app.PendingIntent;
+import android.appwidget.AppWidgetManager;
+import android.appwidget.AppWidgetProvider;
+import android.content.ComponentName;
+import android.content.Context;
+import android.content.Intent;
+import android.view.View;
+import android.widget.RemoteViews;
+
+import org.json.JSONArray;
+import org.json.JSONObject;
+
+import java.text.SimpleDateFormat;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.Date;
+import java.util.List;
+import java.util.Locale;
+
+/** Widget fuer Start- und Sperrbildschirm: offene Aufgaben mit Haken zum Abhaken. */
+public class AufgabenWidget extends AppWidgetProvider {
+    private static final int MAX = 5;
+
+    @Override
+    public void onUpdate(Context c, AppWidgetManager m, int[] ids) {
+        for (int id : ids) m.updateAppWidget(id, build(c));
+    }
+
+    static void refreshAll(Context c) {
+        try {
+            AppWidgetManager m = AppWidgetManager.getInstance(c);
+            int[] ids = m.getAppWidgetIds(new ComponentName(c, AufgabenWidget.class));
+            if (ids == null) return;
+            for (int id : ids) m.updateAppWidget(id, build(c));
+        } catch (Exception ignored) {
+            // Widget ist optional
+        }
+    }
+
+    private static String when(long due, long now) {
+        boolean sameDay = new SimpleDateFormat("yyyyMMdd", Locale.GERMANY).format(new Date(due))
+                .equals(new SimpleDateFormat("yyyyMMdd", Locale.GERMANY).format(new Date(now)));
+        return new SimpleDateFormat(sameDay ? "HH:mm" : "dd.MM. HH:mm", Locale.GERMANY).format(new Date(due));
+    }
+
+    static RemoteViews build(Context c) {
+        RemoteViews v = new RemoteViews(c.getPackageName(), R.layout.aufgaben_widget);
+        final int[] rows = {R.id.row1, R.id.row2, R.id.row3, R.id.row4, R.id.row5};
+        final int[] titles = {R.id.t1, R.id.t2, R.id.t3, R.id.t4, R.id.t5};
+        final int[] checks = {R.id.c1, R.id.c2, R.id.c3, R.id.c4, R.id.c5};
+
+        List<JSONObject> list = new ArrayList<>();
+        JSONArray a = NStore.tasks(c);
+        for (int i = 0; i < a.length(); i++) {
+            JSONObject o = a.optJSONObject(i);
+            if (o != null) list.add(o);
+        }
+        Collections.sort(list, new Comparator<JSONObject>() {
+            @Override
+            public int compare(JSONObject x, JSONObject y) {
+                return Long.compare(x.optLong("due"), y.optLong("due"));
+            }
+        });
+
+        long now = System.currentTimeMillis();
+        for (int i = 0; i < MAX; i++) {
+            if (i < list.size()) {
+                JSONObject t = list.get(i);
+                String id = t.optString("id");
+                long due = t.optLong("due");
+                String label = t.optString("title") + (due > now ? "  · " + when(due, now) : "");
+                v.setViewVisibility(rows[i], View.VISIBLE);
+                v.setTextViewText(titles[i], label);
+                v.setOnClickPendingIntent(checks[i], Notifier.doneIntent(c, id));
+            } else {
+                v.setViewVisibility(rows[i], View.GONE);
+            }
+        }
+        v.setViewVisibility(R.id.empty, list.isEmpty() ? View.VISIBLE : View.GONE);
+        if (list.size() > MAX) {
+            v.setViewVisibility(R.id.more, View.VISIBLE);
+            v.setTextViewText(R.id.more, "+" + (list.size() - MAX) + " weitere");
+        } else {
+            v.setViewVisibility(R.id.more, View.GONE);
+        }
+
+        Intent launch = c.getPackageManager().getLaunchIntentForPackage(c.getPackageName());
+        if (launch != null) {
+            PendingIntent open = PendingIntent.getActivity(c, 7, launch, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+            v.setOnClickPendingIntent(R.id.header, open);
+        }
+        return v;
     }
 }
 """)
@@ -361,7 +634,7 @@ public class AufgabenPlugin extends Plugin {
         return getContext().checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED;
     }
 
-    /** Die Seite gibt die aktuelle Liste offener Aufgaben; hier werden Benachrichtigungen und Alarme angepasst. */
+    /** Die Seite gibt die aktuelle Liste offener Aufgaben; hier werden Benachrichtigungen, Alarme und Widget angepasst. */
     @PluginMethod
     public void setTasks(PluginCall call) {
         JSArray arr = call.getArray("tasks");
@@ -371,35 +644,50 @@ public class AufgabenPlugin extends Plugin {
         }
         Context c = getContext();
         try {
-            // Gerade in der Benachrichtigung abgehakte, noch nicht abgeholte Aufgaben nicht wieder anlegen
+            // Gerade abgehakte, noch nicht abgeholte Aufgaben: den Stand der App-Seite behalten
             Set<String> skip = new HashSet<>();
             JSONArray pend = NStore.pendingDone(c);
-            for (int i = 0; i < pend.length(); i++) skip.add(pend.optString(i));
+            for (int i = 0; i < pend.length(); i++) {
+                JSONObject d = pend.optJSONObject(i);
+                if (d != null) skip.add(d.optString("id"));
+            }
 
-            Map<String, Long> oldNext = new HashMap<>();
-            JSONArray old = NStore.tasks(c);
-            for (int i = 0; i < old.length(); i++) {
-                JSONObject o = old.optJSONObject(i);
-                if (o != null) oldNext.put(o.optString("id"), o.optLong("next", 0));
+            Map<String, JSONObject> old = new HashMap<>();
+            JSONArray oldArr = NStore.tasks(c);
+            for (int i = 0; i < oldArr.length(); i++) {
+                JSONObject o = oldArr.optJSONObject(i);
+                if (o != null) old.put(o.optString("id"), o);
             }
 
             JSONArray fresh = new JSONArray();
             Set<String> keep = new HashSet<>();
+            Set<String> titleChanged = new HashSet<>();
             for (int i = 0; i < arr.length(); i++) {
                 JSONObject t = arr.getJSONObject(i);
                 String id = t.getString("id");
-                if (skip.contains(id)) continue;
+                JSONObject prev = old.get(id);
+                if (skip.contains(id)) {
+                    if (prev != null) {
+                        fresh.put(prev);
+                        keep.add(id);
+                    }
+                    continue;
+                }
                 JSONObject o = new JSONObject();
                 o.put("id", id);
                 o.put("title", t.optString("title"));
                 o.put("due", t.optLong("due"));
-                Long n = oldNext.get(id);
-                o.put("next", n == null ? 0L : n);
+                o.put("rep", t.optString("rep", ""));
+                long due = t.optLong("due");
+                // Wurde der Termin geaendert, gilt die Wegwisch-Pause nicht mehr
+                boolean sameDue = prev != null && prev.optLong("due") == due;
+                o.put("next", sameDue ? prev.optLong("next", 0) : 0L);
+                if (prev != null && !prev.optString("title").equals(t.optString("title"))) titleChanged.add(id);
                 fresh.put(o);
                 keep.add(id);
             }
 
-            for (String id : oldNext.keySet()) {
+            for (String id : old.keySet()) {
                 if (!keep.contains(id)) {
                     Notifier.cancelAlarm(c, id);
                     Notifier.cancelNotification(c, id);
@@ -414,22 +702,24 @@ public class AufgabenPlugin extends Plugin {
                 String id = o.getString("id");
                 long at = Math.max(o.optLong("due"), o.optLong("next"));
                 if (at <= now) {
-                    if (!Notifier.isShown(c, id)) Notifier.show(c, id, o.optString("title"));
+                    if (!Notifier.isShown(c, id) || titleChanged.contains(id)) Notifier.show(c, id, o.optString("title"));
                 } else {
+                    Notifier.cancelNotification(c, id);
                     Notifier.schedule(c, id, at);
                 }
             }
+            AufgabenWidget.refreshAll(c);
             call.resolve();
         } catch (Exception e) {
             call.reject("setTasks fehlgeschlagen: " + e.getMessage());
         }
     }
 
-    /** In der Benachrichtigung abgehakte Aufgaben abholen. */
+    /** Abgehakte Aufgaben (aus Benachrichtigung oder Widget) abholen: [{id, ts, due}]. */
     @PluginMethod
     public void takeDone(PluginCall call) {
         JSObject ret = new JSObject();
-        ret.put("ids", NStore.takeDone(getContext()));
+        ret.put("items", NStore.takeDone(getContext()));
         call.resolve(ret);
     }
 
@@ -486,4 +776,4 @@ public class MainActivity extends BridgeActivity {
     }
 }
 """)
-print('Benachrichtigungs-Plug-in eingetragen, Build-Nummer', run)
+print('Benachrichtigungs-Plug-in und Widget eingetragen, Build-Nummer', run)
