@@ -1,5 +1,6 @@
 /* Gemeinsamer Code für Seite und Service Worker: Speicher (IndexedDB) und Benachrichtigungen.
    Aufgabe: { id, title, due, rep (Wiederholung: '', daily, weekdays, weekly, monthly), nextShow,
+              done (wann zuletzt abgehakt, nur bei Wiederholung), prevDue (Termin davor, fürs Rückgängig),
               u (Änderungszeit), del (erledigt = Löschvermerk), dirty (noch nicht hochgeladen) } */
 var FAR = Number.MAX_SAFE_INTEGER;
 var REPEAT_MS = 15 * 60 * 1000;
@@ -69,6 +70,8 @@ async function updateTask(id, title, due, rep) {
   t.due = due;
   t.rep = rep || '';
   t.nextShow = due;
+  delete t.done;
+  delete t.prevDue;
   t.u = Math.max(Date.now(), (t.u || 0) + 1);
   t.dirty = true;
   await putTask(t);
@@ -81,11 +84,31 @@ async function completeTask(id, ts, newDue) {
   var t = await getTask(id);
   if (!t || t.del) return;
   if (t.rep) {
-    t.due = newDue || nextOccurrence(t.due, t.rep, ts || Date.now());
+    t.prevDue = t.due;
+    t.done = ts || Date.now();
+    t.due = newDue || nextOccurrence(t.due, t.rep, t.done);
     t.nextShow = t.due;
   } else {
     t.del = true;
   }
+  t.u = Math.max(Date.now(), (t.u || 0) + 1);
+  t.dirty = true;
+  await putTask(t);
+}
+
+/* Wiederholende Aufgabe, die abgehakt ist und deren nächster Termin noch bevorsteht. */
+function isDoneRepeat(t, now) {
+  return !!(t.rep && t.done && t.due > (now || Date.now()));
+}
+
+/* Abhaken rückgängig machen (nur bei Wiederholung): zurück auf den Termin davor. */
+async function undoTask(id) {
+  var t = await getTask(id);
+  if (!t || t.del || !t.done || !t.prevDue) return;
+  t.due = t.prevDue;
+  t.nextShow = t.due;
+  delete t.done;
+  delete t.prevDue;
   t.u = Math.max(Date.now(), (t.u || 0) + 1);
   t.dirty = true;
   await putTask(t);

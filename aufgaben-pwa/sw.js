@@ -1,7 +1,7 @@
 /* Aufgaben Service Worker: Offline-Cache und Benachrichtigungen. */
 importScripts('store.js');
 
-const CACHE = 'aufgaben-v3';
+const CACHE = 'aufgaben-v4';
 const FILES = ['./', './index.html', './app.js', './store.js', './sync.js', './manifest.webmanifest', './icons/icon-192.png', './icons/icon-512.png', './icons/icon-maskable-512.png'];
 
 self.addEventListener('install', e => {

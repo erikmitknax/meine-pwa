@@ -31,6 +31,9 @@ ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
 li { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 li > div:first-child { display: grid; min-width: 0; }
 li small { color: var(--muted); }
+h2 { font-size: 15px; color: var(--muted); margin: 24px 0 8px; }
+.doneList li { opacity: .75; }
+.doneList li > div:first-child span { text-decoration: line-through; }
 li .acts { display: flex; gap: 6px; flex-shrink: 0; }
 li .acts button.ghost { padding: 10px 12px; }
 #perm { margin-bottom: 16px; display: grid; gap: 8px; }
@@ -77,6 +80,9 @@ button.link { background: none; color: var(--accent); padding: 4px 0; text-align
 
   <ul id="list"></ul>
   <p id="empty" class="hint" hidden>Keine offenen Aufgaben.</p>
+
+  <h2 id="doneH" hidden>Erledigt</h2>
+  <ul id="doneList" class="doneList"></ul>
 
   <details id="acct">
     <summary id="sySum">Konto &amp; Sync</summary>

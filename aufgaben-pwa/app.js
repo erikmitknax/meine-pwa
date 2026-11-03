@@ -57,8 +57,18 @@ function needsPermission() {
   return 'Notification' in window && Notification.permission !== 'granted';
 }
 
+function fmtDone(ms) {
+  var d = new Date(ms), n = new Date();
+  var same = d.getFullYear() === n.getFullYear() && d.getMonth() === n.getMonth() && d.getDate() === n.getDate();
+  return same ? 'heute ' + d.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }) : fmt(ms);
+}
+
 async function render() {
-  var tasks = (await openTasks()).sort(function (a, b) { return a.due - b.due; });
+  var now = Date.now();
+  var all = (await openTasks()).sort(function (a, b) { return a.due - b.due; });
+  var tasks = all.filter(function (t) { return !isDoneRepeat(t, now); });
+  var doneList = all.filter(function (t) { return isDoneRepeat(t, now); }).sort(function (a, b) { return b.done - a.done; });
+
   var ul = $('list');
   ul.textContent = '';
   $('empty').hidden = tasks.length > 0;
@@ -68,7 +78,7 @@ async function render() {
     var title = document.createElement('span');
     title.textContent = t.title;
     var when = document.createElement('small');
-    when.textContent = fmt(t.due) + (t.due <= Date.now() ? ' · fällig' : '') + (t.rep ? ' · ' + REPS[t.rep] : '');
+    when.textContent = fmt(t.due) + (t.due <= now ? ' · fällig' : '') + (t.rep ? ' · ' + REPS[t.rep] : '');
     box.append(title, when);
     var acts = document.createElement('div');
     acts.className = 'acts';
@@ -84,6 +94,34 @@ async function render() {
     acts.append(edit, btn);
     li.append(box, acts);
     ul.append(li);
+  });
+
+  var dl = $('doneList');
+  dl.textContent = '';
+  $('doneH').hidden = doneList.length === 0;
+  doneList.forEach(function (t) {
+    var li = document.createElement('li');
+    var box = document.createElement('div');
+    var title = document.createElement('span');
+    title.textContent = t.title;
+    var when = document.createElement('small');
+    when.textContent = '✓ erledigt ' + fmtDone(t.done) + ' · nächstes Mal ' + fmt(t.due) + ' · ' + REPS[t.rep];
+    box.append(title, when);
+    var acts = document.createElement('div');
+    acts.className = 'acts';
+    var edit = document.createElement('button');
+    edit.className = 'ghost';
+    edit.textContent = '✎';
+    edit.setAttribute('aria-label', 'Bearbeiten');
+    edit.onclick = function () { startEdit(t); };
+    var undo = document.createElement('button');
+    undo.className = 'ghost';
+    undo.textContent = '↩';
+    undo.setAttribute('aria-label', 'Rückgängig');
+    undo.onclick = async function () { await undoTask(t.id); await render(); await tick(); pushSoon(); };
+    acts.append(edit, undo);
+    li.append(box, acts);
+    dl.append(li);
   });
   $('perm').hidden = !needsPermission();
 }
@@ -178,6 +216,7 @@ async function registerPeriodic() {
   await render();
   tick();
   setInterval(tick, NATIVE ? 4000 : 15000);
+  setInterval(render, 30000); // Erledigtes wandert zurück in die Liste, sobald der nächste Termin da ist
   document.addEventListener('visibilitychange', function () {
     if (!document.hidden) { render(); tick(); pushSoon(); }
   });
