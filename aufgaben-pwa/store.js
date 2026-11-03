@@ -1,4 +1,5 @@
-/* Gemeinsamer Code für Seite und Service Worker: Speicher (IndexedDB) und Benachrichtigungen. */
+/* Gemeinsamer Code für Seite und Service Worker: Speicher (IndexedDB) und Benachrichtigungen.
+   Aufgabe: { id, title, due, nextShow, u (Änderungszeit), del (erledigt = Löschvermerk), dirty (noch nicht hochgeladen) } */
 var FAR = Number.MAX_SAFE_INTEGER;
 var REPEAT_MS = 15 * 60 * 1000;
 
@@ -25,7 +26,28 @@ function run(mode, fn) {
 function allTasks() { return run('readonly', function (s) { return s.getAll(); }); }
 function getTask(id) { return run('readonly', function (s) { return s.get(id); }); }
 function putTask(t) { return run('readwrite', function (s) { return s.put(t); }); }
-function delTask(id) { return run('readwrite', function (s) { return s.delete(id); }); }
+
+/* Nur offene Aufgaben (erledigte bleiben als Löschvermerk gespeichert, damit der Abgleich sie überall entfernt). */
+async function openTasks() {
+  return (await allTasks()).filter(function (t) { return !t.del; });
+}
+
+/* Neue Aufgabe lokal anlegen. */
+function newTask(title, due) {
+  var now = Date.now();
+  var t = { id: now.toString(36) + Math.random().toString(36).slice(2, 6), title: title, due: due, nextShow: due, u: now, del: false, dirty: true };
+  return putTask(t).then(function () { return t; });
+}
+
+/* Aufgabe abhaken: Löschvermerk setzen, wird beim nächsten Abgleich hochgeladen. */
+async function completeTask(id) {
+  var t = await getTask(id);
+  if (!t || t.del) return;
+  t.del = true;
+  t.u = Math.max(Date.now(), (t.u || 0) + 1);
+  t.dirty = true;
+  await putTask(t);
+}
 
 /* Zeigt eine lautlose Benachrichtigung, die stehen bleibt, bis man sie abhakt. */
 function showTask(reg, t) {
@@ -45,7 +67,7 @@ function showTask(reg, t) {
 async function checkTasks(reg) {
   var now = Date.now();
   var shown = (await reg.getNotifications()).map(function (n) { return n.tag; });
-  var tasks = await allTasks();
+  var tasks = await openTasks();
   for (var i = 0; i < tasks.length; i++) {
     var t = tasks[i];
     if (t.due > now) continue;

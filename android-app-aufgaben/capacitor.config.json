@@ -1,0 +1,12 @@
+{
+  "appId": "io.github.erikmitknax.aufgaben",
+  "appName": "Aufgaben",
+  "webDir": "www",
+  "backgroundColor": "#faf9f7",
+  "server": {
+    "url": "https://erikmitknax.github.io/meine-pwa/aufgaben-pwa/",
+    "androidScheme": "https",
+    "errorPath": "offline.html",
+    "allowNavigation": ["erikmitknax.github.io"]
+  }
+}

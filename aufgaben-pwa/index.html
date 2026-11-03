@@ -32,6 +32,15 @@ li { display: flex; align-items: center; justify-content: space-between; gap: 12
 li div { display: grid; min-width: 0; }
 li small { color: var(--muted); }
 #perm { margin-bottom: 16px; display: grid; gap: 8px; }
+details { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px; margin-top: 20px; }
+summary { cursor: pointer; font-weight: 600; }
+#syBox { display: grid; gap: 10px; margin-top: 12px; }
+.row { display: flex; gap: 8px; }
+.row button { flex: 1; }
+button.ghost { background: transparent; color: var(--fg); border: 1px solid var(--line); }
+button.link { background: none; color: var(--accent); padding: 4px 0; text-align: left; }
+.status.err { color: #b3372b; font-size: 14px; }
+@media (prefers-color-scheme: dark) { .status.err { color: #ef7a6c; } }
 .hint { color: var(--muted); font-size: 13px; margin-top: 20px; }
 </style>
 </head>
@@ -55,9 +64,15 @@ li small { color: var(--muted); }
   <ul id="list"></ul>
   <p id="empty" class="hint" hidden>Keine offenen Aufgaben.</p>
 
+  <details id="acct">
+    <summary id="sySum">Konto &amp; Sync</summary>
+    <div id="syBox"></div>
+  </details>
+
   <p class="hint">Die Benachrichtigung bleibt lautlos stehen, bis du „Erledigt“ tippst. Wischst du sie weg, kommt sie nach 15 Minuten wieder, sobald die App geöffnet ist oder Chrome sie im Hintergrund prüft.</p>
 </main>
 <script src="store.js"></script>
 <script src="app.js"></script>
+<script src="sync.js"></script>
 </body>
 </html>

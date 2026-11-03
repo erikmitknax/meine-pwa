@@ -1,0 +1,16 @@
+# Aufgaben als Android-App (APK)
+
+Die App ist eine Hülle (Capacitor), die die Seite
+https://erikmitknax.github.io/meine-pwa/aufgaben-pwa/ lädt.
+Änderungen an `aufgaben-pwa/` kommen also ohne neue APK auf dem Handy an.
+Eine neue APK ist nur nötig, wenn sich etwas in `android-app-aufgaben/` ändert.
+
+Anders als die PWA zeigt die APK die Benachrichtigungen über ein eigenes Android-Plug-in
+(`patch_android.py` erzeugt es): lautlos, bleibt bis "Erledigt", kommt nach dem Wegwischen
+nach 15 Minuten wieder, auch bei geschlossener App.
+
+Gebaut wird sie von GitHub Actions (`.github/workflows/build-apk-aufgaben.yml`).
+Download: Releases -> "Aufgaben-App (APK)" -> aufgaben.apk
+
+Signiert wird mit demselben festen Debug-Schlüssel wie die anderen Apps
+(`android-app/resources/debug.keystore`), damit Updates über die installierte App gehen.

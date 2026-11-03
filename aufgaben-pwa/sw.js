@@ -1,8 +1,8 @@
 /* Aufgaben Service Worker: Offline-Cache und Benachrichtigungen. */
 importScripts('store.js');
 
-const CACHE = 'aufgaben-v1';
-const FILES = ['./', './index.html', './app.js', './store.js', './manifest.webmanifest', './icons/icon-192.png', './icons/icon-512.png', './icons/icon-maskable-512.png'];
+const CACHE = 'aufgaben-v2';
+const FILES = ['./', './index.html', './app.js', './store.js', './sync.js', './manifest.webmanifest', './icons/icon-192.png', './icons/icon-512.png', './icons/icon-maskable-512.png'];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(FILES)).then(() => self.skipWaiting()));
@@ -34,7 +34,7 @@ self.addEventListener('notificationclick', e => {
   const id = e.notification.data && e.notification.data.id;
   e.notification.close();
   if (e.action === 'done') {
-    e.waitUntil(delTask(id).then(tellPages));
+    e.waitUntil(completeTask(id).then(tellPages));
   } else {
     e.waitUntil(self.clients.matchAll({ type: 'window' }).then(list => list.length ? list[0].focus() : self.clients.openWindow('./')));
   }
