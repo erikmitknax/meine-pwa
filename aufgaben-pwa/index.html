@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#faf9f7" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#171614" media="(prefers-color-scheme: dark)">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Aufgaben">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon-192.png" type="image/png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<title>Aufgaben</title>
+<style>
+:root { --bg: #faf9f7; --panel: #ffffff; --fg: #1f1d1a; --muted: #6b665f; --line: #e4e0d9; --accent: #2f7d6b; --radius: 12px; }
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #171614; --panel: #211f1c; --fg: #f1eee8; --muted: #a39d93; --line: #35322d; --accent: #5cc0a6; color-scheme: dark; }
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.4 system-ui, sans-serif; padding: max(16px, env(safe-area-inset-top)) 16px 32px; }
+main { max-width: 560px; margin: 0 auto; }
+h1 { font-size: 24px; margin: 8px 0 16px; }
+form, li, #perm { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px; }
+form { display: grid; gap: 10px; margin-bottom: 16px; }
+label { display: grid; gap: 4px; color: var(--muted); font-size: 14px; }
+input { font: inherit; color: var(--fg); background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 10px; width: 100%; }
+button { font: inherit; border: 0; border-radius: 8px; padding: 10px 14px; background: var(--accent); color: #fff; }
+ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+li { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+li div { display: grid; min-width: 0; }
+li small { color: var(--muted); }
+#perm { margin-bottom: 16px; display: grid; gap: 8px; }
+.hint { color: var(--muted); font-size: 13px; margin-top: 20px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Aufgaben</h1>
+
+  <div id="perm" hidden>
+    <span>Damit Aufgaben als Benachrichtigung kommen, musst du sie einmal erlauben.</span>
+    <button id="permBtn" type="button">Benachrichtigungen erlauben</button>
+  </div>
+
+  <form id="f">
+    <input id="title" placeholder="Neue Aufgabe" required autocomplete="off">
+    <label>Wann (leer = sofort)
+      <input id="due" type="datetime-local">
+    </label>
+    <button type="submit">Hinzufügen</button>
+  </form>
+
+  <ul id="list"></ul>
+  <p id="empty" class="hint" hidden>Keine offenen Aufgaben.</p>
+
+  <p class="hint">Die Benachrichtigung bleibt lautlos stehen, bis du „Erledigt“ tippst. Wischst du sie weg, kommt sie nach 15 Minuten wieder, sobald die App geöffnet ist oder Chrome sie im Hintergrund prüft.</p>
+</main>
+<script src="store.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
