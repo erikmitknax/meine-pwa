@@ -82,6 +82,34 @@ function swipeRows(root, onDone) {
 }
 const swRow = (r, label) => `<div class="swrap"><div class="swbg">${icon("archive", 18)} ${label}</div><div class="res" data-rid="${r.id}">${recipeLine(r)}</div></div>`;
 const archiveRecipe = (id, on) => { const r = D.recipes.find(x => x.id === id); if (!r) return; if (on) r.arch = true; else delete r.arch; save(); };
+/* Zuckerarten: pro Lebensmittel-Name (klein geschrieben) in D.settings.sugType, auch für Zutaten ohne Datenbank-Eintrag.
+   { t: "n" } natürlich (ganzes Obst/Gemüse, Milch pur) · { t: "a" } zugesetzt/frei (Süßes, Saft, Honig, Softdrinks) · { t: "m", a: g pro 100 g } gemischt */
+const sugKey = n => String(n || "").trim().toLowerCase();
+const sugTypeOf = name => (D.settings.sugType || {})[sugKey(name)] || null;
+function setSugType(name, t, a, oldName) {
+  const m = D.settings.sugType = D.settings.sugType || {};
+  if (oldName && sugKey(oldName) !== sugKey(name)) delete m[sugKey(oldName)];
+  if (t === "n" || t === "a") m[sugKey(name)] = { t }; else if (t === "m" && a >= 0) m[sugKey(name)] = { t: "m", a }; else delete m[sugKey(name)];
+}
+/* Aufteilung des Zuckers einer Eintragsliste: nat (natürlich), add (zugesetzt/frei), unk (nicht eingeordnet) in g */
+function sugarSplit(list) {
+  const r = { nat: 0, add: 0, unk: 0, names: {} };
+  const put = (name, sg, grams) => {
+    if (!(sg > 0)) return; const t = sugTypeOf(name);
+    if (t && t.t === "n") r.nat += sg; else if (t && t.t === "a") r.add += sg;
+    else if (t && t.t === "m") { const a = Math.min(sg, (t.a || 0) * grams / 100); r.add += a; r.nat += sg - a; }
+    else { r.unk += sg; r.names[name] = (r.names[name] || 0) + sg; }
+  };
+  list.forEach(e => {
+    if (!(e.grams > 0)) return;
+    const ings = entryIngs(e); let got = 0;
+    if (ings) ings.forEach(i => { if (i.off || !hasN(i.sugar)) return; const sg = i.sugar * i.grams / 100; got += sg; put(i.name, sg, i.grams); });
+    else if (hasN(e.s)) { got = e.s; put(e.name, e.s, e.grams); }
+    if (ings && hasN(e.s) && e.s - got > 0.05) { r.unk += e.s - got; r.names[e.name] = (r.names[e.name] || 0) + e.s - got; }
+  });
+  return r;
+}
+const sugLine = r => `Zugesetzt/frei: <b>${nde(r.add, 1)} g</b> · Natürlich: <b>${nde(r.nat, 1)} g</b>${r.unk > 0.05 ? ` · nicht eingeordnet: ${nde(r.unk, 1)} g` : ""}`;
 /* Ausnahmetage (z. B. Feier): zählen nicht in Durchschnitte, bleiben aber normal gespeichert. D.settings.exclDays = { Datum: true } */
 const isExcl = d => !!((D.settings.exclDays || {})[d]);
 function setExcl(d, on) { const m = D.settings.exclDays = D.settings.exclDays || {}; if (on) m[d] = true; else delete m[d]; save(); }
@@ -503,6 +531,7 @@ function viewWeek() {
   ${logged0.length ? `<button class="btn sec block" style="margin-top:12px" data-act="exclSheet">Tage aus dem Durchschnitt nehmen${exN ? " (" + exN + ")" : ""}</button>` : ""}
   ${logged.length ? `<div class="muted small" style="margin:12px 4px 0">${exN ? "Durchschnitt ohne " + exN + (exN === 1 ? " Ausnahmetag. " : " Ausnahmetage. ") : ""}${hit} von ${logged.length} ${logged.length === 1 ? "Tag" : "Tagen"} im Zielbereich (±10 %)</div>
   ${(() => { const dv = days.filter(d => !isExcl(d)), tot = dv.reduce((a, d) => a + mlOf(d), 0), mg = dv.reduce((a, d) => a + mgOfDay(d), 0); return tot ? `<div class="muted small" style="margin:6px 4px 0">☕ Koffein: ${fmtMl(tot)} Getränke im Zeitraum, Ø ${r0(mg / L)} mg pro erfasstem Tag</div>` : ""; })()}
+  ${(() => { const sp = sugarSplit(logged.flatMap(r => dayEntries(r.d))); return sp.add + sp.nat + sp.unk > 0 ? `<div class="muted small" style="margin:6px 4px 0">🍬 Zucker Ø pro Tag: zugesetzt/frei <b style="color:var(--text)">${nde(sp.add / L, 1)} g</b> · natürlich <b style="color:var(--text)">${nde(sp.nat / L, 1)} g</b>${sp.unk > 0.05 ? " · nicht eingeordnet " + nde(sp.unk / L, 1) + " g" : ""}</div>` : ""; })()}
   <section class="macros" style="margin-top:20px">${macroCol("Ø Eiweiß", avg.p / L, g.p, "p")}${macroCol("Ø Kohlenh.", avg.c / L, g.c, "c")}${macroCol("Ø Fett", avg.f / L, g.f, "f")}</section>` : ""}
   <section class="exportcard"><b>Zeitraum exportieren</b><div class="muted small">${label}: alle Tage mit Mahlzeiten, Nährwerten und Rezept-Zutaten als Textdatei, z. B. für eine KI-Analyse.</div>
     <div class="grid2"><button class="btn" data-act="exportRange">Als Datei</button><button class="btn sec" data-act="copyRange">Kopieren</button></div></section>
@@ -1157,6 +1186,9 @@ function foodForm(f) {
     <div><label>davon Zucker (g)</label><input type="text" inputmode="decimal" id="fS" value="${v("sugar")}"></div><div><label>Ballaststoffe (g)</label><input type="text" inputmode="decimal" id="fFi" value="${v("fiber")}"></div>
     <div><label>davon gesättigte Fettsäuren (g)</label><input type="text" inputmode="decimal" id="fSat" value="${v("sat")}"></div><div><label>Salz (g)</label><input type="text" inputmode="decimal" id="fSalt" value="${v("salt")}"></div></div>
     <label>Portionsgröße (g)</label><input type="text" inputmode="decimal" id="fServ" value="${v("serving") || 100}">
+    <div class="muted small" style="margin-top:14px">Zuckerart (optional, für die Aufteilung)</div>
+    <select id="fSugT" aria-label="Zuckerart"><option value="">Nicht eingeordnet</option><option value="n" ${(sugTypeOf(f.name) || {}).t === "n" ? "selected" : ""}>Natürlich (ganzes Obst, Gemüse, Milch pur)</option><option value="a" ${(sugTypeOf(f.name) || {}).t === "a" ? "selected" : ""}>Zugesetzt / frei (Süßes, Saft, Honig, Softdrinks)</option><option value="m" ${(sugTypeOf(f.name) || {}).t === "m" ? "selected" : ""}>Gemischt (z. B. Fruchtjoghurt)</option></select>
+    <div id="fSugAw" ${(sugTypeOf(f.name) || {}).t === "m" ? "" : 'style="display:none"'}><label>davon zugesetzt (g pro 100 g)</label><input type="text" inputmode="decimal" id="fSugA" value="${(sugTypeOf(f.name) || {}).t === "m" ? String((sugTypeOf(f.name) || {}).a ?? "").replace(".", ",") : ""}" placeholder="z. B. 8"></div>
     <div class="muted small" style="margin-top:14px">Preis (optional)</div>
     <div class="grid2"><div><label>Preis (€)</label><input type="text" inputmode="decimal" id="fPrice" placeholder="z. B. 1,29" value="${hasPrice(f) ? String(f.price).replace(".", ",") : ""}"></div><div><label>Preis gilt für</label><select id="fPriceU"><option value="g">eine Menge (g/ml)</option><option value="piece" ${f.priceU === "piece" ? "selected" : ""}>1 Stück / Portion</option></select></div></div>
     <div id="fPriceGw" ${f.priceU === "piece" ? 'style="display:none"' : ""}><label>Menge, für die der Preis gilt (g oder ml)</label><input type="text" inputmode="decimal" id="fPriceG" placeholder="z. B. 500" value="${f.priceG > 0 && f.priceU !== "piece" ? String(f.priceG).replace(".", ",") : ""}"></div>
@@ -1250,6 +1282,7 @@ function bindPriceHint(root) {
 function readFoodForm(root, base) {
   const name = $("#fName", root).value.trim();
   if (!name) { toast("Bitte einen Namen eingeben"); return null; }
+  if ($("#fSugT", root)) { const t = $("#fSugT", root).value, a = num($("#fSugA", root) ? $("#fSugA", root).value : 0); setSugType(name, t, a, base ? base.name : ""); }
   const prTxt = $("#fPrice", root) ? $("#fPrice", root).value.trim() : "", pr = num(prTxt), pg = $("#fPriceG", root) ? num($("#fPriceG", root).value) : 0;
   const out = { ...(base || {}), id: (base && base.id) || uid(), name, brand: $("#fBrand", root).value.trim(), barcode: $("#fBar", root).value.replace(/\D/g, ""),
     kcal: num($("#fKcal", root).value), protein: num($("#fP", root).value), carbs: num($("#fC", root).value), fat: num($("#fF", root).value),
@@ -1598,6 +1631,7 @@ function nutrientBody(list, dayList) {
     return `<div class="nrow"><div class="row between"><b>${x.name}</b><span><b ${bad ? 'class="warn"' : ""}>${nde(v, 2)} g</b> <span class="muted small">${isMin ? "von mind." : "von max."} ${nde(lim, 0)} g</span></span></div>
       <div class="nbar"><i class="${bad ? "warn" : good ? "good" : ""}" style="width:${pct}%"></i></div>
       <div class="muted tiny">${dayList ? (share != null ? `${share} % des Tageswerts · ` : "") + (isMin ? "Tagesziel" : "Tageslimit") + " " + nde(lim, 0) + " g" : microHint(x.ek)}</div>${top ? `<div class="muted tiny">Meist aus: ${top}</div>` : ""}
+      ${x.ek === "s" && v > 0 ? (() => { const sp = sugarSplit(list); return `<div class="tiny" style="margin-top:4px">${sugLine(sp)}</div>${Object.keys(sp.names).length ? `<button class="linkbtn" data-sugcls="1">Zuckerarten einordnen (${Object.keys(sp.names).length}) ›</button>` : ""}`; })() : ""}
       ${miss ? `<div class="warn tiny">Für ${miss} von ${list.length} Einträgen ist diese Angabe nicht bekannt.</div><button class="linkbtn" data-miss="${x.ek}">Fehlende ansehen und nachtragen ›</button>` : ""}</div>`;
   }).join("");
   return `<div class="card nsum"><div><b>${fmt(t.kcal)}</b><span class="muted tiny">kcal</span></div><div><b>${r0(t.p)} g</b><span class="muted tiny">Eiweiß</span></div>
@@ -1683,7 +1717,26 @@ function missingSheet(list, ek, back) {
   };
   const first = $("[data-mi], [data-me]", s); if (first) first.focus();
 }
+function sugarClassSheet(list, back) {
+  const sp = sugarSplit(list), names = Object.keys(sp.names).sort((a, b) => sp.names[b] - sp.names[a]);
+  const rows = names.map((n, k) => `<div class="card" style="margin-bottom:10px"><div class="row between"><b style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(n)}</b><span class="muted small">${nde(sp.names[n], 1)} g Zucker</span></div>
+    <select data-sn="${k}" aria-label="Zuckerart von ${esc(n)}"><option value="">Nicht eingeordnet</option><option value="n">Natürlich</option><option value="a">Zugesetzt / frei</option><option value="m">Gemischt</option></select>
+    <div data-sw="${k}" style="display:none"><label>davon zugesetzt (g pro 100 g)</label><input type="text" inputmode="decimal" data-sa="${k}" placeholder="z. B. 8"></div></div>`).join("");
+  const s = sheet(`<button class="linkbtn" id="scBack" style="margin:-4px 0 6px">‹ Zurück</button><h3>Zuckerarten einordnen</h3>
+    <div class="muted small" style="margin:-6px 0 12px"><b>Natürlich:</b> Zucker in ganzem Obst, Gemüse, Milch, Naturjoghurt. <b>Zugesetzt / frei:</b> Haushaltszucker, Süßes, Gebäck, Softdrinks, Säfte, Smoothies, Honig. <b>Gemischt:</b> z. B. Fruchtjoghurt, dort gibst du an, wie viel pro 100 g zugesetzt ist. Die Einordnung gilt für alle Tage, auch rückwirkend.</div>
+    ${rows || `<div class="muted center" style="padding:24px 10px">Alles eingeordnet.</div>`}
+    <button class="btn block" style="margin-top:12px" id="scSave">Speichern</button><button class="btn sec block" style="margin-top:8px" id="scCancel">Abbrechen</button>`);
+  $$("[data-sn]", s).forEach(sel => sel.onchange = () => { $(`[data-sw="${sel.dataset.sn}"]`, s).style.display = sel.value === "m" ? "" : "none"; });
+  $("#scBack", s).onclick = $("#scCancel", s).onclick = back;
+  $("#scSave", s).onclick = () => {
+    let n = 0;
+    $$("[data-sn]", s).forEach(sel => { if (!sel.value) return; const nm = names[+sel.dataset.sn], a = num($(`[data-sa="${sel.dataset.sn}"]`, s).value); setSugType(nm, sel.value, a); n++; });
+    if (n) { save(); render(); toast(n + (n === 1 ? " Zuckerart gespeichert" : " Zuckerarten gespeichert")); }
+    back();
+  };
+}
 function wireMiss(s, list, back) {
+  $$("[data-sugcls]", s).forEach(b => b.onclick = () => sugarClassSheet(list, back));
   $$("[data-miss]", s).forEach(b => b.onclick = () => missingSheet(list, b.dataset.miss, back));
 }
 function nutrientSheet(date) {
@@ -2101,6 +2154,7 @@ function buildReport(from, to) {
     if (logged.length) {
       out.push(`- Durchschnitt pro erfasstem Tag: ${nde(a.kcal / L, 0)} kcal · Eiweiß ${nde(a.p / L, 0)} g · Kohlenhydrate ${nde(a.c / L, 0)} g · Fett ${nde(a.f / L, 0)} g`);
       { const mm = microSum(logged.flatMap(r => r.es)); out.push(`- Durchschnitt weitere Nährstoffe pro erfasstem Tag: Zucker ${nde(mm.s / L, 2)} g · Ballaststoffe ${nde(mm.fi / L, 2)} g · gesättigte Fettsäuren ${nde(mm.sa / L, 2)} g · Salz ${nde(mm.sl / L, 2)} g${microMissNote(mm)}`); }
+      { const sp = sugarSplit(logged.flatMap(r => r.es)); if (sp.add + sp.nat > 0) out.push(`- Zucker-Aufteilung Ø pro erfasstem Tag: zugesetzt/frei ${nde(sp.add / L, 1)} g · natürlich ${nde(sp.nat / L, 1)} g · nicht eingeordnet ${nde(sp.unk / L, 1)} g`); }
       out.push(`- Tage im Zielbereich (±10 % vom Kalorienziel): ${logged.filter(r => Math.abs(r.t.kcal - g.kcal) <= g.kcal * 0.1).length}`);
     }
     const ws = days.filter(d => D.weights[d] != null);
@@ -2114,6 +2168,7 @@ function buildReport(from, to) {
     if (!r.es.length) { out.push("Keine Einträge."); if (D.weights[r.d] != null) out.push(`Gewicht: ${nde(D.weights[r.d])} kg`); { const cl = coffeeLine(r.d); if (cl) out.push(cl); } return; }
     out.push(`Summe: ${nde(r.t.kcal, 0)} kcal (Ziel ${nde(g.kcal, 0)}) · Eiweiß ${nde(r.t.p, 0)} g (Ziel ${nde(g.p, 0)}) · Kohlenhydrate ${nde(r.t.c, 0)} g (Ziel ${nde(g.c, 0)}) · Fett ${nde(r.t.f, 0)} g (Ziel ${nde(g.f, 0)})`);
     { const q = microSum(r.es); out.push(`Weitere Nährstoffe: Zucker ${nde(q.s, 2)} g · Ballaststoffe ${nde(q.fi, 2)} g · gesättigte Fettsäuren ${nde(q.sa, 2)} g · Salz ${nde(q.sl, 2)} g${microMissNote(q)}`); }
+    { const sp = sugarSplit(r.es); if (sp.add + sp.nat > 0) out.push(`Zucker-Aufteilung: zugesetzt/frei ${nde(sp.add, 1)} g · natürlich ${nde(sp.nat, 1)} g${sp.unk > 0.05 ? " · nicht eingeordnet " + nde(sp.unk, 1) + " g" : ""}`); }
     if (D.weights[r.d] != null) out.push(`Gewicht: ${nde(D.weights[r.d])} kg`);
     { const cl = coffeeLine(r.d); if (cl) out.push(cl); }
     { // Verteilung über den Tag nach Uhrzeit
@@ -2576,6 +2631,7 @@ document.addEventListener("click", async ev => {
 document.addEventListener("keydown", ev => { if ((ev.key === "Enter" || ev.key === " ") && ev.target.matches && ev.target.matches("[role=button][data-act]")) { ev.preventDefault(); ev.target.click(); } });
 document.addEventListener("change", async ev => {
   const ct = ev.target;
+  if (ct && ct.id === "fSugT") { const w = $("#fSugAw"); if (w) w.style.display = ct.value === "m" ? "" : "none"; return; }
   if (ct && ct.id === "exclDay") { setExcl(ui.date, ct.checked); render(); return; }
   if (ct && ct.id === "cfSrc") { ui.cfSrc = ct.value; D.settings.cfLast = ct.value; save(); render(); return; }
   if (ct && ["cfSleep", "cfMl", "cfMg"].includes(ct.id)) {
