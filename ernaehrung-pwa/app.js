@@ -587,7 +587,7 @@ function viewWeight() {
 
 /* ---- Einstellungen ---- */
 function viewSettings() {
-  const s = D.settings, tot = s.pP + s.pC + s.pF;
+  const s = D.settings, tot = s.pP + s.pC + s.pF, refs0 = (() => { const k = s.kcal; return { s: { max: k * 0.10 / 4 }, fi: { min: 30 }, sa: { max: k * 0.10 / 9 }, sl: { max: 6 } }; })();
   return `<h1>Einstellungen</h1>
   ${acc("goals", `Tagesziele`, `<div class="panel">
     <label>Kalorien pro Tag</label><input type="text" inputmode="numeric" id="sKcal" value="${s.kcal}">
@@ -595,6 +595,12 @@ function viewSettings() {
     <div><label>Kohlenh. in %</label><input type="text" inputmode="numeric" id="sC" value="${s.pC}"></div>
     <div><label>Fett in %</label><input type="text" inputmode="numeric" id="sF" value="${s.pF}"></div></div>
     <div id="macroInfo" class="small ${tot === 100 ? "muted" : "warn"}" style="margin:10px 2px 0">${macroInfoText(s.pP, s.pC, s.pF, s.kcal)}</div>
+    <div class="muted small" style="margin:16px 2px 0"><b>Weitere Nährstoffe (g pro Tag)</b></div>
+    <div class="grid2"><div><label>Zucker höchstens</label><input type="text" inputmode="decimal" id="sMgS" value="${esc(s.mgS ?? "")}" placeholder="${r0(refs0.s.max)} (Standard)"></div>
+    <div><label>Ballaststoffe mindestens</label><input type="text" inputmode="decimal" id="sMgFi" value="${esc(s.mgFi ?? "")}" placeholder="${r0(refs0.fi.min)} (Standard)"></div></div>
+    <div class="grid2"><div><label>Ges. Fettsäuren höchstens</label><input type="text" inputmode="decimal" id="sMgSa" value="${esc(s.mgSa ?? "")}" placeholder="${r0(refs0.sa.max)} (Standard)"></div>
+    <div><label>Salz höchstens</label><input type="text" inputmode="decimal" id="sMgSl" value="${esc(s.mgSl ?? "")}" placeholder="${r0(refs0.sl.max)} (Standard)"></div></div>
+    <div class="muted tiny" style="margin:6px 2px 0">Leer lassen = Richtwert (Zucker und ges. Fett unter 10 % der Kalorien, Ballaststoffe ab 30 g, Salz bis 6 g). Mit eigenen Werten rechnen Fortschrittsbalken, Hinweise und Export.</div>
     <label>Zielgewicht in kg (optional)</label><input type="text" inputmode="decimal" id="sGoalW" value="${esc(s.goalWeight)}">
     <label class="toggle"><span>Morgens nach Gewicht fragen (ab 6 Uhr)</span><input type="checkbox" id="wGateOn" ${s.weightGate !== false ? "checked" : ""}></label>
     <button class="btn block" style="margin-top:16px" data-act="saveGoals">Ziele speichern</button></div>
@@ -1571,9 +1577,16 @@ function mealToRecipe(meal) {
 }
 
 /* ---------- Nährstoff-Details pro Tag ---------- */
-function microRefs() { const k = D.settings.kcal; return { s: { max: k * 0.10 / 4 }, fi: { min: 30 }, sa: { max: k * 0.10 / 9 }, sl: { max: 6 } }; }
+/* Ziele für weitere Nährstoffe (g pro Tag): eigene Werte aus den Einstellungen (mgS, mgFi, mgSa, mgSl), leer = Richtwert */
+const MG_KEY = { s: "mgS", fi: "mgFi", sa: "mgSa", sl: "mgSl" };
+const microCustom = ek => { const v = num(D.settings[MG_KEY[ek]]); return String(D.settings[MG_KEY[ek]] ?? "").trim() !== "" && v > 0 ? v : null; };
+function microRefs() {
+  const k = D.settings.kcal, c = microCustom;
+  return { s: { max: c("s") || k * 0.10 / 4 }, fi: { min: c("fi") || 30 }, sa: { max: c("sa") || k * 0.10 / 9 }, sl: { max: c("sl") || 6 } };
+}
 function microMissNote(m) { const n = Math.max(...MICRO.map(x => m.miss[x.ek])); return n > 0 ? ` (bei bis zu ${n} Einträgen fehlt die Angabe)` : ""; }
 const MICRO_HINT = { s: "Richtwert: unter 10 % der Kalorien (zählt auch Zucker aus Obst und Milch)", fi: "Richtwert: mindestens 30 g am Tag", sa: "Richtwert: unter 10 % der Kalorien", sl: "Richtwert: höchstens 6 g am Tag" };
+const microHint = ek => { const c = microCustom(ek); return c ? `Dein Ziel: ${ek === "fi" ? "mindestens" : "höchstens"} ${nde(c, 2)} g am Tag (änderbar in den Einstellungen)` : MICRO_HINT[ek]; };
 /* Übersicht der Nährstoffe für eine Liste von Einträgen; dayList = ganzer Tag (für „Anteil am Tag“ bei einer Mahlzeit) */
 function nutrientBody(list, dayList) {
   const t = sum(list), m = microSum(list), refs = microRefs(), dm = dayList ? microSum(dayList) : null;
@@ -1584,7 +1597,7 @@ function nutrientBody(list, dayList) {
     const miss = m.miss[x.ek], share = dm && dm[x.ek] > 0 ? Math.round(v / dm[x.ek] * 100) : null;
     return `<div class="nrow"><div class="row between"><b>${x.name}</b><span><b ${bad ? 'class="warn"' : ""}>${nde(v, 2)} g</b> <span class="muted small">${isMin ? "von mind." : "von max."} ${nde(lim, 0)} g</span></span></div>
       <div class="nbar"><i class="${bad ? "warn" : good ? "good" : ""}" style="width:${pct}%"></i></div>
-      <div class="muted tiny">${dayList ? (share != null ? `${share} % des Tageswerts · ` : "") + (isMin ? "Tagesziel" : "Tageslimit") + " " + nde(lim, 0) + " g" : MICRO_HINT[x.ek]}</div>${top ? `<div class="muted tiny">Meist aus: ${top}</div>` : ""}
+      <div class="muted tiny">${dayList ? (share != null ? `${share} % des Tageswerts · ` : "") + (isMin ? "Tagesziel" : "Tageslimit") + " " + nde(lim, 0) + " g" : microHint(x.ek)}</div>${top ? `<div class="muted tiny">Meist aus: ${top}</div>` : ""}
       ${miss ? `<div class="warn tiny">Für ${miss} von ${list.length} Einträgen ist diese Angabe nicht bekannt.</div><button class="linkbtn" data-miss="${x.ek}">Fehlende ansehen und nachtragen ›</button>` : ""}</div>`;
   }).join("");
   return `<div class="card nsum"><div><b>${fmt(t.kcal)}</b><span class="muted tiny">kcal</span></div><div><b>${r0(t.p)} g</b><span class="muted tiny">Eiweiß</span></div>
@@ -2078,7 +2091,7 @@ function buildReport(from, to) {
   out.push("", "## Tagesziele");
   out.push(`- Kalorien: ${nde(g.kcal, 0)} kcal`);
   out.push(`- Eiweiß: ${nde(g.p, 0)} g (${s.pP} %) · Kohlenhydrate: ${nde(g.c, 0)} g (${s.pC} %) · Fett: ${nde(g.f, 0)} g (${s.pF} %)`);
-  { const rf = microRefs(); out.push(`- Richtwerte (Orientierung): Zucker unter ${nde(rf.s.max, 0)} g · Ballaststoffe mindestens ${nde(rf.fi.min, 0)} g · gesättigte Fettsäuren unter ${nde(rf.sa.max, 0)} g · Salz höchstens ${nde(rf.sl.max, 0)} g pro Tag`); }
+  { const rf = microRefs(); out.push(`- ${MICRO.some(m => microCustom(m.ek)) ? "Eigene Ziele/Richtwerte" : "Richtwerte (Orientierung)"}: Zucker unter ${nde(rf.s.max, 0)} g · Ballaststoffe mindestens ${nde(rf.fi.min, 0)} g · gesättigte Fettsäuren unter ${nde(rf.sa.max, 0)} g · Salz höchstens ${nde(rf.sl.max, 0)} g pro Tag`); }
   if (s.goalWeight) out.push(`- Zielgewicht: ${s.goalWeight} kg`);
   if (days.length > 1) {
     const a = sum(logged.flatMap(r => r.es)), L = logged.length || 1;
@@ -2503,7 +2516,12 @@ document.addEventListener("click", async ev => {
     const k = num($("#sKcal").value), p = r0(num($("#sP").value)), c = r0(num($("#sC").value)), f = r0(num($("#sF").value));
     if (k < 800 || k > 8000) return toast("Kalorienziel zwischen 800 und 8000");
     if (p + c + f !== 100) return toast("Prozentwerte müssen 100 % ergeben");
-    Object.assign(D.settings, { kcal: r0(k), pP: p, pC: c, pF: f, goalWeight: $("#sGoalW").value.trim() ? String(num($("#sGoalW").value)) : "" });
+    const mg = {}; for (const [id, key, nm] of [["sMgS", "mgS", "Zucker"], ["sMgFi", "mgFi", "Ballaststoffe"], ["sMgSa", "mgSa", "Ges. Fettsäuren"], ["sMgSl", "mgSl", "Salz"]]) {
+      const raw = $("#" + id).value.trim(), v = num(raw);
+      if (raw !== "" && !(v > 0 && v <= 1000)) return toast(nm + ": Zahl zwischen 0 und 1000 g oder leer lassen");
+      mg[key] = raw === "" ? "" : String(Math.round(v * 100) / 100);
+    }
+    Object.assign(D.settings, { kcal: r0(k), pP: p, pC: c, pF: f, goalWeight: $("#sGoalW").value.trim() ? String(num($("#sGoalW").value)) : "" }, mg);
     save(); render(); toast("Ziele gespeichert");
   }
   else if (a === "mode") { D.settings.mode = t.dataset.v; save(); applyTheme(); render(); }
