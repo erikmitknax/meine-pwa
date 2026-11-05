@@ -113,6 +113,13 @@ for i in range(1, 6):
         android:gravity="center_vertical"
         android:orientation="horizontal">
         <TextView
+            android:id="@+id/d%d"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:paddingRight="8dp"
+            android:text="\u25cf"
+            android:textSize="14sp" />
+        <TextView
             android:id="@+id/t%d"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
@@ -134,7 +141,7 @@ for i in range(1, 6):
             android:textSize="22sp"
             android:textStyle="bold" />
     </LinearLayout>
-""" % (i, i, i)
+""" % (i, i, i, i)
 
 write_res('layout', 'aufgaben_widget.xml', """<?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
@@ -167,6 +174,47 @@ write_res('layout', 'aufgaben_widget.xml', """<?xml version="1.0" encoding="utf-
         android:paddingTop="4dp"
         android:textColor="#9FA39B"
         android:textSize="12sp" />
+</LinearLayout>
+""")
+
+write_res('layout', 'aufgaben_notif.xml', """<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/nroot"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:gravity="center_vertical"
+    android:orientation="horizontal"
+    android:padding="12dp">
+    <LinearLayout
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:orientation="vertical">
+        <TextView
+            android:id="@+id/ntitle"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:ellipsize="end"
+            android:maxLines="2"
+            android:textSize="15sp"
+            android:textStyle="bold" />
+        <TextView
+            android:id="@+id/nsub"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Offen"
+            android:textSize="12sp" />
+    </LinearLayout>
+    <TextView
+        android:id="@+id/ndone"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:paddingBottom="8dp"
+        android:paddingLeft="14dp"
+        android:paddingTop="8dp"
+        android:text="\u2713 Erledigt"
+        android:textSize="15sp"
+        android:textStyle="bold" />
 </LinearLayout>
 """)
 
@@ -355,8 +403,10 @@ import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.content.Context;
 import android.content.Intent;
+import android.graphics.Color;
 import android.graphics.drawable.Icon;
 import android.service.notification.StatusBarNotification;
+import android.widget.RemoteViews;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -393,13 +443,9 @@ final class Notifier {
         return receiverIntent(c, ACT_DONE, id, 0);
     }
 
-    /** Zeigt die Benachrichtigung: lautlos, "laufend", mit Erledigt-Knopf. */
-    static void show(Context c, String id, String title) {
+    /** Zeigt die Benachrichtigung: lautlos, "laufend". Mit Kategorie ist der Inhalt komplett in deren Farbe. */
+    static void show(Context c, String id, String title, String colorHex) {
         ensureChannel(c);
-        Notification.Action done = new Notification.Action.Builder(
-                Icon.createWithResource(c, android.R.drawable.checkbox_on_background),
-                "Erledigt",
-                doneIntent(c, id)).build();
 
         PendingIntent open = null;
         Intent launch = c.getPackageManager().getLaunchIntentForPackage(c.getPackageName());
@@ -410,13 +456,45 @@ final class Notifier {
         Notification.Builder b = new Notification.Builder(c, CHANNEL)
                 .setSmallIcon(android.R.drawable.ic_menu_agenda)
                 .setContentTitle(title)
-                .setContentText("Offen – mit „Erledigt“ abhaken")
+                .setContentText("Offen \u2013 mit \u201eErledigt\u201c abhaken")
                 .setCategory(Notification.CATEGORY_REMINDER)
                 .setOngoing(true)
                 .setOnlyAlertOnce(true)
                 .setVisibility(Notification.VISIBILITY_PUBLIC)
-                .setDeleteIntent(receiverIntent(c, ACT_DISMISSED, id, 1))
-                .addAction(done);
+                .setDeleteIntent(receiverIntent(c, ACT_DISMISSED, id, 1));
+
+        int color = 0;
+        boolean colored = false;
+        if (colorHex != null && !colorHex.isEmpty()) {
+            try {
+                color = Color.parseColor(colorHex);
+                colored = true;
+            } catch (Exception ignored) {
+                colored = false;
+            }
+        }
+
+        if (colored) {
+            double lum = (0.299 * Color.red(color) + 0.587 * Color.green(color) + 0.114 * Color.blue(color)) / 255.0;
+            int tx = lum > 0.6 ? 0xFF111111 : 0xFFFFFFFF;
+            RemoteViews rv = new RemoteViews(c.getPackageName(), R.layout.aufgaben_notif);
+            rv.setInt(R.id.nroot, "setBackgroundColor", color);
+            rv.setTextViewText(R.id.ntitle, title);
+            rv.setTextColor(R.id.ntitle, tx);
+            rv.setTextColor(R.id.nsub, tx);
+            rv.setTextColor(R.id.ndone, tx);
+            rv.setOnClickPendingIntent(R.id.ndone, doneIntent(c, id));
+            b.setColor(color)
+                    .setColorized(true)
+                    .setStyle(new Notification.DecoratedCustomViewStyle())
+                    .setCustomContentView(rv);
+        } else {
+            Notification.Action done = new Notification.Action.Builder(
+                    Icon.createWithResource(c, android.R.drawable.checkbox_on_background),
+                    "Erledigt",
+                    doneIntent(c, id)).build();
+            b.addAction(done);
+        }
         if (open != null) b.setContentIntent(open);
 
         c.getSystemService(NotificationManager.class).notify(nid(id), b.build());
@@ -452,7 +530,7 @@ final class Notifier {
             if (t == null) continue;
             String id = t.optString("id");
             long at = Math.max(t.optLong("due", 0), t.optLong("next", 0));
-            if (at <= now) show(c, id, t.optString("title")); else schedule(c, id, at);
+            if (at <= now) show(c, id, t.optString("title"), t.optString("color", "")); else schedule(c, id, at);
         }
         AufgabenWidget.refreshAll(c);
     }
@@ -498,8 +576,11 @@ public class AufgabenReceiver extends BroadcastReceiver {
             }
         } else if (Notifier.ACT_DISMISSED.equals(action)) {
             // Weggewischt: in 15 Minuten wieder anzeigen, falls noch offen
-            if (NStore.find(c, id) != null) {
-                long next = System.currentTimeMillis() + NStore.repeatMs(c);
+            JSONObject cur = NStore.find(c, id);
+            if (cur != null) {
+                // Eigene Zeit der Aufgabe, sonst die Einstellung fuer alle
+                long own = cur.optLong("snooze", 0) * 60000L;
+                long next = System.currentTimeMillis() + (own >= 60000L ? own : NStore.repeatMs(c));
                 NStore.setNext(c, id, next);
                 Notifier.schedule(c, id, next);
             }
@@ -507,7 +588,7 @@ public class AufgabenReceiver extends BroadcastReceiver {
             JSONObject t = NStore.find(c, id);
             if (t != null) {
                 NStore.setNext(c, id, 0);
-                Notifier.show(c, id, t.optString("title"));
+                Notifier.show(c, id, t.optString("title"), t.optString("color", ""));
             }
         }
         AufgabenWidget.refreshAll(c);
@@ -523,6 +604,7 @@ import android.appwidget.AppWidgetProvider;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
+import android.graphics.Color;
 import android.view.View;
 import android.widget.RemoteViews;
 
@@ -568,6 +650,7 @@ public class AufgabenWidget extends AppWidgetProvider {
         final int[] rows = {R.id.row1, R.id.row2, R.id.row3, R.id.row4, R.id.row5};
         final int[] titles = {R.id.t1, R.id.t2, R.id.t3, R.id.t4, R.id.t5};
         final int[] checks = {R.id.c1, R.id.c2, R.id.c3, R.id.c4, R.id.c5};
+        final int[] dots = {R.id.d1, R.id.d2, R.id.d3, R.id.d4, R.id.d5};
 
         List<JSONObject> list = new ArrayList<>();
         JSONArray a = NStore.tasks(c);
@@ -591,6 +674,21 @@ public class AufgabenWidget extends AppWidgetProvider {
                 String label = t.optString("title") + (due > now ? "  · " + when(due, now) : "");
                 v.setViewVisibility(rows[i], View.VISIBLE);
                 v.setTextViewText(titles[i], label);
+                int dotColor = 0;
+                try {
+                    String col = t.optString("color", "");
+                    if (!col.isEmpty()) dotColor = Color.parseColor(col);
+                } catch (Exception ignored) {
+                    dotColor = 0;
+                }
+                if (dotColor != 0) {
+                    double lum = (0.299 * Color.red(dotColor) + 0.587 * Color.green(dotColor) + 0.114 * Color.blue(dotColor)) / 255.0;
+                    v.setViewVisibility(dots[i], View.VISIBLE);
+                    // Schwarz waere auf dem dunklen Widget unsichtbar: dann hellgrau
+                    v.setTextColor(dots[i], lum < 0.25 ? 0xFF8A8A8A : dotColor);
+                } else {
+                    v.setViewVisibility(dots[i], View.GONE);
+                }
                 v.setOnClickPendingIntent(checks[i], Notifier.doneIntent(c, id));
             } else {
                 v.setViewVisibility(rows[i], View.GONE);
@@ -689,11 +787,13 @@ public class AufgabenPlugin extends Plugin {
                 o.put("title", t.optString("title"));
                 o.put("due", t.optLong("due"));
                 o.put("rep", t.optString("rep", ""));
+                o.put("color", t.optString("color", ""));
+                o.put("snooze", t.optLong("snooze", 0));
                 long due = t.optLong("due");
                 // Wurde der Termin geaendert, gilt die Wegwisch-Pause nicht mehr
                 boolean sameDue = prev != null && prev.optLong("due") == due;
                 o.put("next", sameDue ? prev.optLong("next", 0) : 0L);
-                if (prev != null && !prev.optString("title").equals(t.optString("title"))) titleChanged.add(id);
+                if (prev != null && (!prev.optString("title").equals(t.optString("title")) || !prev.optString("color", "").equals(t.optString("color", "")))) titleChanged.add(id);
                 fresh.put(o);
                 keep.add(id);
             }
@@ -713,7 +813,7 @@ public class AufgabenPlugin extends Plugin {
                 String id = o.getString("id");
                 long at = Math.max(o.optLong("due"), o.optLong("next"));
                 if (at <= now) {
-                    if (!Notifier.isShown(c, id) || titleChanged.contains(id)) Notifier.show(c, id, o.optString("title"));
+                    if (!Notifier.isShown(c, id) || titleChanged.contains(id)) Notifier.show(c, id, o.optString("title"), o.optString("color", ""));
                 } else {
                     Notifier.cancelNotification(c, id);
                     Notifier.schedule(c, id, at);

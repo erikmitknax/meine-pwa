@@ -1,7 +1,7 @@
 /* Aufgaben – Konto & Abgleich zwischen Geräten (Firebase: Anmeldung + Firestore, kostenloser Spark-Tarif).
    Gleiches Firebase-Projekt und gleiches Konto wie FoodPro, Wunschliste und Lernwerkstatt.
    Klassisches Skript: teilt sich den Scope mit app.js (render, tick …). Lokal zuerst: alles liegt im Gerät,
-   Firebase gleicht nur ab. Dokumente unter users/<uid>/au_tasks/<id> = { d: { title, due, rep, done, prevDue }, u: Zeitstempel, del }.
+   Firebase gleicht nur ab. Dokumente unter users/<uid>/au_tasks/<id> = { d: { title, due, rep, done, prevDue, cat, snooze, delAt, delWhy }, u: Zeitstempel, del }.
    Letzte Änderung gewinnt. Die bestehenden Firestore-Regeln (users/{uid}/**) gelten auch hierfür. */
 const SY_V = "10.14.1";
 /* Öffentliche Web-Konfiguration des Firebase-Projekts (kein Geheimnis – geschützt wird über Anmeldung + Firestore-Regeln). */
@@ -67,7 +67,7 @@ async function syApply(changes) {
     const local = await getTask(id);
     if (local && (local.u || 0) >= d.u) continue;
     const due = Number(d.d.due) || Date.now();
-    await putTask({ id, title: String(d.d.title || ""), due, rep: String(d.d.rep || ""), done: Number(d.d.done) || undefined, prevDue: Number(d.d.prevDue) || undefined, nextShow: local ? local.nextShow : due, u: d.u, del: !!d.del, dirty: false });
+    await putTask({ id, title: String(d.d.title || ""), due, rep: String(d.d.rep || ""), done: Number(d.d.done) || undefined, prevDue: Number(d.d.prevDue) || undefined, cat: String(d.d.cat || ""), snooze: Number(d.d.snooze) || 0, delAt: Number(d.d.delAt) || undefined, delWhy: d.d.delWhy ? String(d.d.delWhy) : undefined, nextShow: local ? local.nextShow : due, u: d.u, del: !!d.del, dirty: false });
     changed = true;
   }
   if (changed) { await render(); await tick(); }
@@ -85,7 +85,7 @@ async function syPush() {
     const { fs, db } = SY.fb;
     const dirty = (await allTasks()).filter(t => t.dirty);
     for (const t of dirty) {
-      await syTimeout(fs.setDoc(fs.doc(db, "users", SY.user.uid, "au_tasks", t.id), { d: { title: t.title, due: t.due, rep: t.rep || "", done: t.done || 0, prevDue: t.prevDue || 0 }, u: t.u, del: !!t.del }), 15000);
+      await syTimeout(fs.setDoc(fs.doc(db, "users", SY.user.uid, "au_tasks", t.id), { d: { title: t.title, due: t.due, rep: t.rep || "", done: t.done || 0, prevDue: t.prevDue || 0, cat: t.cat || "", snooze: t.snooze || 0, delAt: t.delAt || 0, delWhy: t.delWhy || "" }, u: t.u, del: !!t.del }), 15000);
       const cur = await getTask(t.id);
       if (cur && cur.u === t.u) { cur.dirty = false; await putTask(cur); }
     }

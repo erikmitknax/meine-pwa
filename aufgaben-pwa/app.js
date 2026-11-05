@@ -20,6 +20,73 @@ function fmt(ms) {
 
 var REPS = { daily: 'täglich', weekdays: 'Mo–Fr', weekly: 'wöchentlich', monthly: 'monatlich' };
 var editId = null;
+var selCat = '';
+var delArmed = null;
+
+function catNames() {
+  try { return JSON.parse(localStorage.getItem('aufgaben.catnames') || '{}') || {}; } catch (e) { return {}; }
+}
+function catName(k) { return catNames()[k] || CATS[k].n; }
+
+function setCat(k) {
+  selCat = k || '';
+  Array.prototype.forEach.call($('chips').children, function (b) { b.classList.toggle('sel', b.dataset.cat === selCat); });
+}
+
+function renderChips() {
+  var box = $('chips');
+  box.textContent = '';
+  var none = document.createElement('button');
+  none.type = 'button';
+  none.className = 'chip none';
+  none.textContent = 'Keine';
+  none.dataset.cat = '';
+  none.onclick = function () { setCat(''); };
+  box.append(none);
+  Object.keys(CATS).forEach(function (k) {
+    var b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'chip';
+    b.dataset.cat = k;
+    b.style.background = CATS[k].c;
+    b.title = catName(k);
+    b.setAttribute('aria-label', catName(k));
+    b.onclick = function () { setCat(k); };
+    box.append(b);
+  });
+  setCat(selCat);
+}
+
+function renderCatSettings() {
+  var box = $('catNames');
+  box.textContent = '';
+  Object.keys(CATS).forEach(function (k) {
+    var row = document.createElement('div');
+    row.className = 'catrow';
+    var dot = document.createElement('span');
+    dot.className = 'dot';
+    dot.style.background = CATS[k].c;
+    var inp = document.createElement('input');
+    inp.value = catNames()[k] || '';
+    inp.placeholder = CATS[k].n;
+    inp.maxLength = 20;
+    inp.addEventListener('change', function () {
+      var n = catNames(), v = inp.value.trim();
+      if (v) n[k] = v; else delete n[k];
+      try { localStorage.setItem('aufgaben.catnames', JSON.stringify(n)); } catch (e) { /* egal */ }
+      renderChips();
+      render();
+    });
+    row.append(dot, inp);
+    box.append(row);
+  });
+}
+
+function resetDel() {
+  clearTimeout(delArmed);
+  delArmed = null;
+  $('delBtn').textContent = 'Löschen';
+}
 
 function toLocalInput(ms) {
   var d = new Date(ms);
@@ -38,8 +105,12 @@ function startEdit(t) {
   $('title').value = t.title;
   $('due').value = toLocalInput(t.due);
   $('rep').value = t.rep || '';
+  setCat(t.cat || '');
+  $('snoozeSel').value = String(t.snooze || 0);
   $('saveBtn').textContent = 'Speichern';
   $('cancelEdit').hidden = false;
+  $('delBtn').hidden = false;
+  resetDel();
   window.scrollTo(0, 0);
   $('title').focus();
 }
@@ -49,8 +120,12 @@ function stopEdit() {
   $('title').value = '';
   $('due').value = '';
   $('rep').value = '';
+  setCat('');
+  $('snoozeSel').value = '0';
   $('saveBtn').textContent = 'Hinzufügen';
   $('cancelEdit').hidden = true;
+  $('delBtn').hidden = true;
+  resetDel();
 }
 
 function needsPermission() {
@@ -75,11 +150,12 @@ async function render() {
   $('empty').hidden = tasks.length > 0;
   tasks.forEach(function (t) {
     var li = document.createElement('li');
+    if (t.cat && CATS[t.cat]) li.style.borderLeft = '6px solid ' + CATS[t.cat].c;
     var box = document.createElement('div');
     var title = document.createElement('span');
     title.textContent = t.title;
     var when = document.createElement('small');
-    when.textContent = fmt(t.due) + (t.due <= now ? ' · fällig' : '') + (t.rep ? ' · ' + REPS[t.rep] : '');
+    when.textContent = fmt(t.due) + (t.due <= now ? ' · fällig' : '') + (t.rep ? ' · ' + REPS[t.rep] : '') + (t.cat && CATS[t.cat] ? ' · ' + catName(t.cat) : '') + (t.snooze ? ' · wieder nach ' + t.snooze + ' Min' : '');
     box.append(title, when);
     var acts = document.createElement('div');
     acts.className = 'acts';
@@ -102,6 +178,7 @@ async function render() {
   $('doneH').hidden = doneList.length === 0;
   doneList.forEach(function (t) {
     var li = document.createElement('li');
+    if (t.cat && CATS[t.cat]) li.style.borderLeft = '6px solid ' + CATS[t.cat].c;
     var box = document.createElement('div');
     var title = document.createElement('span');
     title.textContent = t.title;
@@ -124,7 +201,36 @@ async function render() {
     li.append(box, acts);
     dl.append(li);
   });
+  await renderTrash();
   $('perm').hidden = !needsPermission();
+}
+
+async function renderTrash() {
+  var del = await deletedTasks();
+  $('trash').hidden = del.length === 0;
+  $('trashSum').textContent = 'Papierkorb (' + del.length + ')';
+  var tl = $('trashList');
+  tl.textContent = '';
+  del.forEach(function (t) {
+    var li = document.createElement('li');
+    if (t.cat && CATS[t.cat]) li.style.borderLeft = '6px solid ' + CATS[t.cat].c;
+    var box = document.createElement('div');
+    var title = document.createElement('span');
+    title.textContent = t.title;
+    var when = document.createElement('small');
+    when.textContent = (t.delWhy === 'gelöscht' ? '🗑 gelöscht ' : '✓ erledigt ') + fmtDone(t.delAt || t.u || Date.now()) + (t.rep ? ' · ' + REPS[t.rep] : '');
+    box.append(title, when);
+    var acts = document.createElement('div');
+    acts.className = 'acts';
+    var back = document.createElement('button');
+    back.className = 'ghost';
+    back.textContent = '↩';
+    back.setAttribute('aria-label', 'Zurückholen');
+    back.onclick = async function () { await restoreTask(t.id); await render(); await tick(); pushSoon(); };
+    acts.append(back);
+    li.append(box, acts);
+    tl.append(li);
+  });
 }
 
 function pushSoon() { if (window.syPush) window.syPush(); }
@@ -146,7 +252,7 @@ async function nativeTick() {
     var items = (done && done.items) || [];
     for (var i = 0; i < items.length; i++) await completeTask(items[i].id, items[i].ts, items[i].due);
     if (items.length) { await render(); pushSoon(); }
-    var list = (await openTasks()).map(function (t) { return { id: t.id, title: t.title, due: t.due, rep: t.rep || '' }; });
+    var list = (await openTasks()).map(function (t) { return { id: t.id, title: t.title, due: t.due, rep: t.rep || '', color: t.cat && CATS[t.cat] ? CATS[t.cat].c : '', snooze: t.snooze || 0 }; });
     var key = JSON.stringify(list) + '|' + repeatMs;
     if (key !== nativeSent) {
       await NATIVE.setTasks({ tasks: list, repeatMs: repeatMs });
@@ -170,11 +276,12 @@ $('f').addEventListener('submit', async function (ev) {
   var v = $('due').value;
   var due = v ? new Date(v).getTime() : Date.now();
   var rep = $('rep').value;
+  var snooze = Number($('snoozeSel').value) || 0;
   if (editId) {
-    await updateTask(editId, title, due, rep);
+    await updateTask(editId, title, due, rep, selCat, snooze);
     await closeNotif(editId);
   } else {
-    await newTask(title, due, rep);
+    await newTask(title, due, rep, selCat, snooze);
   }
   stopEdit();
   await render();
@@ -183,6 +290,24 @@ $('f').addEventListener('submit', async function (ev) {
 });
 
 $('cancelEdit').addEventListener('click', stopEdit);
+
+/* Löschen: erst tippen, dann zur Sicherheit noch einmal. */
+$('delBtn').addEventListener('click', async function () {
+  if (!editId) return;
+  if (!delArmed) {
+    $('delBtn').textContent = 'Wirklich löschen? Nochmal tippen';
+    delArmed = setTimeout(resetDel, 4000);
+    return;
+  }
+  var id = editId;
+  resetDel();
+  await deleteTask(id);
+  await closeNotif(id);
+  stopEdit();
+  await render();
+  await tick();
+  pushSoon();
+});
 
 $('repeatSel').addEventListener('change', async function () {
   repeatMs = Number($('repeatSel').value) * 60000;
@@ -220,6 +345,8 @@ async function registerPeriodic() {
       }
     } catch (e) { /* ohne Service Worker weiter */ }
   }
+  renderChips();
+  renderCatSettings();
   try { repeatMs = await getRepeatMs(); } catch (e) { /* Standard */ }
   $('repeatSel').value = String(Math.round(repeatMs / 60000));
   await render();

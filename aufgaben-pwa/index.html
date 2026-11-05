@@ -47,6 +47,15 @@ button.link { background: none; color: var(--accent); padding: 4px 0; text-align
 .status.err { color: #b3372b; font-size: 14px; }
 @media (prefers-color-scheme: dark) { .status.err { color: #ef7a6c; } }
 .hint { color: var(--muted); font-size: 13px; margin-top: 20px; }
+.chips { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+.chip { width: 34px; height: 34px; border-radius: 50%; padding: 0; border: 2px solid var(--line); }
+.chip.none { width: auto; padding: 0 12px; border-radius: 17px; background: transparent; color: var(--muted); font-size: 14px; }
+.chip.sel { outline: 3px solid var(--fg); outline-offset: 2px; }
+button.danger { color: #b3372b; border-color: #b3372b; }
+@media (prefers-color-scheme: dark) { button.danger { color: #ef7a6c; border-color: #ef7a6c; } }
+.catrow { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+.dot { width: 18px; height: 18px; border-radius: 50%; flex-shrink: 0; border: 1px solid var(--line); }
+.trashList li { opacity: .8; }
 </style>
 </head>
 <body>
@@ -72,10 +81,24 @@ button.link { background: none; color: var(--accent); padding: 4px 0; text-align
         <option value="monthly">Monatlich</option>
       </select>
     </label>
+    <label>Farbe / Kategorie (so sieht die Benachrichtigung aus)
+      <div class="chips" id="chips"></div>
+    </label>
+    <label>Wiederkommen nach dem Wegwischen (nur diese Aufgabe)
+      <select id="snoozeSel">
+        <option value="0">Standard (aus den Einstellungen)</option>
+        <option value="5">5 Minuten</option>
+        <option value="10">10 Minuten</option>
+        <option value="15">15 Minuten</option>
+        <option value="30">30 Minuten</option>
+        <option value="60">1 Stunde</option>
+      </select>
+    </label>
     <div class="row">
       <button type="submit" id="saveBtn">Hinzufügen</button>
       <button type="button" id="cancelEdit" class="ghost" hidden>Abbrechen</button>
     </div>
+    <button type="button" id="delBtn" class="ghost danger" hidden>Löschen</button>
   </form>
 
   <ul id="list"></ul>
@@ -83,6 +106,12 @@ button.link { background: none; color: var(--accent); padding: 4px 0; text-align
 
   <h2 id="doneH" hidden>Erledigt</h2>
   <ul id="doneList" class="doneList"></ul>
+
+  <details id="trash" hidden>
+    <summary id="trashSum">Papierkorb</summary>
+    <p class="hint" style="margin-top:8px">Erledigte und gelöschte Aufgaben. Mit ↩ holst du eine zurück.</p>
+    <ul id="trashList" class="trashList" style="margin-top:10px"></ul>
+  </details>
 
   <details id="opts">
     <summary>Einstellungen</summary>
@@ -95,6 +124,10 @@ button.link { background: none; color: var(--accent); padding: 4px 0; text-align
         <option value="60">1 Stunde</option>
       </select>
     </label>
+    <div style="margin-top:16px"><strong>Namen der Farben</strong>
+      <div id="catNames"></div>
+      <p class="hint" style="margin-top:8px">Zum Beispiel Rot = Medikamente. Gilt für dieses Gerät.</p>
+    </div>
     <p class="hint" style="margin-top:8px">Gilt für dieses Gerät. Solange die Benachrichtigung sichtbar ist, kommt nichts doppelt. Android kann die Wiederkehr im Energiesparmodus um einige Minuten verzögern.</p>
   </details>
 

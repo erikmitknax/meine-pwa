@@ -1,7 +1,7 @@
 /* Aufgaben Service Worker: Offline-Cache und Benachrichtigungen. */
 importScripts('store.js');
 
-const CACHE = 'aufgaben-v5';
+const CACHE = 'aufgaben-v6';
 const FILES = ['./', './index.html', './app.js', './store.js', './sync.js', './manifest.webmanifest', './icons/icon-192.png', './icons/icon-512.png', './icons/icon-maskable-512.png'];
 
 self.addEventListener('install', e => {
@@ -46,7 +46,8 @@ self.addEventListener('notificationclose', e => {
   e.waitUntil((async () => {
     const t = await getTask(id);
     if (t) {
-      t.nextShow = Date.now() + (await getRepeatMs());
+      const own = (t.snooze || 0) * 60000;
+      t.nextShow = Date.now() + (own >= 60000 ? own : await getRepeatMs());
       await putTask(t);
     }
   })());

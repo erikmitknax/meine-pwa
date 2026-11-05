@@ -5,6 +5,16 @@
 var FAR = Number.MAX_SAFE_INTEGER;
 var REPEAT_MS = 15 * 60 * 1000;
 
+/* Farb-Kategorien. c = Farbe, e = Symbol für die Browser-Benachrichtigung (die dort keine Farbe kennt). */
+var CATS = {
+  red:    { n: 'Rot',     c: '#D32F2F', e: '\uD83D\uDD34' },
+  blue:   { n: 'Blau',    c: '#1976D2', e: '\uD83D\uDD35' },
+  green:  { n: 'Grün',    c: '#2E7D32', e: '\uD83D\uDFE2' },
+  yellow: { n: 'Gelb',    c: '#FBC02D', e: '\uD83D\uDFE1' },
+  black:  { n: 'Schwarz', c: '#111111', e: '\u26AB' },
+  white:  { n: 'Weiß',    c: '#FFFFFF', e: '\u26AA' }
+};
+
 function openDb() {
   return new Promise(function (res, rej) {
     var r = indexedDB.open('aufgaben', 1);
@@ -71,19 +81,21 @@ function nextOccurrence(due, rep, now) {
 }
 
 /* Neue Aufgabe lokal anlegen. */
-function newTask(title, due, rep) {
+function newTask(title, due, rep, cat, snooze) {
   var now = Date.now();
-  var t = { id: now.toString(36) + Math.random().toString(36).slice(2, 6), title: title, due: due, rep: rep || '', nextShow: due, u: now, del: false, dirty: true };
+  var t = { id: now.toString(36) + Math.random().toString(36).slice(2, 6), title: title, due: due, rep: rep || '', cat: cat || '', snooze: snooze || 0, nextShow: due, u: now, del: false, dirty: true };
   return putTask(t).then(function () { return t; });
 }
 
 /* Bestehende Aufgabe ändern. */
-async function updateTask(id, title, due, rep) {
+async function updateTask(id, title, due, rep, cat, snooze) {
   var t = await getTask(id);
   if (!t || t.del) return;
   t.title = title;
   t.due = due;
   t.rep = rep || '';
+  t.cat = cat || '';
+  t.snooze = snooze || 0;
   t.nextShow = due;
   delete t.done;
   delete t.prevDue;
@@ -105,6 +117,8 @@ async function completeTask(id, ts, newDue) {
     t.nextShow = t.due;
   } else {
     t.del = true;
+    t.delAt = ts || Date.now();
+    t.delWhy = 'erledigt';
   }
   t.u = Math.max(Date.now(), (t.u || 0) + 1);
   t.dirty = true;
@@ -129,9 +143,45 @@ async function undoTask(id) {
   await putTask(t);
 }
 
+/* Aufgabe löschen (auch Wiederholungen): kommt nie wieder, liegt aber im Papierkorb. */
+async function deleteTask(id) {
+  var t = await getTask(id);
+  if (!t || t.del) return;
+  t.del = true;
+  t.delAt = Date.now();
+  t.delWhy = 'gelöscht';
+  t.u = Math.max(Date.now(), (t.u || 0) + 1);
+  t.dirty = true;
+  await putTask(t);
+}
+
+/* Aus dem Papierkorb zurückholen. Abgelaufene Termine rücken vor (Wiederholung) bzw. werden "jetzt". */
+async function restoreTask(id) {
+  var t = await getTask(id);
+  if (!t || !t.del) return;
+  var now = Date.now();
+  t.del = false;
+  delete t.delAt;
+  delete t.delWhy;
+  delete t.done;
+  delete t.prevDue;
+  if (t.due <= now) t.due = t.rep ? nextOccurrence(t.due, t.rep, now) : now;
+  t.nextShow = t.due;
+  t.u = Math.max(now, (t.u || 0) + 1);
+  t.dirty = true;
+  await putTask(t);
+}
+
+/* Papierkorb: erledigte und gelöschte Aufgaben, neueste zuerst (höchstens 50). */
+async function deletedTasks() {
+  var list = (await allTasks()).filter(function (t) { return t.del && t.title; });
+  list.sort(function (a, b) { return (b.delAt || b.u || 0) - (a.delAt || a.u || 0); });
+  return list.slice(0, 50);
+}
+
 /* Zeigt eine lautlose Benachrichtigung, die stehen bleibt, bis man sie abhakt. */
 function showTask(reg, t) {
-  return reg.showNotification(t.title, {
+  return reg.showNotification((t.cat && CATS[t.cat] ? CATS[t.cat].e + ' ' : '') + t.title, {
     body: 'Offen – mit „Erledigt“ abhaken',
     tag: 'task-' + t.id,
     requireInteraction: true,
