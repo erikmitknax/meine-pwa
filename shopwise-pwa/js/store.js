@@ -105,6 +105,15 @@ export function toggleItem(listId, itemId) {
   });
 }
 
+// Artikel nachträglich ändern (Name, Menge)
+export function updateItem(listId, itemId, fields) {
+  if (fields.name) recordHistory(fields.name, fields.qty || '');
+  return updateList(listId, (l) => {
+    const it = l.items.find((x) => x.id === itemId);
+    if (it) Object.assign(it, fields);
+  });
+}
+
 export function removeItem(listId, itemId) {
   return updateList(listId, (l) => { l.items = l.items.filter((x) => x.id !== itemId); });
 }

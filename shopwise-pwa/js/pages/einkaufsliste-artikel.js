@@ -1,6 +1,7 @@
 // Artikel einer Einkaufsliste (Hinzufügen, Abhaken, Löschen) – wird direkt in der aufgeklappten Liste angezeigt.
-import { getList, addItem, toggleItem, removeItem, clearChecked, loadHistory, forgetHistory, loadStock, loadWatch } from '../store.js';
+import { getList, addItem, updateItem, toggleItem, removeItem, clearChecked, loadHistory, forgetHistory, loadStock, loadWatch } from '../store.js';
 import { norm } from '../angebote-logik.js';
+import { uiIcon } from '../icons.js';
 import { h } from '../dom.js';
 
 // onChange wird nach jeder Änderung aufgerufen (z. B. um die Zusammenfassung in der Kopfzeile zu aktualisieren).
@@ -98,6 +99,44 @@ export function mountItems(container, listId, onChange = () => {}) {
     onChange();
   });
 
+  // Dialog: Name und Menge eines Artikels ändern
+  function openEdit(item) {
+    const dialog = h('dialog', 'dialog');
+    const form = h('form');
+    form.method = 'dialog';
+    form.appendChild(h('h2', '', 'Artikel bearbeiten'));
+    const n = h('input');
+    n.type = 'text'; n.required = true; n.maxLength = 60; n.autocomplete = 'off'; n.value = item.name;
+    const nl = h('label', 'field');
+    nl.append(h('span', 'field-label', 'Name'), n);
+    const q = h('input');
+    q.type = 'text'; q.maxLength = 12; q.autocomplete = 'off'; q.placeholder = 'z. B. 2 Stk'; q.value = item.qty || '';
+    const ql = h('label', 'field');
+    ql.append(h('span', 'field-label', 'Menge (optional)'), q);
+    form.append(nl, ql);
+    const actions = h('div', 'dialog-actions');
+    const cancel = h('button', 'btn btn-ghost', 'Abbrechen');
+    cancel.type = 'button';
+    cancel.addEventListener('click', () => dialog.close());
+    const ok = h('button', 'btn btn-gold', 'Speichern');
+    ok.type = 'submit';
+    actions.append(cancel, ok);
+    form.appendChild(actions);
+    form.addEventListener('submit', () => {
+      const name2 = n.value.trim();
+      if (!name2) return;
+      updateItem(listId, item.id, { name: name2, qty: q.value.trim() });
+      draw();
+      onChange();
+    });
+    dialog.appendChild(form);
+    dialog.addEventListener('close', () => dialog.remove());
+    document.body.appendChild(dialog);
+    dialog.showModal();
+    n.focus();
+    n.select();
+  }
+
   function row(item) {
     const li = h('div', `item${item.checked ? ' done' : ''}`);
 
@@ -110,6 +149,13 @@ export function mountItems(container, listId, onChange = () => {}) {
     if (item.qty) main.appendChild(h('span', 'item-qty', item.qty));
     main.addEventListener('click', () => { toggleItem(listId, item.id); draw(); onChange(); });
     li.appendChild(main);
+
+    const edit = h('button', 'icon-btn');
+    edit.type = 'button';
+    edit.appendChild(uiIcon('pencil'));
+    edit.setAttribute('aria-label', `${item.name} bearbeiten`);
+    edit.addEventListener('click', () => openEdit(item));
+    li.appendChild(edit);
 
     const del = h('button', 'icon-btn', '✕');
     del.type = 'button';
