@@ -528,6 +528,7 @@ function viewWeek() {
   <div class="row" style="gap:8px;flex-wrap:wrap;margin:-6px 0 14px">${[["Diese Woche", "w"], ["Dieser Monat", "m"], ["Letzte 14 Tage", "14"], ["Dieses Jahr", "y"]].map(([l, k]) => `<button class="tcchip" data-act="cpreset" data-k="${k}">${l}</button>`).join("")}</div>` : ""}
   ${logged.length ? `<div class="bignum"><b>${fmt(avgK)}</b><span>kcal pro Tag</span><span class="pill ${Math.abs(diff) <= g.kcal * .1 ? "good" : diff > 0 ? "bad" : ""}">${diff >= 0 ? "+" : "−"}${fmt(Math.abs(diff))} zum Ziel</span></div>` : `<div class="muted" style="margin:0 4px 14px">${logged0.length ? "Alle Tage dieses Zeitraums sind als Ausnahmetage markiert." : "In diesem Zeitraum gibt es noch keine Einträge."}</div>`}
   <div class="surface">${chart}</div>
+  ${logged0.length ? `<button class="btn sec block" style="margin-top:12px" data-act="topSheet">Häufigste Lebensmittel &amp; Rezepte</button>` : ""}
   ${logged0.length ? `<button class="btn sec block" style="margin-top:12px" data-act="exclSheet">Tage aus dem Durchschnitt nehmen${exN ? " (" + exN + ")" : ""}</button>` : ""}
   ${logged.length ? `<div class="muted small" style="margin:12px 4px 0">${exN ? "Durchschnitt ohne " + exN + (exN === 1 ? " Ausnahmetag. " : " Ausnahmetage. ") : ""}${hit} von ${logged.length} ${logged.length === 1 ? "Tag" : "Tagen"} im Zielbereich (±10 %)</div>
   ${(() => { const dv = days.filter(d => !isExcl(d)), tot = dv.reduce((a, d) => a + mlOf(d), 0), mg = dv.reduce((a, d) => a + mgOfDay(d), 0); return tot ? `<div class="muted small" style="margin:6px 4px 0">☕ Koffein: ${fmtMl(tot)} Getränke im Zeitraum, Ø ${r0(mg / L)} mg pro erfasstem Tag</div>` : ""; })()}
@@ -539,6 +540,94 @@ function viewWeek() {
   <div class="surface"><div class="wdbars">${wdBars}</div></div>`;
 }
 
+/* ---- Häufigste Lebensmittel & Rezepte (mit Gruppen, z. B. Kimchi verschiedener Marken) ---- */
+const grpList = () => D.settings.foodGroups = D.settings.foodGroups || [];
+const topKeyOf = e => (e.rid ? "r:" : "f:") + sugKey(e.name);
+function topStats(days) {
+  const set = new Set(days), map = {}, gs = grpList(), byKey = {};
+  gs.forEach(g => g.keys.forEach(k => byKey[k] = g));
+  D.entries.forEach(e => {
+    if (!set.has(e.date)) return;
+    const k = topKeyOf(e), g = byKey[k], id = g ? "g:" + g.id : k;
+    const o = map[id] = map[id] || { id, name: g ? g.n : e.name, group: g || null, n: 0, g: 0, kcal: 0, days: new Set(), rec: !!e.rid, parts: {} };
+    o.n++; o.g += +e.grams || 0; o.kcal += +e.kcal || 0; o.days.add(e.date);
+    const pn = o.parts[k] = o.parts[k] || { k, name: e.name, n: 0 }; pn.n++;
+  });
+  return Object.values(map);
+}
+function topSheet() {
+  const st = ui.top = ui.top || { m: "n", kind: "all" };
+  let selMode = false; const sel = new Set();
+  const days = curDays();
+  const draw = s => {
+    let rows = topStats(days).filter(o => st.kind === "all" || (st.kind === "r") === o.rec);
+    rows.sort((a, b) => st.m === "g" ? b.g - a.g : st.m === "k" ? b.kcal - a.kcal : st.m === "d" ? b.days.size - a.days.size : b.n - a.n);
+    const val = o => st.m === "g" ? o.g : st.m === "k" ? o.kcal : st.m === "d" ? o.days.size : o.n, mx = Math.max(1, ...rows.map(val));
+    const chip = (k, v, l, cur) => `<button class="tcchip ${cur === v ? "on" : ""}" style="--cc:var(--accent)" data-${k}="${v}">${l}</button>`;
+    const list = rows.slice(0, 100).map(o => `<div class="card toprow" data-id="${esc(o.id)}" style="margin-bottom:8px;cursor:pointer;position:relative;overflow:hidden">
+      <div style="position:absolute;inset:0 auto 0 0;width:${val(o) / mx * 100}%;background:color-mix(in srgb,var(--accent) 14%,transparent)"></div>
+      <div class="row between" style="position:relative;gap:10px">
+        ${selMode ? `<input type="checkbox" data-sel="${esc(o.id)}" ${sel.has(o.id) ? "checked" : ""} style="flex:none">` : ""}
+        <div style="min-width:0;flex:1"><b style="display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${o.rec ? "🍲 " : ""}${o.group ? "🔗 " : ""}${esc(o.name)}</b>
+        <span class="muted small">${o.n}× · ${o.days.size} ${o.days.size === 1 ? "Tag" : "Tage"} · ${fmt(o.g)} g · ${fmt(o.kcal)} kcal${o.group ? " · " + o.group.keys.length + " Produkte" : ""}</span></div>
+        <b style="flex:none">${st.m === "g" ? fmt(o.g) + " g" : st.m === "k" ? fmt(o.kcal) : st.m === "d" ? o.days.size : o.n + "×"}</b></div></div>`).join("");
+    s.querySelector("#tpBody").innerHTML = `<div class="tcchips">${chip("m", "n", "Häufigkeit", st.m)}${chip("m", "d", "Tage", st.m)}${chip("m", "g", "Menge (g)", st.m)}${chip("m", "k", "Kalorien", st.m)}</div>
+      <div class="tcchips">${chip("kind", "all", "Alles", st.kind)}${chip("kind", "f", "Lebensmittel", st.kind)}${chip("kind", "r", "Rezepte", st.kind)}</div>
+      ${list || `<div class="muted center" style="padding:24px 10px">Keine Einträge im Zeitraum.</div>`}`;
+    const nsel = sel.size;
+    s.querySelector("#tpAct").innerHTML = selMode
+      ? `<button class="btn block" id="tpMerge" ${nsel < 2 ? "disabled" : ""}>${nsel < 2 ? "Mindestens 2 auswählen" : nsel + " zusammenfassen …"}</button><button class="btn sec block" style="margin-top:8px" id="tpCancel">Abbrechen</button>`
+      : `<button class="btn sec block" id="tpSelect">Zusammenfassen (z. B. Marken)</button>`;
+    s.querySelectorAll("[data-m]").forEach(b => b.onclick = () => { st.m = b.dataset.m; draw(s); });
+    s.querySelectorAll("[data-kind]").forEach(b => b.onclick = () => { st.kind = b.dataset.kind; sel.clear(); draw(s); });
+    s.querySelectorAll(".toprow").forEach(r => r.onclick = () => {
+      const id = r.dataset.id;
+      if (selMode) { sel.has(id) ? sel.delete(id) : sel.add(id); draw(s); return; }
+      const o = rows.find(x => x.id === id); if (o && o.group) groupSheet(o.group);
+    });
+    const q = x => s.querySelector(x);
+    if (q("#tpSelect")) q("#tpSelect").onclick = () => { selMode = true; draw(s); };
+    if (q("#tpCancel")) q("#tpCancel").onclick = () => { selMode = false; sel.clear(); draw(s); };
+    if (q("#tpMerge")) q("#tpMerge").onclick = () => mergeSheet([...sel].map(id => rows.find(x => x.id === id)).filter(Boolean));
+  };
+  const s = sheet(`<h3>Häufigste Lebensmittel &amp; Rezepte</h3><div class="muted small" style="margin:-6px 0 12px">Zeitraum: ${curDays().length === 1 ? "1 Tag" : curDays().length + " Tage"}. Tippe auf „Zusammenfassen“, um z. B. verschiedene Kimchi-Marken zu einem Eintrag zu bündeln.</div><div id="tpBody"></div><div id="tpAct" style="margin-top:12px"></div><button class="btn sec block" style="margin-top:8px" id="tpClose">Schließen</button>`);
+  s.querySelector("#tpClose").onclick = closeSheet;
+  draw(s);
+  topSheet.redraw = () => topSheet();
+}
+function mergeSheet(items) {
+  const grp = items.find(o => o.group), best = items.slice().sort((a, b) => b.n - a.n)[0];
+  const s = sheet(`<h3>Zusammenfassen</h3><div class="muted small" style="margin:-6px 0 8px">${items.map(o => esc(o.name)).join(" · ")}</div>
+    <label>Name der Gruppe</label><input type="text" id="mgName" value="${esc(grp ? grp.name : best.name)}" maxlength="60">
+    <div class="muted small" style="margin-top:8px">Gilt für alle Tage, auch rückwirkend. Deine Einträge bleiben unverändert, nur die Statistik fasst sie zusammen.</div>
+    <button class="btn block" style="margin-top:14px" id="mgOk">Zusammenfassen</button><button class="btn sec block" style="margin-top:8px" id="mgNo">Abbrechen</button>`);
+  s.querySelector("#mgNo").onclick = () => topSheet();
+  s.querySelector("#mgOk").onclick = () => {
+    const name = s.querySelector("#mgName").value.trim(); if (!name) return toast("Bitte einen Namen eingeben");
+    const gs = grpList(), keys = new Set();
+    items.forEach(o => o.group ? o.group.keys.forEach(k => keys.add(k)) : Object.keys(o.parts).forEach(k => keys.add(k)));
+    const old = items.filter(o => o.group).map(o => o.group.id);
+    let target = old.length ? gs.find(g => g.id === old[0]) : null;
+    D.settings.foodGroups = gs.filter(g => !old.includes(g.id) || g === target);
+    if (target) { target.n = name; target.keys = [...keys]; } else D.settings.foodGroups.push({ id: uid(), n: name, keys: [...keys] });
+    save(); toast("Zusammengefasst"); topSheet();
+  };
+}
+function groupSheet(g) {
+  const names = {}; D.entries.forEach(e => { const k = topKeyOf(e); if (g.keys.includes(k)) names[k] = (names[k] || { name: e.name, n: 0 }), names[k].n++; });
+  const s = sheet(`<h3>Gruppe</h3><label>Name</label><input type="text" id="gnName" value="${esc(g.n)}" maxlength="60">
+    <label>Enthalten (tippe zum Entfernen)</label><div id="gnList">${g.keys.map(k => `<div class="xrow" data-k="${esc(k)}"><span class="grow"><b>${esc(names[k] ? names[k].name : k.slice(2))}</b></span><span class="muted small">${names[k] ? names[k].n + "×" : "—"}</span><span class="muted">✕</span></div>`).join("")}</div>
+    <button class="btn block" style="margin-top:14px" id="gnSave">Speichern</button><button class="btn sec block" style="margin-top:8px" id="gnDel">Gruppe auflösen</button><button class="btn sec block" style="margin-top:8px" id="gnBack">Zurück</button>`);
+  let keys = [...g.keys];
+  s.querySelectorAll("#gnList .xrow").forEach(r => r.onclick = () => { const k = r.dataset.k; keys = keys.includes(k) ? keys.filter(x => x !== k) : [...keys, k]; r.style.opacity = keys.includes(k) ? "" : ".35"; });
+  s.querySelector("#gnBack").onclick = () => topSheet();
+  s.querySelector("#gnDel").onclick = () => { D.settings.foodGroups = grpList().filter(x => x.id !== g.id); save(); toast("Gruppe aufgelöst"); topSheet(); };
+  s.querySelector("#gnSave").onclick = () => {
+    const n = s.querySelector("#gnName").value.trim(); if (!n) return toast("Bitte einen Namen eingeben");
+    if (keys.length < 2) { D.settings.foodGroups = grpList().filter(x => x.id !== g.id); toast("Gruppe aufgelöst"); } else { g.n = n; g.keys = keys; toast("Gespeichert"); }
+    save(); topSheet();
+  };
+}
 /* ---- Gewicht ---- */
 function weightList() { return Object.entries(D.weights).map(([d, w]) => ({ d, w })).sort((a, b) => a.d.localeCompare(b.d)); }
 /* Tage eines Zeitraums als Ausnahmetage markieren (Haken = nicht im Durchschnitt) */
@@ -2557,6 +2646,7 @@ document.addEventListener("click", async ev => {
   }
   else if (a === "goDay") { ui.date = t.dataset.d; setTab("today"); render(); }
   else if (a === "exclSheet") exclSheet();
+  else if (a === "topSheet") topSheet();
   else if (a === "wRange") { ui.wRange = +t.dataset.v; render(); }
   else if (a === "wcmp") { ui.wcOff = Math.max(0, (ui.wcOff || 0) + (+t.dataset.d)); render(); }
   else if (a === "saveWeight") {
