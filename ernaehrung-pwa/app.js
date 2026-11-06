@@ -625,11 +625,11 @@ function viewSettings() {
     <div><label>Fett in %</label><input type="text" inputmode="numeric" id="sF" value="${s.pF}"></div></div>
     <div id="macroInfo" class="small ${tot === 100 ? "muted" : "warn"}" style="margin:10px 2px 0">${macroInfoText(s.pP, s.pC, s.pF, s.kcal)}</div>
     <div class="muted small" style="margin:16px 2px 0"><b>Weitere Nährstoffe (g pro Tag)</b></div>
-    <div class="grid2"><div><label>Zucker höchstens</label><input type="text" inputmode="decimal" id="sMgS" value="${esc(s.mgS ?? "")}" placeholder="${r0(refs0.s.max)} (Standard)"></div>
+    <div class="grid2"><div><label>Zugesetzter Zucker höchstens</label><input type="text" inputmode="decimal" id="sMgS" value="${esc(s.mgS ?? "")}" placeholder="${r0(refs0.s.max)} (Standard)"></div>
     <div><label>Ballaststoffe mindestens</label><input type="text" inputmode="decimal" id="sMgFi" value="${esc(s.mgFi ?? "")}" placeholder="${r0(refs0.fi.min)} (Standard)"></div></div>
     <div class="grid2"><div><label>Ges. Fettsäuren höchstens</label><input type="text" inputmode="decimal" id="sMgSa" value="${esc(s.mgSa ?? "")}" placeholder="${r0(refs0.sa.max)} (Standard)"></div>
     <div><label>Salz höchstens</label><input type="text" inputmode="decimal" id="sMgSl" value="${esc(s.mgSl ?? "")}" placeholder="${r0(refs0.sl.max)} (Standard)"></div></div>
-    <div class="muted tiny" style="margin:6px 2px 0">Leer lassen = Richtwert (Zucker und ges. Fett unter 10 % der Kalorien, Ballaststoffe ab 30 g, Salz bis 6 g). Mit eigenen Werten rechnen Fortschrittsbalken, Hinweise und Export.</div>
+    <div class="muted tiny" style="margin:6px 2px 0">Leer lassen = Richtwert (zugesetzter Zucker und ges. Fett unter 10 % der Kalorien, Ballaststoffe ab 30 g, Salz bis 6 g). Mit eigenen Werten rechnen Fortschrittsbalken, Hinweise und Export.</div>
     <label>Zielgewicht in kg (optional)</label><input type="text" inputmode="decimal" id="sGoalW" value="${esc(s.goalWeight)}">
     <label class="toggle"><span>Morgens nach Gewicht fragen (ab 6 Uhr)</span><input type="checkbox" id="wGateOn" ${s.weightGate !== false ? "checked" : ""}></label>
     <button class="btn block" style="margin-top:16px" data-act="saveGoals">Ziele speichern</button></div>
@@ -1619,19 +1619,22 @@ function microRefs() {
 }
 function microMissNote(m) { const n = Math.max(...MICRO.map(x => m.miss[x.ek])); return n > 0 ? ` (bei bis zu ${n} Einträgen fehlt die Angabe)` : ""; }
 const MICRO_HINT = { s: "Richtwert: unter 10 % der Kalorien (zählt auch Zucker aus Obst und Milch)", fi: "Richtwert: mindestens 30 g am Tag", sa: "Richtwert: unter 10 % der Kalorien", sl: "Richtwert: höchstens 6 g am Tag" };
+const sugHint = () => { const c = microCustom("s"); return c ? `Dein Ziel: höchstens ${nde(c, 2)} g zugesetzter/freier Zucker am Tag. Natürlicher Zucker zählt hier nicht.` : "Richtwert: unter 10 % der Kalorien als zugesetzter/freier Zucker. Natürlicher Zucker aus Obst und Milch zählt hier nicht mit."; };
 const microHint = ek => { const c = microCustom(ek); return c ? `Dein Ziel: ${ek === "fi" ? "mindestens" : "höchstens"} ${nde(c, 2)} g am Tag (änderbar in den Einstellungen)` : MICRO_HINT[ek]; };
 /* Übersicht der Nährstoffe für eine Liste von Einträgen; dayList = ganzer Tag (für „Anteil am Tag“ bei einer Mahlzeit) */
 function nutrientBody(list, dayList) {
   const t = sum(list), m = microSum(list), refs = microRefs(), dm = dayList ? microSum(dayList) : null;
+  const spL = sugarSplit(list), spD = dayList ? sugarSplit(dayList) : null, sugCls = spL.add + spL.nat > 0.05; // Zucker eingeordnet? Dann zählt nur zugesetzter/freier Zucker gegen das Limit
   const rows = MICRO.map(x => {
-    const v = m[x.ek], ref = refs[x.ek], isMin = ref.min != null, lim = isMin ? ref.min : ref.max;
+    const isSug = x.ek === "s" && sugCls, v = isSug ? spL.add + spL.unk : m[x.ek], ref = refs[x.ek], isMin = ref.min != null, lim = isMin ? ref.min : ref.max;
     const pct = lim > 0 ? Math.min(v / lim * 100, 100) : 0, bad = !isMin && v > lim, good = isMin && v >= lim;
     const top = list.filter(e => hasN(e[x.ek]) && e[x.ek] > 0.004).sort((a, b) => b[x.ek] - a[x.ek]).slice(0, 3).map(e => `${esc(e.name)} ${nde(e[x.ek], 2)} g`).join(" · ");
-    const miss = m.miss[x.ek], share = dm && dm[x.ek] > 0 ? Math.round(v / dm[x.ek] * 100) : null;
-    return `<div class="nrow"><div class="row between"><b>${x.name}</b><span><b ${bad ? 'class="warn"' : ""}>${nde(v, 2)} g</b> <span class="muted small">${isMin ? "von mind." : "von max."} ${nde(lim, 0)} g</span></span></div>
+    const dTot = isSug && spD ? spD.add + spD.unk : dm ? dm[x.ek] : 0;
+    const miss = m.miss[x.ek], share = dm && dTot > 0 ? Math.round(v / dTot * 100) : null;
+    return `<div class="nrow"><div class="row between"><b>${isSug ? "Zugesetzter / freier Zucker" : x.name}</b><span><b ${bad ? 'class="warn"' : ""}>${nde(v, 2)} g</b> <span class="muted small">${isMin ? "von mind." : "von max."} ${nde(lim, 0)} g</span></span></div>
       <div class="nbar"><i class="${bad ? "warn" : good ? "good" : ""}" style="width:${pct}%"></i></div>
-      <div class="muted tiny">${dayList ? (share != null ? `${share} % des Tageswerts · ` : "") + (isMin ? "Tagesziel" : "Tageslimit") + " " + nde(lim, 0) + " g" : microHint(x.ek)}</div>${top ? `<div class="muted tiny">Meist aus: ${top}</div>` : ""}
-      ${x.ek === "s" && v > 0 ? (() => { const sp = sugarSplit(list); return `<div class="tiny" style="margin-top:4px">${sugLine(sp)}</div>${Object.keys(sp.names).length ? `<button class="linkbtn" data-sugcls="1">Zuckerarten einordnen (${Object.keys(sp.names).length}) ›</button>` : ""}`; })() : ""}
+      <div class="muted tiny">${dayList ? (share != null ? `${share} % des Tageswerts · ` : "") + (isMin ? "Tagesziel" : "Tageslimit") + " " + nde(lim, 0) + " g" : isSug ? sugHint() : microHint(x.ek)}</div>${top ? `<div class="muted tiny">Meist aus: ${top}</div>` : ""}
+      ${x.ek === "s" && m[x.ek] > 0 ? (() => { const sp = spL; return `<div class="tiny" style="margin-top:4px">Gesamtzucker <b>${nde(m.s, 1)} g</b> · ${sugLine(sp)}</div>${Object.keys(sp.names).length ? `<button class="linkbtn" data-sugcls="1">Zuckerarten einordnen (${Object.keys(sp.names).length}) ›</button>` : ""}`; })() : ""}
       ${miss ? `<div class="warn tiny">Für ${miss} von ${list.length} Einträgen ist diese Angabe nicht bekannt.</div><button class="linkbtn" data-miss="${x.ek}">Fehlende ansehen und nachtragen ›</button>` : ""}</div>`;
   }).join("");
   return `<div class="card nsum"><div><b>${fmt(t.kcal)}</b><span class="muted tiny">kcal</span></div><div><b>${r0(t.p)} g</b><span class="muted tiny">Eiweiß</span></div>
@@ -1883,7 +1886,8 @@ function editEntry(id) {
       <div><b>${r1(v.c)} g</b><span class="muted tiny cc">Kohlenhydrate · ${pc(v.c * 4)} %</span></div><div><b>${r1(v.f)} g</b><span class="muted tiny cf">Fett · ${pc(v.f * 9)} %</span></div></div>
       <div class="stack" style="margin:2px 0 10px"><div style="display:flex;width:100%;height:100%"><i class="p" style="width:${v.p * 4 / kt * 100}%"></i><i class="c" style="width:${v.c * 4 / kt * 100}%"></i><i class="f" style="width:${v.f * 9 / kt * 100}%"></i></div></div>
       ${MICRO.map(x => { const val = v[x.ek], ref = refs[x.ek], isMin = ref.min != null, lim = isMin ? ref.min : ref.max;
-        return `<div class="row between" style="padding:5px 2px;font-size:14.5px"><span>${x.ek === "s" ? "davon Zucker" : x.ek === "sa" ? "davon gesättigt" : x.name}</span>${hasN(val) ? `<span><b>${nde(val, 2)} g</b> <span class="muted tiny">${Math.round(val / lim * 100)} % ${isMin ? "des Tagesziels" : "des Tageslimits"}</span></span>` : `<span class="muted small">nicht bekannt</span>`}</div>`; }).join("")}`;
+        const spE = x.ek === "s" ? sugarSplit([e]) : null, fr = spE && spE.add + spE.nat > 0.05 ? (spE.add + spE.unk) / (spE.add + spE.nat + spE.unk) : null, val2 = fr != null && hasN(val) ? val * fr : val;
+        return `<div class="row between" style="padding:5px 2px;font-size:14.5px"><span>${x.ek === "s" ? (fr != null ? "davon Zucker (zugesetzt/frei)" : "davon Zucker") : x.ek === "sa" ? "davon gesättigt" : x.name}</span>${hasN(val) ? `<span><b>${nde(val2, 2)} g</b>${fr != null ? ` <span class="muted tiny">von ${nde(val, 2)} g gesamt</span>` : ""} <span class="muted tiny">${Math.round(val2 / lim * 100)} % ${isMin ? "des Tagesziels" : "des Tageslimits"}</span></span>` : `<span class="muted small">nicht bekannt</span>`}</div>`; }).join("")}`;
   };
   drawNut();
   if ($("#eg", s)) $("#eg", s).oninput = () => { if (!ings) drawNut(); };
@@ -2144,7 +2148,7 @@ function buildReport(from, to) {
   out.push("", "## Tagesziele");
   out.push(`- Kalorien: ${nde(g.kcal, 0)} kcal`);
   out.push(`- Eiweiß: ${nde(g.p, 0)} g (${s.pP} %) · Kohlenhydrate: ${nde(g.c, 0)} g (${s.pC} %) · Fett: ${nde(g.f, 0)} g (${s.pF} %)`);
-  { const rf = microRefs(); out.push(`- ${MICRO.some(m => microCustom(m.ek)) ? "Eigene Ziele/Richtwerte" : "Richtwerte (Orientierung)"}: Zucker unter ${nde(rf.s.max, 0)} g · Ballaststoffe mindestens ${nde(rf.fi.min, 0)} g · gesättigte Fettsäuren unter ${nde(rf.sa.max, 0)} g · Salz höchstens ${nde(rf.sl.max, 0)} g pro Tag`); }
+  { const rf = microRefs(); out.push(`- ${MICRO.some(m => microCustom(m.ek)) ? "Eigene Ziele/Richtwerte" : "Richtwerte (Orientierung)"}: zugesetzter/freier Zucker unter ${nde(rf.s.max, 0)} g · Ballaststoffe mindestens ${nde(rf.fi.min, 0)} g · gesättigte Fettsäuren unter ${nde(rf.sa.max, 0)} g · Salz höchstens ${nde(rf.sl.max, 0)} g pro Tag`); }
   if (s.goalWeight) out.push(`- Zielgewicht: ${s.goalWeight} kg`);
   if (days.length > 1) {
     const a = sum(logged.flatMap(r => r.es)), L = logged.length || 1;
