@@ -780,9 +780,32 @@ function setTab(t) {
 }
 window.addEventListener("popstate", () => {
   if (hist.skip > 0) { hist.skip--; return; }
-  if (hist.sheet) { hist.sheet = false; clearSheet(); return; }
+  if (hist.sheet) {
+    if (rGuardNeeded()) { try { history.pushState({ ern: "sheet" }, ""); } catch (e) { } discardAsk(); return; }
+    hist.sheet = false; rOpen = false; clearSheet(); return;
+  }
   if (hist.tab) { hist.tab = false; ui.tab = "today"; render(); $("#view").scrollTop = 0; }
 });
+/* Schutz: Rezept-Entwurf nicht versehentlich verlieren */
+let rOpen = false, rSnap = "";
+const rNorm = d => JSON.stringify({ n: d.name || "", s: +d.servings || 1, w: +d.weight || 0, i: (d.items || []).map(i => [i.name, +i.grams || 0]), c: d.cats || [], m: d.img ? 1 : 0 });
+function rCur() {
+  const d = { ...rdraft }, n = document.querySelector("#rn");
+  if (n && document.querySelector("#rSave")) { d.name = n.value.trim(); d.servings = num(document.querySelector("#rs").value) || 1; d.weight = Math.max(0, num(document.querySelector("#rw").value) || 0); }
+  return d;
+}
+const rDirty = () => rOpen && rNorm(rCur()) !== rSnap;
+const rGuardNeeded = () => rDirty();
+function discardAsk() {
+  if (document.querySelector("#discBg")) return;
+  const bg = document.createElement("div"); bg.id = "discBg";
+  bg.style.cssText = "position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;padding:24px";
+  bg.innerHTML = `<div class="card" style="max-width:340px;width:100%;padding:20px"><h3 style="margin:0 0 8px">Rezept verwerfen?</h3><div class="muted small" style="margin-bottom:16px">Deine Änderungen an diesem Rezept sind noch nicht gespeichert und gehen verloren.</div><button class="btn block" id="discKeep">Weiter bearbeiten</button><button class="btn danger block" style="margin-top:8px" id="discGo">Verwerfen</button></div>`;
+  document.body.append(bg);
+  bg.querySelector("#discKeep").onclick = () => bg.remove();
+  bg.querySelector("#discGo").onclick = () => { bg.remove(); recipeExit(); };
+}
+function userClose() { if (rGuardNeeded()) return discardAsk(); rOpen = false; closeSheet(); }
 function clearSheet() { stopScan(); $("#sheetRoot").innerHTML = ""; }
 function sheet(html, mount) {
   clearSheet();
@@ -790,8 +813,8 @@ function sheet(html, mount) {
   const bg = document.createElement("div");
   bg.className = "sheetbg";
   bg.innerHTML = `<div class="sheet"><button class="sclose" type="button" aria-label="Schließen">${icon("x", 18, 2.6)}</button>${html}</div>`;
-  bg.querySelector(".sclose").onclick = () => closeSheet();
-  bg.addEventListener("click", e => { if (e.target === bg) closeSheet(); });
+  bg.querySelector(".sclose").onclick = () => userClose();
+  bg.addEventListener("click", e => { if (e.target === bg) userClose(); });
   $("#sheetRoot").append(bg);
   if (mount) mount(bg.firstElementChild);
   return bg.firstElementChild;
@@ -1515,9 +1538,11 @@ function recipeEditor(r, back) {
   rdraft = r ? JSON.parse(JSON.stringify(r)) : { id: null, name: "", servings: 1, items: [], cats: [] };
   if (!Array.isArray(rdraft.cats)) rdraft.cats = []; ui.catEdit = false;
   rdraft.back = back || "add";
+  rOpen = true; rSnap = rNorm(rdraft);
   drawRecipeEditor();
 }
 function recipeExit() {
+  rOpen = false;
   const b = rdraft.back;
   if (b === "add") { addTab = "recipes"; openAdd(); }
   else if (b === "manage") recipeManage();
@@ -1567,7 +1592,7 @@ function drawRecipeEditor() {
     capture();
     foodPicker((food, grams) => { d.items.push({ name: food.name, grams, ...per100(food) }); drawRecipeEditor(); }, drawRecipeEditor);
   };
-  $("#rCancel", s).onclick = recipeExit;
+  $("#rCancel", s).onclick = () => rDirty() ? discardAsk() : recipeExit();
   $$("[data-cat]", s).forEach(b => b.onclick = ev => {
     const del = ev.target.closest("[data-catdel]");
     if (del) { const c = del.dataset.catdel; capture(); D.settings.recipeCats = recCats().filter(x => x !== c); D.recipes.forEach(r => { if (r.cats) { r.cats = r.cats.filter(x => x !== c); if (!r.cats.length) delete r.cats; } }); d.cats = d.cats.filter(x => x !== c); save(); drawRecipeEditor(); return; }
