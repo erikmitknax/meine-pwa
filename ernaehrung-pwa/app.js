@@ -561,7 +561,7 @@ function topSheet() {
   const days = curDays();
   const draw = s => {
     let rows = topStats(days).filter(o => st.kind === "all" || (st.kind === "r") === o.rec);
-    rows.sort((a, b) => st.m === "g" ? b.g - a.g : st.m === "k" ? b.kcal - a.kcal : st.m === "d" ? b.days.size - a.days.size : b.n - a.n);
+    rows.sort((a, b) => st.m === "az" ? a.name.localeCompare(b.name, "de", { sensitivity: "base", numeric: true }) : st.m === "g" ? b.g - a.g : st.m === "k" ? b.kcal - a.kcal : st.m === "d" ? b.days.size - a.days.size : b.n - a.n);
     const val = o => st.m === "g" ? o.g : st.m === "k" ? o.kcal : st.m === "d" ? o.days.size : o.n, mx = Math.max(1, ...rows.map(val));
     const chip = (k, v, l, cur) => `<button class="tcchip ${cur === v ? "on" : ""}" style="--cc:var(--accent)" data-${k}="${v}">${l}</button>`;
     const list = rows.slice(0, 100).map(o => `<div class="card toprow" data-id="${esc(o.id)}" style="margin-bottom:8px;cursor:pointer;position:relative;overflow:hidden">
@@ -571,7 +571,7 @@ function topSheet() {
         <div style="min-width:0;flex:1"><b style="display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${o.rec ? "🍲 " : ""}${o.group ? "🔗 " : ""}${esc(o.name)}</b>
         <span class="muted small">${o.n}× · ${o.days.size} ${o.days.size === 1 ? "Tag" : "Tage"} · ${fmt(o.g)} g · ${fmt(o.kcal)} kcal${o.group ? " · " + o.group.keys.length + " Produkte" : ""}</span></div>
         <b style="flex:none">${st.m === "g" ? fmt(o.g) + " g" : st.m === "k" ? fmt(o.kcal) : st.m === "d" ? o.days.size : o.n + "×"}</b></div></div>`).join("");
-    s.querySelector("#tpBody").innerHTML = `<div class="tcchips">${chip("m", "n", "Häufigkeit", st.m)}${chip("m", "d", "Tage", st.m)}${chip("m", "g", "Menge (g)", st.m)}${chip("m", "k", "Kalorien", st.m)}</div>
+    s.querySelector("#tpBody").innerHTML = `<div class="tcchips">${chip("m", "n", "Häufigkeit", st.m)}${chip("m", "d", "Tage", st.m)}${chip("m", "g", "Menge (g)", st.m)}${chip("m", "k", "Kalorien", st.m)}${chip("m", "az", "A–Z", st.m)}</div>
       <div class="tcchips">${chip("kind", "all", "Alles", st.kind)}${chip("kind", "f", "Lebensmittel", st.kind)}${chip("kind", "r", "Rezepte", st.kind)}</div>
       ${list || `<div class="muted center" style="padding:24px 10px">Keine Einträge im Zeitraum.</div>`}`;
     const nsel = sel.size;
