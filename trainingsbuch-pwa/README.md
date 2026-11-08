@@ -13,6 +13,7 @@ Läuft ohne Server und ohne Abhängigkeiten. Die Daten liegen im `localStorage` 
 | `settings-theme.js` | Farben, Logo, Signal am Pausenende |
 | `dropbox-backup.js` | Sicherung und Wiederherstellung über Dropbox (OAuth2 PKCE, ohne Server) |
 | `sw.js` | Service Worker: Offline-Betrieb |
+| `logo-holz.png`, `icon-*.png`, `apple-touch-icon.png` | Logo (Holzfigur mit Lorbeerkranz) für Kopfzeile, Browser-Tab und Startbildschirm. Dieselben Bilder liegen in `android-app/resources/` für die APK. |
 
 ## Tests
 

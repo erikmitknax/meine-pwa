@@ -1,9 +1,9 @@
 // Cache-Name nur hochzählen, wenn sich die Dateiliste ändert oder alte Caches weg sollen.
 // Code-Dateien (HTML, JS, CSS) holt der Service Worker immer zuerst aus dem Netz. Ein vergessenes Hochzählen
 // liefert deshalb keine alten Dateien mehr aus, und HTML und JS laufen nicht mehr auseinander.
-const VERSION = 'tb-v8';
+const VERSION = 'tb-v9';
 const FONTS = ['barlow-latin-400-normal', 'barlow-latin-500-normal', 'barlow-latin-600-normal', 'barlow-condensed-latin-500-normal', 'barlow-condensed-latin-600-normal', 'barlow-condensed-latin-700-normal'].map(n => './fonts/' + n + '.woff2');
-const SHELL = ['./', './index.html', './app.css', './logic.js', './app.js', './settings-theme.js', './dropbox-backup.js', './manifest.webmanifest',
+const SHELL = ['./', './index.html', './app.css', './logic.js', './app.js', './settings-theme.js', './dropbox-backup.js', './manifest.webmanifest', './logo-holz.png',
   './icon-192.png', './icon-512.png', './icon-maskable-512.png', './apple-touch-icon.png', ...FONTS];
 const INDEX = './index.html';
 

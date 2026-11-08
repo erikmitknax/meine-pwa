@@ -43,6 +43,7 @@ const server = http.createServer((req, res) => {
   console.log('Start');
   ok(!!w.TBLogic, 'logic.js geladen (window.TBLogic)');
   ok(view().includes('Training starten'), 'Startseite zeigt "Training starten"');
+  ok(!!$('#brandLogo img[src="logo-holz.png"]') && $('link[rel="icon"]').getAttribute('href') === 'logo-holz.png', 'Neues Logo (Holzfigur) steht in der Kopfzeile und im Browser-Tab');
   ok(!d.querySelector('link[href*="googleapis"]'), 'keine Google-Fonts-Verbindung im HTML');
   ok(d.querySelector('title') && d.querySelector('title').parentNode.tagName === 'HEAD', '<title> steht im <head>');
 
@@ -300,6 +301,24 @@ const server = http.createServer((req, res) => {
   c7('.chk[data-ei="0"][data-si="1"]'); await tick(40);
   ok(rtCalls.filter(c => c[0] === 'start').length === 1 && rtCalls.some(c => c[0] === 'cancel'), 'Haken zurücknehmen entfernt den Countdown wieder');
   dom7.window.close();
+
+  console.log('Logo: Umstellung von der alten Hantel, eigenes Bild bleibt');
+  const mkLogoDom = async (settings) => { const dm = await JSDOM.fromURL(base + 'index.html', { runScripts: 'dangerously', resources: 'usable', pretendToBeVisual: true, virtualConsole: vc, beforeParse(wl) { wl.Element.prototype.scrollIntoView = function () {}; wl.scrollTo = function () {}; wl.addEventListener('error', e => errors.push('window.onerror: ' + e.message)); wl.localStorage.setItem('tb_settings', JSON.stringify(settings)); } }); await tick(250); return dm; };
+  const dA = await mkLogoDom({ theme: 'gold', logo: 'hantel' });
+  ok(!!dA.window.document.querySelector('#brandLogo img[src="logo-holz.png"]'), 'altes Standard-Logo (Hantel) wird zum neuen Logo');
+  dA.window.document.querySelector('#gearBtn').click(); await tick();
+  dA.window.document.querySelector('[data-act="acc"][data-id="logo"]').click(); await tick();
+  const lgs = [...dA.window.document.querySelectorAll('.logos .lg')];
+  ok(lgs.length === 10 && lgs.some(b => /Holzfigur/.test(b.textContent) && b.querySelector('img')) && lgs.find(b => /Holzfigur/.test(b.textContent)).classList.contains('on'), 'Logo-Auswahl zeigt „Holzfigur“ mit Bild und als gewählt');
+  lgs.find(b => /Hantel/.test(b.textContent)).click(); await tick();
+  ok(!!dA.window.document.querySelector('#brandLogo svg') && JSON.parse(dA.window.localStorage.getItem('tb_settings')).logo === 'hantel', 'die Hantel lässt sich bewusst wieder wählen');
+  dA.window.close();
+  const dB = await mkLogoDom({ theme: 'gold', logo: 'custom', logoData: 'data:image/png;base64,iVBORw0KGgo=' });
+  ok(!!dB.window.document.querySelector('#brandLogo img[src^="data:image/png"]'), 'ein selbst gewähltes Bild bleibt erhalten');
+  dB.window.close();
+  const dC = await mkLogoDom({ theme: 'gold', logo: 'blitz' });
+  ok(!!dC.window.document.querySelector('#brandLogo svg'), 'eine andere bewusst gewählte Form bleibt erhalten');
+  dC.window.close();
 
   console.log('Fehler im Log');
   ok(errors.length === 0, errors.length ? errors.slice(0, 8).join(' | ') : 'keine Fehler in der Konsole');

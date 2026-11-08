@@ -16,6 +16,7 @@
 
   var LOGOS = [
     { id: 'none', name: 'Kein Logo', svg: '' },
+    { id: 'holz', name: 'Holzfigur', img: 'logo-holz.png' },
     { id: 'hantel', name: 'Hantel', svg: '<path d="M1.5 10h2v4h-2zM4.5 6.5h3v11h-3zM16.5 6.5h3v11h-3zM20.5 10h2v4h-2zM7.5 11h9v2h-9z"/>' },
     { id: 'kettle', name: 'Kettlebell', svg: '<circle cx="12" cy="15.2" r="6.3"/><path d="M8.3 10.2V7a3 3 0 0 1 3-3h1.4a3 3 0 0 1 3 3v3.2" fill="none" stroke="currentColor" stroke-width="2.2"/>' },
     { id: 'blitz', name: 'Blitz', svg: '<path d="M13.5 1.5 4 14h6.5l-1.5 8.5L19 9.5h-6.5z"/>' },
@@ -43,12 +44,14 @@
     { id: 'fanfare', name: 'Fanfare' }
   ];
 
-  var DEFAULTS = { theme: 'gold', colors: null, logo: 'hantel', logoData: null, vib: 'lang', snd: 'still' };
+  var DEFAULTS = { theme: 'gold', colors: null, logo: 'holz', logoData: null, logoV: 0, vib: 'lang', snd: 'still' };
 
   function load() {
     var s = {};
     try { s = JSON.parse(localStorage.getItem(KEY) || '{}') || {}; } catch (e) { s = {}; }
     var out = {}; for (var k in DEFAULTS) out[k] = (s[k] === undefined ? DEFAULTS[k] : s[k]);
+    // Einmalig: Wer noch das alte Standard-Logo (Hantel) hat, bekommt das neue. Wer ein eigenes Bild gewählt hat, behält es.
+    if (!out.logoV) { if (out.logo === 'hantel') out.logo = 'holz'; out.logoV = 1; }
     return out;
   }
   var cur = load();
@@ -87,7 +90,9 @@
   /* ---- Logo ---- */
   function logoById(id) { for (var i = 0; i < LOGOS.length; i++) if (LOGOS[i].id === id) return LOGOS[i]; return null; }
   function logoSvg(id, size) {
-    var l = logoById(id); if (!l || !l.svg) return '';
+    var l = logoById(id); if (!l) return '';
+    if (l.img) return '<img src="' + l.img + '" width="' + (size || 28) + '" height="' + (size || 28) + '" alt="" style="display:block;border-radius:22%">';
+    if (!l.svg) return '';
     return '<svg viewBox="0 0 24 24" width="' + (size || 28) + '" height="' + (size || 28) + '" fill="currentColor" aria-hidden="true">' + l.svg + '</svg>';
   }
   function logoHTML(size) {
@@ -96,14 +101,16 @@
   }
   function faviconHref() {
     if (cur.logo === 'custom' && cur.logoData) return cur.logoData;
-    var l = logoById(cur.logo); if (!l || !l.svg) return null;
+    var l = logoById(cur.logo); if (l && l.img) return l.img;
+    if (!l || !l.svg) return null;
     var p = palette();
     var svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><rect width="24" height="24" rx="5" fill="' + p.bg + '"/><g transform="translate(3 3) scale(.75)" fill="' + p.gold + '" color="' + p.gold + '">' + l.svg + '</g></svg>';
     return 'data:image/svg+xml,' + encodeURIComponent(svg);
   }
   function applyLogo() {
     var el = document.getElementById('brandLogo');
-    if (el) { var h = logoHTML(28); el.innerHTML = h; el.hidden = !h; }
+    var lg = logoById(cur.logo);
+    if (el) { var h = logoHTML(lg && lg.img && cur.logo !== 'custom' ? 34 : 28); el.innerHTML = h; el.hidden = !h; }
     var href = faviconHref(), link = document.querySelector('link[rel="icon"]');
     if (link) link.setAttribute('href', href || 'icon-192.png');
   }

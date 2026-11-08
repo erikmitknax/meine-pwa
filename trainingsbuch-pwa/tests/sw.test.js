@@ -143,3 +143,13 @@ test('Dateiliste im Service Worker stimmt mit den Dateien überein', () => {
   for (const f of fs.readdirSync(path.join(dir, 'fonts')).filter(x => x.endsWith('.woff2'))) assert.ok(SRC.includes(f.replace('.woff2', '')), 'Schrift nicht im Service Worker: ' + f);
   for (const need of ['index.html', 'app.css', 'logic.js', 'app.js', 'settings-theme.js', 'dropbox-backup.js', 'manifest.webmanifest']) assert.ok(files.includes(need), need + ' fehlt im Cache');
 });
+
+test('Symbole: Manifest-Dateien existieren und haben genau die angegebene Größe, Logo ist quadratisch', () => {
+  const dir = path.join(__dirname, '..');
+  const png = f => { const b = fs.readFileSync(path.join(dir, f)); assert.equal(b.toString('latin1', 1, 4), 'PNG', f + ' ist kein PNG'); return [b.readUInt32BE(16), b.readUInt32BE(20)]; };
+  const man = JSON.parse(fs.readFileSync(path.join(dir, 'manifest.webmanifest'), 'utf8'));
+  for (const ic of man.icons) { const [w, h] = png(ic.src); assert.equal(w + 'x' + h, ic.sizes, ic.src); }
+  assert.deepEqual(png('apple-touch-icon.png'), [180, 180]);
+  const [lw, lh] = png('logo-holz.png'); assert.equal(lw, lh);
+  assert.ok(SRC.includes("./logo-holz.png"), 'Kopfzeilen-Logo ist im Service Worker gelistet');
+});
