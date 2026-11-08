@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Mobility Quest</title>
+<meta name="theme-color" content="#14122a">
+<meta name="description" content="Mobility Quest: Beweglichkeit trainieren wie ein Videospiel – Wissen, Übungen, Pläne, Timer und Tests.">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="preload" href="fonts/pressstart.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<header id="hdr">
+  <div class="brand" data-act="tab" data-id="home"><img src="icons/logo.png" alt="" class="logo"><span class="px">MOBILITY<br>QUEST</span></div>
+  <span id="hdrSync"></span>
+  <button class="gear" data-act="settings" aria-label="Optionen">⚙</button>
+</header>
+<main id="view"></main>
+<nav id="nav"></nav>
+<div id="sheetRoot"></div>
+<div id="player"></div>
+<div id="toast" role="status" aria-live="polite"></div>
+<div class="crt" aria-hidden="true"></div>
+<script src="data.js"></script>
+<script src="app.js"></script>
+<script src="sync.js"></script>
+</body>
+</html>

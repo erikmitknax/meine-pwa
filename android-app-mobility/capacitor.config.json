@@ -1,0 +1,12 @@
+{
+  "appId": "io.github.erikmitknax.mobility",
+  "appName": "Mobility Quest",
+  "webDir": "www",
+  "backgroundColor": "#14122A",
+  "server": {
+    "url": "https://erikmitknax.github.io/meine-pwa/mobility-pwa/",
+    "androidScheme": "https",
+    "errorPath": "offline.html",
+    "allowNavigation": ["erikmitknax.github.io"]
+  }
+}
