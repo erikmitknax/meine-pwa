@@ -223,3 +223,13 @@ input[type=color]::-moz-color-swatch{border:3px solid var(--card);border-radius:
 .llab:focus{box-shadow:0 1.5px 0 var(--accent)}
 .lnk a.lsub{flex:none;font-weight:450;font-size:12px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .lnk.fav a.lsub{color:color-mix(in srgb,var(--ok) 70%,var(--muted))}
+
+/* Geschenkliste */
+.vsw{margin-bottom:14px}
+.vsw button{display:inline-flex;align-items:center;justify-content:center;gap:7px}
+.ghead{display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin:18px 4px 8px;font-weight:680;font-size:17px;letter-spacing:-.01em}
+.ghead:first-of-type{margin-top:4px}
+.ghead small{color:var(--muted);font-weight:600;font-size:13px}
+.gprice{flex:none;max-width:38%;border:0;border-radius:15px;padding:9px 12px;font-weight:700;font-size:14px;background:color-mix(in srgb,var(--accent) 16%,var(--card2));color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.gprice.empty{width:44px;height:44px;padding:0;border-radius:50%;display:flex;align-items:center;justify-content:center;color:var(--accent)}
+.item.gift.done .gprice{opacity:.6}

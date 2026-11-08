@@ -23,7 +23,7 @@ const SCALE = [
   [10, "Brauche ich wirklich", "Es löst ein echtes Problem oder ist mir extrem wichtig."]
 ];
 
-const DEFAULT_SETTINGS = { mode: "auto", accent: "#6d5efc", amoled: false, dense: false, remind: 14, filter: "open", sort: "new", cats: [], catFilter: "" };
+const DEFAULT_SETTINGS = { mode: "auto", accent: "#6d5efc", amoled: false, dense: false, remind: 14, filter: "open", sort: "new", cats: [], catFilter: "", view: "wishes", gFilter: "idea", gWho: "", gOcc: "" };
 
 /* ---------- Zustand + Speicher ---------- */
 let settings = loadSettings();
@@ -113,7 +113,11 @@ function normItem(r) {
     created, wish, ratings,
     bought: r.bought ? Number(r.bought) || Date.now() : null,
     cat: String(r.cat || "").slice(0, 40),
-    exp: Number(r.exp) || null
+    exp: Number(r.exp) || null,
+    kind: r.kind === "gift" ? "gift" : "wish",
+    who: String(r.who || "").trim().slice(0, 40),
+    occasion: String(r.occasion || "").trim().slice(0, 40),
+    given: Number(r.given) || null
   };
   fixFavs(out);
   return out;
@@ -187,6 +191,7 @@ const IC = {
   clock: p => svg('<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>', p),
   bag: p => svg('<path d="M6 8h12l1 12H5L6 8z"/><path d="M9 8V6.5a3 3 0 0 1 6 0V8"/>', p),
   star: (p, on) => svg('<path d="M12 3.5l2.6 5.3 5.9.9-4.250 4.100 1 5.800L12 16.900 6.750 19.600l1-5.800L3.500 9.700l5.900-.9z"' + (on ? ' fill="currentColor"' : '') + '/>', p),
+  gift: p => svg('<rect x="3" y="8" width="18" height="4" rx="1"/><path d="M12 8v13M5 12v7a2 2 0 0 0 2 2h14M19 12v7a2 2 0 0 1-2 2M7.5 8a2.5 2.5 0 1 1 0-5C10 3 12 8 12 8s2-5 4.500-5a2.500 2.500 0 1 1 0 5"/>', p),
   ext: p => svg('<path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/>', p)
 };
 
@@ -253,6 +258,7 @@ const SORTS = [["new", "Neueste zuerst"], ["old", "Älteste zuerst"], ["wishDesc
 
 function visibleItems() {
   let list = items.filter(i => {
+    if (i.kind === "gift") return false;
     const arch = isArchived(i);
     if (settings.filter === "archive") return arch;
     if (arch) return false;
@@ -313,7 +319,9 @@ function catBar() {
 }
 
 function viewMain() {
-  const active = items.filter(i => !isArchived(i)), archN = items.length - active.length;
+  if (settings.view === "gifts") return viewGifts();
+  const all = items.filter(i => i.kind !== "gift");
+  const active = all.filter(i => !isArchived(i)), archN = all.length - active.length;
   const open = active.filter(i => !i.bought), bought = active.length - open.length;
   const avg = open.length ? (open.reduce((s, i) => s + i.wish, 0) / open.length).toFixed(1).replace(".", ",") : "–";
   const dueN = open.filter(isDue).length;
@@ -321,8 +329,8 @@ function viewMain() {
   let body;
   if (list.length) body = `<div class="list">${list.map(card).join("")}</div>`;
   else {
-    const msg = items.length === 0 ? ["Noch nichts auf der Liste", "Schreib oben hinein, was du dir kaufen möchtest."]
-      : settings.catFilter && settings.filter !== "archive" && !items.some(i => !isArchived(i) && (settings.catFilter === "_none" ? !catById(i.cat) : i.cat === settings.catFilter)) ? ["Nichts in dieser Kategorie", "Trag oben einen Wunsch ein – er landet automatisch hier."]
+    const msg = all.length === 0 ? ["Noch nichts auf der Liste", "Schreib oben hinein, was du dir kaufen möchtest."]
+      : settings.catFilter && settings.filter !== "archive" && !all.some(i => !isArchived(i) && (settings.catFilter === "_none" ? !catById(i.cat) : i.cat === settings.catFilter)) ? ["Nichts in dieser Kategorie", "Trag oben einen Wunsch ein – er landet automatisch hier."]
       : settings.filter === "archive" ? ["Archiv ist leer", "Wünsche und Kategorien mit erreichtem Ablaufdatum landen automatisch hier."]
       : settings.filter === "open" ? ["Alles erledigt", "Keine offenen Wünsche. Stark – oder Zeit für neue."]
         : settings.filter === "bought" ? ["Noch nichts gekauft", "Abgehakte Wünsche landen hier."] : ["Nichts gefunden", ""];
@@ -336,6 +344,7 @@ function viewMain() {
       <button type="button" class="ghost" data-act="settings" aria-label="Einstellungen">${IC.gear(21)}</button>
     </div>
   </div>
+  ${viewSwitch()}
   <div class="stats">
     <div class="stat"><b>${open.length}</b><span>Offen</span></div>
     <div class="stat"><b>${avg}</b><span>Ø Wunsch</span></div>
@@ -478,13 +487,14 @@ function editCatChips(it) {
 function editSheet(id) {
   const it = items.find(i => i.id === id);
   if (!it) return;
+  const gift = it.kind === "gift";
   const rec = openSheet(`<div class="grab"></div>
-    <div class="sh-head"><h2>Wunsch</h2><button type="button" class="x" data-close aria-label="Fertig">${IC.x(20)}</button></div>
-    <input class="nm" id="eName" value="${esc(it.name)}" placeholder="Was möchtest du kaufen?" maxlength="300">
+    <div class="sh-head"><h2>${gift ? "Geschenk" : "Wunsch"}</h2><button type="button" class="x" data-close aria-label="Fertig">${IC.x(20)}</button></div>
+    <input class="nm" id="eName" value="${esc(it.name)}" placeholder="${gift ? "Geschenkidee" : "Was möchtest du kaufen?"}" maxlength="300">
     <div id="eArch">${archBanner(it)}</div>
-    <div class="panel"><h3>Wie sehr willst du es? (1–10)</h3><div id="eRate">${ratingHtml(it)}</div></div>
+    ${gift ? giftPanel(it) : `<div class="panel"><h3>Wie sehr willst du es? (1–10)</h3><div id="eRate">${ratingHtml(it)}</div></div>
     <div class="panel"><h3>Kategorie</h3><div class="chips wrap" id="eCats">${editCatChips(it)}</div>
-      <div class="addrow" style="margin-top:10px"><input class="fld" id="eCatIn" placeholder="Neue Kategorie …" maxlength="30" autocomplete="off"><button type="button" class="btn pri" data-act="catAdd" aria-label="Kategorie hinzufügen">${IC.plus(20)}</button></div></div>
+      <div class="addrow" style="margin-top:10px"><input class="fld" id="eCatIn" placeholder="Neue Kategorie …" maxlength="30" autocomplete="off"><button type="button" class="btn pri" data-act="catAdd" aria-label="Kategorie hinzufügen">${IC.plus(20)}</button></div></div>`}
     <div class="panel"><h3>Links</h3><div id="eLinks">${linksHtml(it)}</div>
       <div class="addrow"><input class="fld" id="eLinkIn" type="url" inputmode="url" placeholder="Link einfügen (Shop, Test, Video …)" autocapitalize="off" autocomplete="off"><button type="button" class="btn pri" data-act="lnkAdd" aria-label="Link hinzufügen">${IC.plus(20)}</button></div>
       <input class="fld" id="eLinkLab" placeholder="Was bietet der Link? (z. B. 3er-Set, 12,99 €)" maxlength="80" autocomplete="off" style="margin-top:8px"></div>
@@ -493,27 +503,33 @@ function editSheet(id) {
     <div class="panel"><h3>Details</h3>
       <div class="two"><div><label for="ePrice">Preis (optional)</label><input class="fld" id="ePrice" value="${esc(it.price)}" placeholder="z. B. 129 €" maxlength="30"></div>
       <div><label for="eDate">Eingetragen am</label><input class="fld" id="eDate" type="date" value="${toInputDate(it.created)}" max="${toInputDate(Date.now())}"></div></div>
-      <div style="height:10px"></div><label class="lbl" for="eExp">Ablaufdatum (optional)</label>
+      ${gift ? `<div style="height:10px"></div>` : `<div style="height:10px"></div><label class="lbl" for="eExp">Ablaufdatum (optional)</label>
       <div class="addrow"><input class="fld" id="eExp" type="date" value="${it.exp ? toInputDate(it.exp) : ""}"><button type="button" class="btn" data-act="expClear" aria-label="Ablaufdatum entfernen">${IC.x(18)}</button></div>
-      <div class="muted tiny" style="margin:6px 0 10px">Ab diesem Tag wandert der Wunsch ins Archiv – dann brauchst du ihn nicht mehr.</div>
+      <div class="muted tiny" style="margin:6px 0 10px">Ab diesem Tag wandert der Wunsch ins Archiv – dann brauchst du ihn nicht mehr.</div>`}
       <textarea class="fld" id="eNote" placeholder="Notiz (Farbe, Größe, wofür …)" maxlength="3000">${esc(it.note)}</textarea></div>
     <div class="row" style="gap:10px;margin-top:4px">
       <button type="button" class="btn grow" data-act="eBought">${IC.check(18)}${it.bought ? "Wieder offen" : "Als gekauft"}</button>
+      ${gift ? `<button type="button" class="btn grow ${it.given ? "pri" : ""}" data-act="eGiven">${IC.gift(18)}${it.given ? "Verschenkt ✓" : "Verschenkt"}</button>` : ""}
       <button type="button" class="btn dng" data-act="eDelete" aria-label="Löschen">${IC.trash(18)}</button>
     </div>`, { cls: "tall", onClose: () => { window.wlEditRefresh = null; render(); } });
 
   const sh = rec.sheet;
-  const reRate = () => { $("#eRate", sh).innerHTML = ratingHtml(it); };
+  const reRate = () => { const el = $("#eRate", sh); if (el) el.innerHTML = ratingHtml(it); };
+  const reGift = () => {
+    const w = $("#eWhoC", sh), o = $("#eOccC", sh), wi = $("#eWho", sh), oi = $("#eOcc", sh);
+    if (w) w.innerHTML = giftChips("who", it.who); if (o) o.innerHTML = giftChips("occ", it.occasion);
+    if (wi && document.activeElement !== wi) wi.value = it.who; if (oi && document.activeElement !== oi) oi.value = it.occasion;
+  };
   const reLinks = () => { $("#eLinks", sh).innerHTML = linksHtml(it); $$(".llab", sh).forEach(autoGrow); };
   const reImgs = () => { $("#eImgs", sh).innerHTML = imagesHtml(it); };
-  const reCats = () => { $("#eCats", sh).innerHTML = editCatChips(it); $("#eArch", sh).innerHTML = archBanner(it); };
+  const reCats = () => { const el = $("#eCats", sh); if (el) el.innerHTML = editCatChips(it); $("#eArch", sh).innerHTML = archBanner(it); };
   function addCatFromInput() {
     const inp = $("#eCatIn", sh), c = addCat(inp.value);
     if (!c) return;
     it.cat = c.id; inp.value = ""; persist(it); reCats();
   }
   window.wlEditRefresh = { id: it.id, fn: () => {
-    reRate(); reImgs(); reCats();
+    reRate(); reImgs(); reCats(); reGift();
     if (!(document.activeElement && document.activeElement.classList.contains("llab"))) reLinks();
     [["eName", it.name], ["ePrice", it.price], ["eNote", it.note]].forEach(([k, v]) => { const el = $("#" + k, sh); if (el && document.activeElement !== el) el.value = v; });
     const ex = $("#eExp", sh); if (ex) ex.value = it.exp ? toInputDate(it.exp) : "";
@@ -546,6 +562,8 @@ function editSheet(id) {
     if (t.id === "eName") { it.name = t.value; later(); }
     else if (t.id === "ePrice") { it.price = t.value; later(); }
     else if (t.id === "eNote") { it.note = t.value; later(); }
+    else if (t.id === "eWho") { it.who = t.value.trim().slice(0, 40); $("#eWhoC", sh).innerHTML = giftChips("who", it.who); later(); }
+    else if (t.id === "eOcc") { it.occasion = t.value.trim().slice(0, 40); $("#eOccC", sh).innerHTML = giftChips("occ", it.occasion); later(); }
     else if (t.classList.contains("llab")) { t.value = t.value.replace(/\n/g, " "); autoGrow(t); setLabel(it, it.links[+t.dataset.i], t.value); later(); }
   });
   sh.addEventListener("change", e => {
@@ -587,8 +605,11 @@ function editSheet(id) {
       case "catSet": it.cat = b.dataset.v || ""; persist(it); reCats(); break;
       case "catAdd": addCatFromInput(); break;
       case "expClear": it.exp = null; $("#eExp", sh).value = ""; persist(it); reCats(); break;
+      case "whoSet": it.who = it.who === b.dataset.v ? "" : b.dataset.v; persist(it); reGift(); break;
+      case "occSet": it.occasion = it.occasion === b.dataset.v ? "" : b.dataset.v; persist(it); reGift(); break;
+      case "eGiven": it.given = it.given ? null : Date.now(); if (it.given && !it.bought) it.bought = it.given; persist(it); closeSheet(); toast(it.given ? "Als verschenkt abgehakt" : "Nicht mehr als verschenkt markiert"); break;
       case "eBought": setBought(it, !it.bought); closeSheet(); break;
-      case "eDelete": if (confirm("„" + (it.name || "Wunsch") + "“ wirklich löschen?")) { deleteItem(it); closeSheet(); } break;
+      case "eDelete": if (confirm("„" + (it.name || (gift ? "Geschenk" : "Wunsch")) + "“ wirklich löschen?")) { deleteItem(it); closeSheet(); } break;
     }
   });
   setTimeout(() => $$(".llab", sh).forEach(autoGrow), 60);
@@ -601,17 +622,19 @@ function imageViewer(src) {
 }
 
 /* ---------- Aktionen ---------- */
-function addItem(name, cat) {
+function addItem(name, cat, extra) {
   name = name.trim();
   if (!name) return null;
   const now = Date.now();
-  const it = { id: uid(), name, note: "", price: "", links: [], favLinks: [], linkNames: [], images: [], created: now, wish: 5, ratings: [{ t: now, v: 5 }], bought: null, cat: cat || "", exp: null };
+  const it = { id: uid(), name, note: "", price: "", links: [], favLinks: [], linkNames: [], images: [], created: now, wish: 5, ratings: [{ t: now, v: 5 }], bought: null, cat: cat || "", exp: null, kind: "wish", who: "", occasion: "", given: null };
+  if (extra) Object.assign(it, extra);
   items.push(it);
   persist(it);
   return it;
 }
 function setBought(it, yes) {
   it.bought = yes ? Date.now() : null;
+  if (!yes) it.given = null;
   persist(it); render(); buzz(14);
   if (yes) toast("„" + (it.name || "Wunsch") + "“ gekauft", { label: "Rückgängig", fn: () => { it.bought = null; persist(it); render(); } });
 }
@@ -701,7 +724,7 @@ function settingsSheet() {
       }
       case "export": exportBackup(); break;
       case "import": $("#sImport", sh).click(); break;
-      case "wipe": if (confirm("Wirklich ALLE Wünsche löschen? Wenn du angemeldet bist, werden sie auch im Konto und auf deinen anderen Geräten gelöscht. Das lässt sich nicht rückgängig machen.")) { items = []; clearDb(); closeSheet(); render(); toast("Alles gelöscht"); } break;
+      case "wipe": if (confirm("Wirklich ALLE Wünsche und Geschenke löschen? Wenn du angemeldet bist, werden sie auch im Konto und auf deinen anderen Geräten gelöscht. Das lässt sich nicht rückgängig machen.")) { items = []; clearDb(); closeSheet(); render(); toast("Alles gelöscht"); } break;
     }
   });
   sh.addEventListener("input", e => { if (e.target.id === "sAccent") { settings.accent = e.target.value; saveSettings(); applyTheme(); render(); } });
@@ -768,6 +791,111 @@ async function importBackup(file, done) {
   if (done) done();
 }
 
+/* ---------- Geschenkliste ---------- */
+const OCCASIONS = ["Weihnachten", "Geburtstag", "Hochzeit", "Jahrestag"];
+const giftsAll = () => items.filter(i => i.kind === "gift");
+const giftStatus = g => g.given ? "given" : g.bought ? "bought" : "idea";
+const whoList = () => [...new Set(giftsAll().map(g => g.who).filter(Boolean))].sort((a, b) => a.localeCompare(b, "de"));
+const occUsed = () => [...new Set(giftsAll().map(g => g.occasion).filter(Boolean))].sort((a, b) => a.localeCompare(b, "de"));
+const occList = () => [...new Set([...OCCASIONS, ...occUsed()])];
+function giftChips(kind, cur) {
+  const list = kind === "who" ? whoList() : occList(), act = kind === "who" ? "whoSet" : "occSet";
+  return list.length ? list.map(v => `<button type="button" class="chip ${cur === v ? "on" : ""}" data-act="${act}" data-v="${esc(v)}">${esc(v)}</button>`).join("")
+    : `<span class="muted small">Noch niemand – tippe unten einen Namen ein.</span>`;
+}
+function giftPanel(it) {
+  return `<div class="panel"><h3>Für wen?</h3><div class="chips wrap" id="eWhoC">${giftChips("who", it.who)}</div>
+      <input class="fld" id="eWho" placeholder="Name, z. B. Mama" maxlength="40" value="${esc(it.who)}" style="margin-top:10px" autocomplete="off"></div>
+    <div class="panel"><h3>Anlass</h3><div class="chips wrap" id="eOccC">${giftChips("occ", it.occasion)}</div>
+      <input class="fld" id="eOcc" placeholder="Anlass, z. B. Weihnachten 2026" maxlength="40" value="${esc(it.occasion)}" style="margin-top:10px" autocomplete="off"></div>`;
+}
+/* Preis aus Freitext lesen („12,99 €“, „ca. 1.299 EUR“) – für die Summe */
+function parsePrice(s) {
+  const m = String(s || "").replace(/\s/g, "").match(/\d[\d.,]*/);
+  if (!m) return 0;
+  let n = m[0].replace(/[.,]+$/, "");
+  if (n.includes(",") && n.includes(".")) n = n.lastIndexOf(",") > n.lastIndexOf(".") ? n.replace(/\./g, "").replace(",", ".") : n.replace(/,/g, "");
+  else if (n.includes(",")) n = /,\d{1,2}$/.test(n) ? n.replace(",", ".") : n.replace(/,/g, "");
+  else if (n.includes(".")) n = /\.\d{1,2}$/.test(n) && (n.match(/\./g) || []).length === 1 ? n : n.replace(/\./g, "");
+  const v = parseFloat(n);
+  return isFinite(v) ? v : 0;
+}
+const fmtEur = n => n.toLocaleString("de-DE", { style: "currency", currency: "EUR", minimumFractionDigits: n % 1 ? 2 : 0, maximumFractionDigits: 2 });
+
+function viewSwitch() {
+  const v = settings.view === "gifts" ? "gifts" : "wishes";
+  return `<div class="seg full vsw" role="tablist">${[["wishes", "Wünsche", IC.bag(16)], ["gifts", "Geschenke", IC.gift(16)]].map(([k, l, ic]) => `<button type="button" class="${v === k ? "on" : ""}" data-act="view" data-v="${k}">${ic}${l}</button>`).join("")}</div>`;
+}
+function giftCard(g) {
+  const st = giftStatus(g), first = g.images[0];
+  const meta = [
+    g.occasion ? `<span class="cat" style="--c:var(--accent)"><i></i>${esc(g.occasion)}</span>` : "",
+    `<span>${st === "given" ? "Verschenkt " + fmtShort(g.given) : st === "bought" ? "Gekauft " + fmtShort(g.bought) : "Seit " + fmtShort(g.created)}</span>`,
+    g.links.length ? `<span>${IC.link(13)}${g.links.length}${g.favLinks.length ? ` · <b class="favn">★ ${g.favLinks.length}</b>` : ""}</span>` : "",
+    g.images.length ? `<span>${IC.image(13)}${g.images.length}</span>` : ""
+  ].join("");
+  return `<article class="item gift ${st === "given" ? "done" : ""}" data-id="${g.id}">
+    <button type="button" class="chk ${g.bought ? "on" : ""}" data-act="toggle" aria-label="${g.bought ? "Als nicht gekauft markieren" : "Als gekauft markieren"}">${IC.check(18)}</button>
+    <div class="body" data-act="open">
+      ${first ? `<img class="thumb" src="${first.t}" alt="" loading="lazy">` : ""}
+      <div class="txt"><div class="name">${esc(g.name) || "<span class='muted'>Ohne Namen</span>"}</div><div class="meta">${meta}</div></div>
+    </div>
+    <button type="button" class="gprice ${g.price ? "" : "empty"}" data-act="open" aria-label="Geschenk öffnen">${g.price ? esc(g.price) : IC.gift(20)}</button>
+  </article>`;
+}
+function viewGifts() {
+  const all = giftsAll();
+  const n = { idea: 0, bought: 0, given: 0 };
+  all.forEach(g => { n[giftStatus(g)]++; });
+  const sum = all.filter(g => !g.given).reduce((s, g) => s + parsePrice(g.price), 0);
+  const who = whoList(), occs = occUsed();
+  let list = all.filter(g => settings.gFilter === "all" || giftStatus(g) === settings.gFilter);
+  const gw = settings.gWho, go = settings.gOcc;
+  if (gw === "_none") list = list.filter(g => !g.who); else if (gw && who.includes(gw)) list = list.filter(g => g.who === gw);
+  if (go && occs.includes(go)) list = list.filter(g => g.occasion === go);
+  list.sort((a, b) => b.created - a.created);
+  const groups = new Map();
+  list.forEach(g => { if (!groups.has(g.who)) groups.set(g.who, []); groups.get(g.who).push(g); });
+  const keys = [...groups.keys()].sort((a, b) => (a === "") - (b === "") || a.localeCompare(b, "de"));
+  let body;
+  if (list.length) body = keys.map(k => {
+    const gs = groups.get(k), s = gs.reduce((t, g) => t + parsePrice(g.price), 0);
+    return `<div class="ghead"><span>${k ? esc(k) : "Ohne Person"}</span><small>${gs.length}${s ? " · " + fmtEur(s) : ""}</small></div><div class="list">${gs.map(giftCard).join("")}</div>`;
+  }).join("");
+  else {
+    const msg = all.length === 0 ? ["Noch keine Geschenkideen", "Sammle hier Ideen für Weihnachten, Geburtstage und mehr."]
+      : settings.gFilter === "idea" ? ["Keine offenen Ideen", "Alles gekauft oder verschenkt – oder neue Idee oben eintragen."]
+        : settings.gFilter === "bought" ? ["Nichts gekauft & noch nicht verschenkt", "Gekaufte Geschenke warten hier aufs Verschenken."]
+          : settings.gFilter === "given" ? ["Noch nichts verschenkt", "Hake Geschenke im Detail mit „Verschenkt“ ab."] : ["Nichts gefunden", ""];
+    body = `<div class="empty"><div class="big">${IC.gift(34)}</div><b>${msg[0]}</b>${msg[1]}</div>`;
+  }
+  const chip = (v, label) => `<button type="button" class="chip ${(who.includes(gw) || gw === "_none" ? gw : "") === v ? "on" : ""}" data-act="gWho" data-v="${esc(v)}">${esc(label)}</button>`;
+  const chips = who.length ? chip("", "Alle") + who.map(w => chip(w, w)).join("") + (all.some(g => !g.who) ? chip("_none", "Ohne") : "") : "";
+  return `
+  <div class="top">
+    <div><h1>Geschenke</h1><div class="muted small sub">${n.idea} Ideen · ${n.bought} gekauft · ${n.given} verschenkt${typeof SY !== "undefined" && SY.user && SY.err ? ` · <button type="button" class="syerr" data-act="settings">⚠ Sync-Problem</button>` : ""}</div></div>
+    <div class="row"><button type="button" class="ghost" data-act="settings" aria-label="Einstellungen">${IC.gear(21)}</button></div>
+  </div>
+  ${viewSwitch()}
+  <div class="stats">
+    <div class="stat"><b>${n.idea}</b><span>Ideen</span></div>
+    <div class="stat"><b>${n.bought}</b><span>Gekauft</span></div>
+    <div class="stat"><b>${sum ? fmtEur(sum) : "–"}</b><span>Summe offen</span></div>
+  </div>
+  <form class="addbar" id="addForm" autocomplete="off">
+    <input id="addIn" type="text" placeholder="Geschenkidee eintragen …" enterkeyhint="done" maxlength="300" aria-label="Neue Geschenkidee">
+    <button type="submit" class="addbtn" aria-label="Hinzufügen">${IC.plus(24)}</button>
+  </form>
+  <div class="seg full" role="tablist">
+    ${[["idea", "Ideen"], ["bought", "Gekauft"], ["given", "Verschenkt"], ["all", "Alle"]].map(([k, l]) => `<button type="button" class="${settings.gFilter === k ? "on" : ""}" data-act="gFilter" data-v="${k}">${l}</button>`).join("")}
+  </div>
+  <div class="bar">
+    <div class="chips">${chips}</div>
+    ${occs.length ? `<div class="sel"><select id="occSel" aria-label="Anlass filtern"><option value="">Alle Anlässe</option>${occs.map(o => `<option value="${esc(o)}" ${go === o ? "selected" : ""}>${esc(o)}</option>`).join("")}</select>${IC.chev(15)}</div>` : ""}
+  </div>
+  ${body}`;
+}
+
 /* ---------- Ereignisse ---------- */
 document.addEventListener("click", e => {
   if (e.target.closest(".sheet-wrap")) return; // Sheets behandeln ihre Klicks selbst
@@ -777,6 +905,9 @@ document.addEventListener("click", e => {
   const it = art ? items.find(i => i.id === art.dataset.id) : null;
   switch (b.dataset.act) {
     case "info": infoSheet(); break;
+    case "view": { const ai = $("#addIn"); if (ai) ai.value = ""; settings.view = b.dataset.v; saveSettings(); render(); $("#view").scrollTop = 0; break; }
+    case "gFilter": settings.gFilter = b.dataset.v; saveSettings(); render(); break;
+    case "gWho": settings.gWho = b.dataset.v; saveSettings(); render(); break;
     case "settings": settingsSheet(); break;
     case "filter": settings.filter = b.dataset.v; saveSettings(); render(); break;
     case "sortDue": settings.sort = "due"; settings.filter = "open"; saveSettings(); render(); break;
@@ -790,13 +921,17 @@ document.addEventListener("submit", e => {
   if (e.target.id !== "addForm") return;
   e.preventDefault();
   const inp = $("#addIn");
-  const it = addItem(inp.value, catById(settings.catFilter) ? settings.catFilter : "");
+  const inGifts = settings.view === "gifts";
+  const it = inGifts
+    ? addItem(inp.value, "", { kind: "gift", who: settings.gWho && settings.gWho !== "_none" ? settings.gWho : "", occasion: settings.gOcc || "" })
+    : addItem(inp.value, catById(settings.catFilter) ? settings.catFilter : "");
   if (!it) return inp.focus();
   inp.value = ""; render(); buzz();
   editSheet(it.id);
 });
 document.addEventListener("change", e => {
-  if (e.target.id === "sortSel") { settings.sort = e.target.value; saveSettings(); render(); }
+  if (e.target.id === "occSel") { settings.gOcc = e.target.value; saveSettings(); render(); }
+  else if (e.target.id === "sortSel") { settings.sort = e.target.value; saveSettings(); render(); }
 });
 if (window.matchMedia) matchMedia("(prefers-color-scheme: light)").addEventListener?.("change", () => { if (settings.mode === "auto") applyTheme(); });
 
