@@ -299,9 +299,9 @@ html.pv-lock,html.pv-lock body{overflow:hidden}
 #r2.holding::after{width:100%;transition:width 1s linear}
 #rateInfo{position:fixed;left:50%;bottom:calc(90px + env(safe-area-inset-bottom));transform:translateX(-50%);z-index:9998;background:var(--ink);color:var(--bg);padding:8px 14px;border-radius:999px;font-size:.85rem;font-weight:600;box-shadow:0 4px 14px rgba(0,0,0,.25);pointer-events:none;max-width:92vw;text-align:center;transition:opacity .4s}
 #rateInfo.out{opacity:0}
-#cardPause{position:relative;overflow:hidden;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;touch-action:manipulation}
-#cardPause::after{content:"";position:absolute;inset:0 auto 0 0;width:0;background:var(--accent);opacity:.3;pointer-events:none}
-#cardPause.holding::after{width:100%;transition:width 1s linear}
+#cardPause,#cardKnown{position:relative;overflow:hidden;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;touch-action:manipulation}
+#cardPause::after,#cardKnown::after{content:"";position:absolute;inset:0 auto 0 0;width:0;background:var(--accent);opacity:.3;pointer-events:none}
+#cardPause.holding::after,#cardKnown.holding::after{width:100%;transition:width 1s linear}
 </style>
 </head>
 <body>
@@ -410,6 +410,7 @@ html.pv-lock,html.pv-lock body{overflow:hidden}
     </div>
     <div class="cardmeta" id="cardMeta">
       <span class="cm-deck"><small>Stapel</small><b id="cardDeck"></b></span>
+      <button class="btn small cm-edit" id="cardKnown" type="button" aria-label="Karte ist sicher (1 Sekunde gedrückt halten)" title="Sicher gewusst: 1 Sekunde gedrückt halten">✓</button>
       <button class="btn small cm-edit" id="cardPause" type="button" aria-label="Karte pausieren (1 Sekunde gedrückt halten)" title="Zum Pausieren 1 Sekunde gedrückt halten">⏸</button>
       <button class="btn small cm-edit" id="cardEdit" type="button" aria-label="Karte bearbeiten" title="Karte bearbeiten">✎</button>
     </div>
@@ -596,7 +597,7 @@ function normalize(){
   S.topics.forEach(t=>{t.parent=(t.parent&&t.parent!==t.id&&tids.has(t.parent))?t.parent:"";t.pdfs=Array.isArray(t.pdfs)?t.pdfs.filter(e=>e&&e.id&&e.name):[]});
   S.topics.forEach(t=>{const seen=new Set([t.id]);let p=t.parent;while(p){if(seen.has(p)){t.parent="";break}seen.add(p);const pt=S.topics.find(x=>x.id===p);p=pt?pt.parent:""}});
   S.decks=Array.isArray(S.decks)?S.decks:[];
-  S.decks.forEach(d=>{d.topic=d.topic||"";d.cards=Array.isArray(d.cards)?d.cards:[];d.cards.forEach(c=>{if(c.p)c.p=1;else delete c.p;c.box=Math.max(0,Math.min(MAXBOX,c.box|0));c.due=c.due||0;c.ok=c.ok||0;c.bad=c.bad||0})});
+  S.decks.forEach(d=>{d.topic=d.topic||"";d.cards=Array.isArray(d.cards)?d.cards:[];d.cards.forEach(c=>{if(c.k){c.k=1;delete c.p}else{delete c.k;if(c.p)c.p=1;else delete c.p}c.box=Math.max(0,Math.min(MAXBOX,c.box|0));c.due=c.due||0;c.ok=c.ok||0;c.bad=c.bad||0})});
   S.sets=(Array.isArray(S.sets)?S.sets:[]).filter(s=>s&&s.id).map(s=>({id:s.id,name:s.name||"Lernstapel",topics:Array.isArray(s.topics)?s.topics:[],decks:Array.isArray(s.decks)?s.decks:[]}));
   S.log=S.log||{};S.set=Object.assign({work:25,short:5,long:15},S.set||{});S.v=2;
 }
@@ -818,9 +819,11 @@ function bump(key,n){const d=String(dayNum());S.log[d]=S.log[d]||{};S.log[d][key
 
 /* ---------- Wiederholung (7 Fächer, wie in der Lernkartei) ---------- */
 const startOfToday=()=>{const d=new Date();d.setHours(0,0,0,0);return d.getTime()};
-const isDue=c=>!c.p&&(c.due||0)<=Date.now();
-const liveN=d=>d.cards.reduce((a,c)=>a+(c.p?0:1),0);   /* ohne pausierte Karten */
-const pausedCards=()=>S.decks.flatMap(d=>d.cards.filter(c=>c.p).map(c=>({c,d})));
+const off=c=>!!(c.p||c.k);   /* pausiert oder als „sicher“ markiert: wird nicht abgefragt */
+const isDue=c=>!off(c)&&(c.due||0)<=Date.now();
+const liveN=d=>d.cards.reduce((a,c)=>a+(off(c)?0:1),0);   /* ohne pausierte und sichere Karten */
+const flagCards=k=>S.decks.flatMap(d=>d.cards.filter(c=>c[k]).map(c=>({c,d})));
+const pausedCards=()=>flagCards("p"),knownCards=()=>flagCards("k");
 const dueCount=d=>d.cards.filter(isDue).length;
 /* Einstellbar: pro Knopf die Wirkung aufs Fach und ein Abstands-Faktor, dazu die Tage je Fach */
 const SRS_ACTS=[["reset","Zurück auf Neu (Fach 0)"],["back","Ein Fach zurück"],["stay","Im Fach bleiben"],["up1","Ein Fach vor"],["up2","Zwei Fächer vor"]];
@@ -1191,7 +1194,7 @@ function renderHome(){
   $("#startDue").disabled=!due;
   /* Ausblick: wie viele Karten in den nächsten 7 Tagen neu fällig werden */
   const sot=startOfToday(),fc=Array(8).fill(0);
-  S.decks.forEach(d=>d.cards.forEach(c=>{if(c.p||(c.due||0)<=Date.now())return;const k=Math.floor((c.due-sot)/DAY);if(k>=1&&k<=7)fc[k]++}));
+  S.decks.forEach(d=>d.cards.forEach(c=>{if(off(c)||(c.due||0)<=Date.now())return;const k=Math.floor((c.due-sot)/DAY);if(k>=1&&k<=7)fc[k]++}));
   $("#dueText").textContent+=fc[1]?` Morgen kommen ${fc[1]} dazu.`:(total&&!fc[1]?" Morgen kommen keine dazu.":"");
   const fmax=Math.max(5,...fc.slice(1)),fwd=["So","Mo","Di","Mi","Do","Fr","Sa"];
   $("#fcBars").innerHTML=fc.slice(1).map((n,i)=>`<div><small>${n||""}</small><span class="b${i===0?" today":""}" style="height:${n/fmax*72}%"></span><small>${i===0?"Morgen":fwd[new Date(Date.now()+(i+1)*864e5).getDay()]}</small></div>`).join("");
@@ -1204,7 +1207,7 @@ function renderHome(){
   let s=0,x=t;if(!act(x))x--;while(act(x)){s++;x--}
   $("#streak").textContent=s;
   $("#focusWeek").textContent=days.reduce((a,x)=>a+((S.log[x]||{}).f||0),0);
-  const cnt=Array(MAXBOX+1).fill(0);S.decks.forEach(d=>d.cards.forEach(c=>{if(!c.p)cnt[Math.min(MAXBOX,c.box||0)]++}));
+  const cnt=Array(MAXBOX+1).fill(0);S.decks.forEach(d=>d.cards.forEach(c=>{if(!off(c))cnt[Math.min(MAXBOX,c.box||0)]++}));
   $("#fach").innerHTML=cnt.map((n,i)=>`<div><b class="mono">${n}</b><small>${i?i:"Neu"}</small></div>`).join("");
 }
 /* Wer das Lernen aus einem anderen Reiter startet, landet nach „Beenden“ wieder dort. */
@@ -1222,7 +1225,7 @@ function cardsOf(src){
   else if(src.kind==="topic"){const cv=descIds(src.id);ds=S.decks.filter(d=>cv.has(d.topic))}
   else if(src.kind==="set"){const s=S.sets.find(x=>x.id===src.id);ds=s?decksOfSet(s):[]}
   else ds=S.decks.slice();
-  return ds.flatMap(d=>d.cards.filter(c=>!c.p).map(c=>({c,d})));
+  return ds.flatMap(d=>d.cards.filter(c=>!off(c)).map(c=>({c,d})));
 }
 function parseSrc(v){if(!v||v==="all")return {kind:"all"};const i=v.indexOf(":");return {kind:v.slice(0,i),id:v.slice(i+1)}}
 function fillSrc(){
@@ -1315,23 +1318,24 @@ function openCardEditor(){
   b.hidden=false;b.scrollIntoView({block:"nearest"});setTimeout(()=>f.focus(),30);
 }
 $("#cardEdit").addEventListener("click",openCardEditor);
-/* Karte pausieren: wird nicht mehr abgefragt, bleibt aber erhalten (Bibliothek › Pausiert) */
-function pauseCard(){
+/* Karte pausieren (Bibliothek › Pausiert) oder als sicher markieren (Bibliothek › Sicher gewusst): wird nicht mehr abgefragt, bleibt aber erhalten */
+function offCard(flag){
   if(!Q.active)return;
   const id=Q.queue[0],x=Q.map[id];if(!x)return;
-  x.c.p=1;x.d.updated=Date.now();saveDeck(x.d);
-  if(document.activeElement&&document.activeElement.blur)document.activeElement.blur();   /* Leertaste soll danach wieder die Karte umdrehen, nicht erneut pausieren */
+  delete x.c.p;delete x.c.k;x.c[flag]=1;x.d.updated=Date.now();saveDeck(x.d);
+  if(document.activeElement&&document.activeElement.blur)document.activeElement.blur();   /* Leertaste soll danach wieder die Karte umdrehen, nicht erneut auslösen */
   Q.queue=Q.queue.filter(i=>i!==id);Q.total=Math.max(0,Q.total-1);
-  toast("Karte pausiert. Zu finden unter Bibliothek › Pausiert.");closeCardEditor();refreshAll();
+  toast(flag==="k"?"Karte als sicher markiert. Zu finden unter Bibliothek › Sicher gewusst.":"Karte pausiert. Zu finden unter Bibliothek › Pausiert.");closeCardEditor();refreshAll();
   if(!Q.queue.length){if(Q.total>0||Q.done>0)finishStudy();else leaveStudy()}else showCard();
 }
-/* Pausieren nur durch 1 Sekunde Gedrückthalten, damit eine Karte nicht aus Versehen verschwindet */
-(function(){
-  const b=$("#cardPause");let timer=0,fired=false;
+const pauseCard=()=>offCard("p"),knownCard=()=>offCard("k");
+/* Pausieren und „Sicher“ nur durch 1 Sekunde Gedrückthalten, damit eine Karte nicht aus Versehen verschwindet */
+function holdBtn(b,fn,hint){
+  let timer=0,fired=false;
   const stop=()=>{clearTimeout(timer);timer=0;b.classList.remove("holding")};
   const start=()=>{
     if(timer)return;fired=false;b.classList.remove("holding");void b.offsetWidth;b.classList.add("holding");
-    timer=setTimeout(()=>{timer=0;fired=true;b.classList.remove("holding");if(navigator.vibrate)try{navigator.vibrate(30)}catch(e){}pauseCard()},1000);
+    timer=setTimeout(()=>{timer=0;fired=true;b.classList.remove("holding");if(navigator.vibrate)try{navigator.vibrate(30)}catch(e){}fn()},1000);
   };
   b.addEventListener("pointerdown",e=>{if(e.button>0)return;start()});
   ["pointerup","pointerleave","pointercancel"].forEach(t=>b.addEventListener(t,stop));
@@ -1339,8 +1343,10 @@ function pauseCard(){
   b.addEventListener("keydown",e=>{if((e.key==="Enter"||e.key===" ")&&!e.repeat){e.preventDefault();start()}});
   b.addEventListener("keyup",e=>{if(e.key==="Enter"||e.key===" ")stop()});
   b.addEventListener("blur",stop);
-  b.addEventListener("click",()=>{if(fired){fired=false;return}toast("Zum Pausieren 1 Sekunde gedrückt halten")});
-})();
+  b.addEventListener("click",()=>{if(fired){fired=false;return}toast(hint)});
+}
+holdBtn($("#cardPause"),pauseCard,"Zum Pausieren 1 Sekunde gedrückt halten");
+holdBtn($("#cardKnown"),knownCard,"Karte ist sicher? 1 Sekunde gedrückt halten, dann wird sie nicht mehr abgefragt");
 
 function flip(){
   if(!Q.active)return;
@@ -1414,7 +1420,7 @@ function rate(r,easy){
 function undoRate(){
   if(!Q.hist||!Q.hist.length)return;
   let h,x;
-  while(Q.hist.length){h=Q.hist.pop();x=Q.map[h.id];if(x&&x.d.cards.includes(x.c)&&!x.c.p)break;x=null}
+  while(Q.hist.length){h=Q.hist.pop();x=Q.map[h.id];if(x&&x.d.cards.includes(x.c)&&!off(x.c))break;x=null}
   if(!x)return;
   Object.assign(x.c,h.prev);
   if(h.again){const i=Q.queue.indexOf(h.id);if(i>=0)Q.queue.splice(i,1)}else Q.done=Math.max(0,Q.done-1);
@@ -1787,7 +1793,7 @@ let lib={view:"list",deckId:null};
 function renderLib(){
   const v=lib.view;
   if(v==="import")renderImport();else if(v==="topics")renderTopics();else if(v==="deck")renderDeck();
-  else if(v==="newdeck")renderNewDeck();else if(v==="paused")renderPaused();else renderLibList();
+  else if(v==="newdeck")renderNewDeck();else if(v==="paused")renderPaused("p");else if(v==="known")renderPaused("k");else renderLibList();
 }
 function goLib(view,deckId){lib.view=view;lib.deckId=deckId||null;renderLib();window.scrollTo(0,0)}
 const backBtn=()=>el("div",{class:"row"},el("button",{class:"btn small",type:"button",onclick:()=>goLib("list")},"← Bibliothek"));
@@ -1798,15 +1804,15 @@ function topicSelect(id,noneLabel,allow){
 }
 
 function deckCard(parent,d){
-  const due=dueCount(d),counts=Array(MAXBOX+1).fill(0);d.cards.forEach(c=>{if(!c.p)counts[Math.min(MAXBOX,c.box||0)]++});
+  const due=dueCount(d),counts=Array(MAXBOX+1).fill(0);d.cards.forEach(c=>{if(!off(c))counts[Math.min(MAXBOX,c.box||0)]++});
   const boxes=el("div",{class:"boxes",title:"Fortschritt: Neu bis Fach 6"});
   counts.forEach(n=>{const i=el("i"),bb=el("b");bb.style.width=(liveN(d)?n/liveN(d)*100:0)+"%";i.append(bb);boxes.append(i)});
-  const good=d.cards.filter(c=>!c.p&&(c.box||0)>=3).length;
+  const good=d.cards.filter(c=>!off(c)&&(c.box||0)>=3).length;
   const go=el("button",{class:"btn small primary",type:"button",onclick:()=>{startFrom("bib",{kind:"deck",id:d.id},"due",0)}},"Lernen");
   if(!due)go.setAttribute("disabled","");
   parent.append(el("article",{class:"deckc"},
     el("div",{class:"top"},
-      el("div",{style:"min-width:0"},el("h3",{text:d.title}),el("div",{class:"syncnote",text:liveN(d)+" Karten · "+good+" sitzen gut"+(d.cards.length>liveN(d)?" · "+(d.cards.length-liveN(d))+" pausiert":"")})),
+      el("div",{style:"min-width:0"},el("h3",{text:d.title}),el("div",{class:"syncnote",text:liveN(d)+" Karten · "+good+" sitzen gut"+(d.cards.some(c=>c.p)?" · "+d.cards.filter(c=>c.p).length+" pausiert":"")+(d.cards.some(c=>c.k)?" · "+d.cards.filter(c=>c.k).length+" sicher":"")})),
       el("span",{class:"pill "+(due?"on":"off"),text:due?due+" fällig":"erledigt"})),
     boxes,
     el("div",{class:"row"},go,
@@ -1832,6 +1838,8 @@ function renderLibList(){
   }
   const np=pausedCards().length;
   b.append(el("button",{class:"pausedbar",type:"button",onclick:()=>goLib("paused")},el("span",null,el("b",{text:"⏸ Pausiert"}),el("br"),el("small",{text:np?np+(np===1?" Karte wird nicht abgefragt":" Karten werden nicht abgefragt"):"Keine pausierten Karten. Pausieren geht beim Lernen mit ⏸."})),el("span",{class:"chev","aria-hidden":"true",text:">"})));
+  const nk=knownCards().length;
+  b.append(el("button",{class:"pausedbar",type:"button",onclick:()=>goLib("known")},el("span",null,el("b",{text:"✅ Sicher gewusst"}),el("br"),el("small",{text:nk?nk+(nk===1?" Karte wird nicht mehr abgefragt":" Karten werden nicht mehr abgefragt"):"Noch keine. Beim Lernen markierst du sichere Karten mit ✓."})),el("span",{class:"chev","aria-hidden":"true",text:">"})));
   const sorted=S.decks.slice().sort((a,b)=>dueCount(b)-dueCount(a)||(b.updated||b.created||0)-(a.updated||a.created||0));
   const node=(parent,t,depth)=>{
     const ids=descIds(t.id),all=S.decks.filter(d=>ids.has(d.topic));
@@ -2050,13 +2058,14 @@ function renderTopics(){
 
 /* ---------- Pausierte Karten ---------- */
 const pSel=new Set();
-function renderPaused(){
+function renderPaused(kind){
+  const KN=kind==="k",T=KN?{h:"✅ Sicher gewusst",d:"Diese Karten sitzen bei dir und werden nicht mehr abgefragt. Hake an, was du wieder lernen willst.",e:"Noch keine Karten als sicher markiert. Beim Lernen hältst du den Knopf ✓ unter der Karte 1 Sekunde gedrückt."}:{h:"⏸ Pausiert",d:"Diese Karten werden nicht abgefragt und zählen nicht als fällig. Hake an, was du wieder lernen willst.",e:"Keine pausierten Karten. Beim Lernen pausierst du eine Karte mit dem Knopf ⏸ unter der Karte."};
   const b=$("#libBody");b.replaceChildren();
-  const all=pausedCards();
+  const all=flagCards(kind);
   [...pSel].forEach(id=>{if(!all.some(x=>x.c.id===id))pSel.delete(id)});
-  b.append(backBtn(),el("h2",{text:"⏸ Pausiert"}),
-    el("p",{class:"syncnote",style:"margin:0",text:"Diese Karten werden nicht abgefragt und zählen nicht als fällig. Hake an, was du wieder lernen willst."}));
-  if(!all.length){b.append(el("div",{class:"empty",text:"Keine pausierten Karten. Beim Lernen pausierst du eine Karte mit dem Knopf ⏸ unter der Karte."}));return}
+  b.append(backBtn(),el("h2",{text:T.h}),
+    el("p",{class:"syncnote",style:"margin:0",text:T.d}));
+  if(!all.length){b.append(el("div",{class:"empty",text:T.e}));return}
   const byDeck=new Map();all.forEach(x=>{if(!byDeck.has(x.d.id))byDeck.set(x.d.id,{d:x.d,cs:[]});byDeck.get(x.d.id).cs.push(x.c)});
   const act=el("button",{class:"btn primary",type:"button"},"Ausgewählte aktivieren");
   const allBtn=el("button",{class:"btn",type:"button"},"Alle aktivieren");
@@ -2064,19 +2073,19 @@ function renderPaused(){
   const upd=()=>{act.textContent="Ausgewählte aktivieren"+(pSel.size?" ("+pSel.size+")":"");act.disabled=!pSel.size};
   const activate=ids=>{
     const touched=new Set();
-    all.forEach(x=>{if(ids.has(x.c.id)){delete x.c.p;touched.add(x.d)}});
+    all.forEach(x=>{if(ids.has(x.c.id)){delete x.c[kind];touched.add(x.d)}});
     touched.forEach(d=>{d.updated=Date.now();saveDeck(d)});
-    pSel.clear();refreshAll();renderPaused();toast(ids.size===1?"Karte aktiviert":ids.size+" Karten aktiviert");
+    pSel.clear();refreshAll();renderPaused(kind);toast(ids.size===1?"Karte aktiviert":ids.size+" Karten aktiviert");
   };
   act.addEventListener("click",()=>activate(new Set(pSel)));
   allBtn.addEventListener("click",()=>armConfirm(allBtn,"Wirklich alle "+all.length+"?",()=>activate(new Set(all.map(x=>x.c.id)))));
-  selAll.addEventListener("click",()=>{all.forEach(x=>pSel.add(x.c.id));renderPaused()});
-  selNone.addEventListener("click",()=>{pSel.clear();renderPaused()});
+  selAll.addEventListener("click",()=>{all.forEach(x=>pSel.add(x.c.id));renderPaused(kind)});
+  selNone.addEventListener("click",()=>{pSel.clear();renderPaused(kind)});
   b.append(el("div",{class:"row"},selAll,selNone),el("div",{class:"row"},act,allBtn));
   byDeck.forEach(({d,cs})=>{
     const g=el("div",{class:"pgroup"});
     const dcb=el("input",{type:"checkbox","aria-label":"Alle Karten aus „"+d.title+"“ auswählen"});dcb.checked=cs.every(c=>pSel.has(c.id));
-    dcb.addEventListener("change",()=>{cs.forEach(c=>{if(dcb.checked)pSel.add(c.id);else pSel.delete(c.id)});renderPaused()});
+    dcb.addEventListener("change",()=>{cs.forEach(c=>{if(dcb.checked)pSel.add(c.id);else pSel.delete(c.id)});renderPaused(kind)});
     g.append(el("label",{class:"pgh"},dcb,el("span",null,(topicPath(d.topic)?topicPath(d.topic)+" › ":"")+d.title+" ",el("em",{style:"font-weight:400;color:var(--muted)",text:"("+cs.length+")"}))));
     cs.forEach(c=>{
       const cb=el("input",{type:"checkbox","aria-label":"Karte auswählen"});cb.checked=pSel.has(c.id);
@@ -2124,9 +2133,10 @@ function renderDeck(){
     x.addEventListener("click",()=>armConfirm(x,"Löschen?",()=>{d.cards=d.cards.filter(k=>k.id!==c.id);d.updated=Date.now();saveDeck(d);refreshAll();renderDeck()}));
     list.append(el("div",{class:"cardrow"},
       el("div",{style:"min-width:0;display:grid;gap:3px"},el("div",{class:"f",text:c.f}),el("div",{class:"b",text:c.b}),
-        el("div",{class:"lv",text:(c.p?"⏸ pausiert · ":"")+(c.box?"Fach "+c.box:"Neu")+(c.ok||c.bad?" · "+c.ok+"× gewusst, "+c.bad+"× nochmal":"")})),
+        el("div",{class:"lv",text:(c.p?"⏸ pausiert · ":"")+(c.k?"✅ sicher · ":"")+(c.box?"Fach "+c.box:"Neu")+(c.ok||c.bad?" · "+c.ok+"× gewusst, "+c.bad+"× nochmal":"")})),
       el("div",{class:"row",style:"flex-wrap:nowrap"},el("button",{class:"btn small",type:"button",onclick:()=>{editCard=c.id;renderDeck()}},"Bearbeiten"),
-        el("button",{class:"btn small",type:"button",title:c.p?"Wieder aktivieren":"Pausieren",onclick:()=>{if(c.p)delete c.p;else c.p=1;d.updated=Date.now();saveDeck(d);refreshAll();renderDeck();toast(c.p?"Karte pausiert":"Karte aktiviert")}},c.p?"▶ Aktivieren":"⏸ Pausieren"),x)));
+        el("button",{class:"btn small",type:"button",title:off(c)?"Wieder aktivieren":"Pausieren",onclick:()=>{if(off(c)){delete c.p;delete c.k}else c.p=1;d.updated=Date.now();saveDeck(d);refreshAll();renderDeck();toast(off(c)?"Karte pausiert":"Karte aktiviert")}},off(c)?"▶ Aktivieren":"⏸ Pausieren"),
+        c.k?null:el("button",{class:"btn small",type:"button",title:"Sicher gewusst, nicht mehr abfragen",onclick:()=>{delete c.p;c.k=1;d.updated=Date.now();saveDeck(d);refreshAll();renderDeck();toast("Karte als sicher markiert")}},"✅ Sicher"),x)));
   });
   const reset=el("button",{class:"btn small",type:"button"},"Fortschritt zurücksetzen");
   reset.addEventListener("click",()=>armConfirm(reset,"Wirklich zurücksetzen?",()=>{d.cards.forEach(c=>{c.box=0;c.due=0;c.ok=0;c.bad=0});saveDeck(d);refreshAll();renderDeck();toast("Fortschritt zurückgesetzt")}));
@@ -2156,7 +2166,7 @@ function planRestore(obj){
   for(const d of obj.decks){
     if(!d||typeof d.id!=="string"||!d.id||!Array.isArray(d.cards))continue;
     const cards=d.cards.filter(c=>c&&typeof c.f==="string"&&typeof c.b==="string"&&c.f.trim()&&c.b.trim())
-      .map(c=>({id:typeof c.id==="string"&&c.id?c.id:uidGen("c"),f:c.f,b:c.b,box:clampInt(c.box,0,MAXBOX),due:Number(c.due)||0,ok:Number(c.ok)||0,bad:Number(c.bad)||0,...(c.p?{p:1}:{})}));
+      .map(c=>({id:typeof c.id==="string"&&c.id?c.id:uidGen("c"),f:c.f,b:c.b,box:clampInt(c.box,0,MAXBOX),due:Number(c.due)||0,ok:Number(c.ok)||0,bad:Number(c.bad)||0,...(c.k?{k:1}:c.p?{p:1}:{})}));
     din.push({id:d.id,title:String(d.title||"Ohne Titel").slice(0,200),topic:typeof d.topic==="string"?d.topic:"",created:Number(d.created)||Date.now(),updated:Number(d.updated)||0,cards});
   }
   if(!din.length&&!bt.length)return {error:"In dieser Sicherung sind keine Stapel enthalten."};
