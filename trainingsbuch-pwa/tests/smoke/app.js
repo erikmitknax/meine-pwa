@@ -320,6 +320,51 @@ const server = http.createServer((req, res) => {
   ok(!!dC.window.document.querySelector('#brandLogo svg'), 'eine andere bewusst gewählte Form bleibt erhalten');
   dC.window.close();
 
+  console.log('Übung im Training tauschen');
+  const prior9 = { h1: { date: '2026-10-01', unit: 'Push', note: '', exercises: [
+    { name: 'Bankdrücken', weste: false, griffe: false, sets: [{ w: '60', r: '8' }, { w: '60', r: '8' }, { w: '55', r: '10' }] },
+    { name: 'Dips', weste: true, griffe: false, sets: [{ w: '', r: '12' }, { w: '', r: '10' }] },
+    { name: 'Trizepsdrücken', weste: false, griffe: false, sets: [{ w: '20', r: '12' }] }], updatedAt: 1 } };
+  const dom9 = await JSDOM.fromURL(base + 'index.html', { runScripts: 'dangerously', resources: 'usable', pretendToBeVisual: true, virtualConsole: vc, beforeParse(w9) { w9.Element.prototype.scrollIntoView = function () {}; w9.scrollTo = function () {}; w9.addEventListener('error', e => errors.push('window.onerror: ' + e.message)); w9.localStorage.setItem('tb_sessions', JSON.stringify(prior9)); w9.localStorage.setItem('tb_plans', JSON.stringify(plans6)); } });
+  await tick(300);
+  const w9 = dom9.window, q9 = x => w9.document.querySelector(x), qa9 = x => [...w9.document.querySelectorAll(x)], c9 = x => q9(x).click(), L9 = k => JSON.parse(w9.localStorage.getItem(k) || 'null');
+  const t9 = (el, v) => { el.value = v; el.dispatchEvent(new w9.Event('input', { bubbles: true })); };
+  const names9 = () => qa9('.ex-name').map(i => i.value).join(' | ');
+  c9('[data-act="startPlan"]'); await tick(60);
+  ok(names9() === 'Bankdrücken | Schulterdrücken', 'Start: Plan mit Bankdrücken und Schulterdrücken');
+  c9('[data-act="exMenu"][data-ei="0"]'); await tick();
+  ok(!!q9('[data-act="swapOpen"][data-ei="0"]'), 'Menü der Übung hat „Übung tauschen“');
+  c9('[data-act="swapOpen"][data-ei="0"]'); await tick();
+  const chips9 = qa9('.swapbox .chip').map(b => b.textContent);
+  ok(chips9.includes('Dips') && chips9.includes('Trizepsdrücken') && !chips9.includes('Bankdrücken') && !chips9.includes('Schulterdrücken'), 'Vorschläge: andere Übungen der Einheit, ohne die schon im Training: ' + chips9.join(', '));
+  c9('.swapbox .chip[data-name="Dips"]'); await tick(60);
+  ok(names9() === 'Dips | Schulterdrücken', 'Tausch per Vorschlag: gleiche Stelle, Reihenfolge bleibt');
+  ok(qa9('.ex')[0].querySelectorAll('.set').length === 3, 'Satzanzahl bleibt erhalten (3)');
+  ok(/Zuletzt/.test(qa9('.ex')[0].textContent) && /12/.test(qa9('.ex')[0].querySelector('.last').textContent) && !!qa9('.ex')[0].querySelector('.tag'), 'Zuletzt-Zeile und Weste kommen von der neuen Übung (Dips)');
+  ok(L9('tb_draft').exercises[0].name === 'Dips' && !q9('.swapbox') && /Bankdrücken → Dips/.test(q9('#toast').textContent), 'Entwurf gespeichert, Panel zu, Meldung „Bankdrücken → Dips“');
+  c9('[data-act="exMenu"][data-ei="1"]'); await tick(); c9('[data-act="swapOpen"][data-ei="1"]'); await tick();
+  t9(q9('#swapIn'), 'Dips'); c9('[data-act="swapGo"][data-ei="1"]'); await tick();
+  ok(names9() === 'Dips | Schulterdrücken' && /schon im Training/.test(q9('#toast').textContent), 'dieselbe Übung doppelt wird abgelehnt');
+  t9(q9('#swapIn'), ''); c9('[data-act="swapGo"][data-ei="1"]'); await tick();
+  ok(/Wähle oder tippe/.test(q9('#toast').textContent), 'leeres Feld: freundlicher Hinweis');
+  t9(q9('#swapIn'), 'Seitheben'); c9('[data-act="swapGo"][data-ei="1"]'); await tick(60);
+  ok(names9() === 'Dips | Seitheben' && /Neue Übung/.test(qa9('.ex')[1].querySelector('.last').textContent), 'freie Eingabe: neue Übung ohne Verlauf wird übernommen');
+  // Schon eingetragene Sätze: Rückfrage, laufende Pause stoppt
+  t9(q9('input[data-ei="1"][data-si="0"][data-f="r"]'), '12');
+  c9('.chk[data-ei="1"][data-si="0"]'); await tick(60);
+  ok(!q9('#restbar').hidden, 'Vorbereitung: Pause läuft für Seitheben');
+  c9('[data-act="exMenu"][data-ei="1"]'); await tick(); c9('[data-act="swapOpen"][data-ei="1"]'); await tick();
+  c9('.swapbox .chip'); await tick();
+  ok(/gehen dabei verloren/.test(q9('.swapbox').textContent) && names9() === 'Dips | Seitheben', 'mit eingetragenen Sätzen kommt erst eine Rückfrage');
+  c9('[data-act="swapCancel"]'); await tick();
+  ok(names9() === 'Dips | Seitheben' && L9('tb_draft').exercises[1].sets[0].r === '12', '„Nein“ ändert nichts');
+  c9('[data-act="swapOpen"][data-ei="1"]'); await tick();   // das Menü ist nach „Nein“ noch offen
+  c9('.swapbox .chip[data-name="Trizepsdrücken"]'); await tick(); c9('[data-act="swapYes"]'); await tick(60);
+  const dr9 = L9('tb_draft');
+  ok(dr9.exercises[1].name === 'Trizepsdrücken' && dr9.exercises[1].sets.every(st => !st.r && !st.w && !st.done), '„Ja“ tauscht, die alten Sätze sind weg');
+  ok(q9('#restbar').hidden, 'die Pause der getauschten Übung wird gestoppt');
+  dom9.window.close();
+
   console.log('Fehler im Log');
   ok(errors.length === 0, errors.length ? errors.slice(0, 8).join(' | ') : 'keine Fehler in der Konsole');
   console.log(`\n${pass} ok, ${fail} fehlgeschlagen`);

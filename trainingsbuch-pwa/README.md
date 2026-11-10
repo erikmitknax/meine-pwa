@@ -30,6 +30,10 @@ Das sind Unit-Tests für `logic.js` und `sw.js` sowie zwei Durchläufe der ganze
 
 Zahnrad oben rechts. Alle Abschnitte sind eingeklappt und lassen sich einzeln aufklappen: Training (Satzdauer), Design, Logo, Signal am Pausenende, Sicherung & Wiederherstellung, Dropbox-Backup, CSV importieren, Übungen verwalten. Auf der Startseite führt „Sicherung & Import“ direkt zum aufgeklappten Abschnitt Sicherung.
 
+## Übung im Training tauschen
+
+Beim Training auf „…“ der Übung, dann **⇄ Übung tauschen**: Vorschläge aus der Einheit antippen oder eine beliebige Übung eintippen. Die neue Übung steht an derselben Stelle mit derselben Satzanzahl, die übrigen Übungen und die Reihenfolge bleiben. Schon eingetragene Sätze der alten Übung gehen verloren (mit Rückfrage), eine laufende Pause dafür wird gestoppt. Der Plan selbst bleibt unverändert, getauscht wird nur im aktuellen Training.
+
 ## Satz fertig, Restzeit und Trainingsdauer
 
 - Jeder Satz hat rechts einen **Haken**. Sind Gewicht oder Wiederholungen noch leer, übernimmt der Haken die grauen Werte vom letzten Training.

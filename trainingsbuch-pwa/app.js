@@ -23,7 +23,7 @@ const ICON={
 const S={
   sessions:new Map(), plans:new Map(), loaded:{s:false,p:false},
   tab:(t=>t==='data'?'settings':t)(LS.get('tb_tab','log')), histFilter:'Alle', progEx:LS.get('tb_progEx',null), progMetric:null, progSel:null,
-  draft:LS.get('tb_draft',null), planEdit:null, exInfo:{}, rest:{}, timerOpen:null, vibOK:null, infoOpen:null, infoEdit:false, exMenu:null, showMeta:false, showNote:false, openSess:null, showTbl:false, confirm:null, imports:[], exportText:null, exportName:null, restore:null, rename:null, storageInfo:null, acc:{}, busy:false
+  draft:LS.get('tb_draft',null), planEdit:null, exInfo:{}, rest:{}, timerOpen:null, vibOK:null, infoOpen:null, infoEdit:false, exMenu:null, swap:null, swapPending:null, showMeta:false, showNote:false, openSess:null, showTbl:false, confirm:null, imports:[], exportText:null, exportName:null, restore:null, rename:null, storageInfo:null, acc:{}, busy:false
 };
 
 S.setSec=(v=>Number.isFinite(v)&&v>=10&&v<=180?Math.round(v):45)(Number(LS.get('tb_setsec',45)));   // geschätzte Dauer eines Satzes in Sekunden
@@ -202,16 +202,31 @@ function newEx(name){
   const n=3;
   return {name,weste:!!(last&&last.ex.weste),griffe:!!(last&&last.ex.griffe),sets:Array.from({length:n},()=>({w:'',r:''}))};
 }
+/* Übung im laufenden Training austauschen: gleiche Stelle in der Reihenfolge, gleiche Satzanzahl, Rest bleibt unberührt */
+function swapEx(ei,name,force){
+  const d=S.draft,e=d&&d.exercises[ei];name=String(name||'').trim();
+  if(!e)return;
+  if(!name){toast('Wähle oder tippe eine Übung.');return}
+  if(name===e.name){S.swap=null;S.swapPending=null;render();return}
+  if(d.exercises.some((x,j)=>j!==ei&&x.name===name)){toast('Diese Übung ist schon im Training.');return}
+  const used=e.sets.some(st=>String(st.w).trim()||String(st.r).trim()||st.done);
+  if(used&&!force){S.swapPending=name;render();return}
+  if(T&&T.name===e.name)stopRest();
+  const old=e.name,n=newEx(name);
+  n.sets=Array.from({length:Math.max(1,e.sets.length)},()=>({w:'',r:''}));
+  d.exercises[ei]=n;S.swap=null;S.swapPending=null;S.exMenu=null;S.timerOpen=null;S.infoOpen=null;S.confirm=null;
+  persistDraft();render();toast(old+' → '+name);
+}
 function startDraft(unit,planId){
   const plan=planId?S.plans.get(planId):null;
   S.draft={id:null,date:todayISO(),unit:plan?plan.unit:unit,note:'',plan:plan?plan.name:'',exercises:(plan?plan.exercises:[]).map(newEx)};
-  persistDraft();S.tab='log';S.confirm=null;S.exMenu=null;S.infoOpen=null;S.timerOpen=null;S.showMeta=false;S.showNote=false;render();window.scrollTo(0,0);
+  persistDraft();S.tab='log';S.confirm=null;S.exMenu=null;S.infoOpen=null;S.timerOpen=null;S.swap=null;S.swapPending=null;S.showMeta=false;S.showNote=false;render();window.scrollTo(0,0);
 }
 function editSession(id){
   const s=S.sessions.get(id);if(!s)return;
   const d=clone(s);
   S.draft={id,date:d.date,unit:d.unit,note:d.note||'',plan:'',exercises:(d.exercises||[]).map(e=>({name:e.name,weste:!!e.weste,griffe:!!e.griffe,sets:(e.sets||[]).map(x=>({w:x.w??'',r:x.r??''}))}))};
-  persistDraft();S.tab='log';S.confirm=null;S.exMenu=null;S.infoOpen=null;S.timerOpen=null;S.showMeta=false;S.showNote=false;render();window.scrollTo(0,0);
+  persistDraft();S.tab='log';S.confirm=null;S.exMenu=null;S.infoOpen=null;S.timerOpen=null;S.swap=null;S.swapPending=null;S.showMeta=false;S.showNote=false;render();window.scrollTo(0,0);
 }
 async function commitDraft(){
   const d=S.draft;if(!d||S.busy)return;
@@ -309,11 +324,19 @@ function exCard(e,i,d){
     ${infoOpen?((info&&!S.infoEdit)?`<div class="info"><p>${esc(info)}</p><button class="link" data-act="infoEditOn">Bearbeiten</button></div>`
       :`<div class="info"><textarea id="infoText" placeholder="z. B. Sitz 5, Lehne Loch 3, langsam ablassen …">${esc(info)}</textarea><div class="row"><button class="btn sm gold" data-act="infoSave" data-ei="${i}">Hinweis speichern</button><button class="btn sm ghost" data-act="infoClose">Schließen</button></div></div>`):''}
     ${menu?`<div class="ex-menu">
+      <button class="btn sm gold" data-act="swapOpen" data-ei="${i}" aria-expanded="${S.swap===e.name}">⇄ Übung tauschen</button>
       <button class="btn sm" data-act="up" data-ei="${i}" ${i===0?'disabled':''}>↑ Nach oben</button>
       <button class="btn sm" data-act="down" data-ei="${i}" ${i===n-1?'disabled':''}>↓ Nach unten</button>
       ${(k.text.length||wmode==='var')?`<button class="btn sm" data-act="wmode" data-ei="${i}">${wmode==='var'?'Gewicht tippen':'Gewicht wählen'}</button>`:''}
       ${canCopy?`<button class="btn sm" data-act="copyW" data-ei="${i}">Gewichte wie ${esc(fmtShort(last.date))}</button>`:''}
       ${S.confirm==='delEx'+i?`<button class="btn sm danger" data-act="delExYes" data-ei="${i}">Wirklich entfernen</button>`:`<button class="btn sm danger" data-act="delEx" data-ei="${i}">Entfernen</button>`}
+    </div>`:''}
+    ${S.swap===e.name?`<div class="swapbox">
+      <span class="lbl">${esc(e.name)} ersetzen durch</span>
+      <div class="chips">${catalog(d.unit).filter(x=>!d.exercises.some(y=>y.name===x)).slice(0,8).map(x=>`<button class="chip" data-act="swapPick" data-ei="${i}" data-name="${esc(x)}">${esc(x)}</button>`).join('')}</div>
+      <div class="row"><input class="in grow" id="swapIn" list="exlist" placeholder="Andere Übung …" autocomplete="off"><button class="btn sm gold" data-act="swapGo" data-ei="${i}">Tauschen</button></div>
+      ${S.swapPending?`<p class="hint" style="margin:0">Die schon eingetragenen Sätze von ${esc(e.name)} gehen dabei verloren. Trotzdem durch <b>${esc(S.swapPending)}</b> ersetzen?</p><div class="row"><button class="btn sm danger" data-act="swapYes" data-ei="${i}">Ja, tauschen</button><button class="btn sm ghost" data-act="swapCancel">Nein</button></div>`:''}
+      <button class="link" data-act="swapCancel" style="justify-self:start">Schließen</button>
     </div>`:''}
     ${(showWeste||showGriffe)?`<div class="flags">
       ${showWeste?`<button class="chip ${e.weste?'on':''}" data-act="flag" data-k="weste" data-ei="${i}" aria-pressed="${e.weste}">Weste ${WESTE_KG} kg</button>`:''}
@@ -763,7 +786,12 @@ document.addEventListener('click',async ev=>{
     case 'infoClose':S.infoOpen=null;S.infoEdit=false;render();break;
     case 'infoSave':{const t=$('#infoText');try{await saveInfo(d.exercises[ei].name,t?t.value:'');S.infoEdit=false;if(!S.exInfo[d.exercises[ei].name])S.infoOpen=null;toast('Hinweis gespeichert')}catch(e){toast('Nicht gespeichert: '+errMsg(e))}render();break}
     case 'popSet':d.exercises[ei].sets.pop();persistDraft();render();break;
-    case 'exMenu':S.timerOpen=null;S.exMenu=S.exMenu===ei?null:ei;S.confirm=null;render();break;
+    case 'swapOpen':{const nm=d&&d.exercises[ei]&&d.exercises[ei].name;S.swap=S.swap===nm?null:nm;S.swapPending=null;S.timerOpen=null;S.infoOpen=null;render();break}
+    case 'swapPick':swapEx(ei,b.dataset.name,false);break;
+    case 'swapGo':{const i=$('#swapIn');swapEx(ei,i&&i.value,false);break}
+    case 'swapYes':swapEx(ei,S.swapPending,true);break;
+    case 'swapCancel':S.swap=null;S.swapPending=null;render();break;
+    case 'exMenu':S.swap=null;S.swapPending=null;S.timerOpen=null;S.exMenu=S.exMenu===ei?null:ei;S.confirm=null;render();break;
     case 'toggleMeta':S.showMeta=!S.showMeta;render();break;
     case 'showNote':S.showNote=true;render();{const t=$('#dNote');if(t)t.focus()}break;
     case 'openSess':S.openSess=S.openSess===b.dataset.id?null:b.dataset.id;S.confirm=null;render();break;

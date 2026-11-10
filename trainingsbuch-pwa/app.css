@@ -239,6 +239,8 @@ td:first-child{white-space:nowrap;color:var(--muted)}
 button.draft-title{background:none;border:0;padding:0;text-align:left;display:block;width:100%}
 .draft-title small{display:block;font-family:var(--body);font-size:13px;font-weight:400;color:var(--muted);letter-spacing:0;margin-top:4px}
 .ex-menu{display:flex;flex-wrap:wrap;gap:6px;margin:4px 8px 10px}
+.swapbox{margin:4px 8px 10px;padding:10px 12px;border-radius:10px;background:var(--surface-2);border:1px solid var(--gold);display:grid;grid-template-columns:minmax(0,1fr);gap:10px}
+.swapbox .row{flex-wrap:nowrap}
 .ex-menu .btn:disabled{opacity:.35;cursor:default}
 .s-sum{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:baseline;gap:2px 12px;width:100%;background:none;border:0;padding:0;text-align:left}
 .s-meta{grid-column:1;color:var(--muted);font-size:13px}
