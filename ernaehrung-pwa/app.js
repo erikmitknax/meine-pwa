@@ -363,6 +363,7 @@ function render() {
   const v = $("#view");
   const top = v.scrollTop;
   v.innerHTML = { today: viewToday, week: viewWeek, weight: viewWeight, settings: viewSettings }[ui.tab]();
+  if (ui.tab === "today" && isExcl(ui.date)) [...v.children].forEach((c, i) => { if (i >= 2 && !c.classList.contains("exkeep")) c.classList.add("exgrey"); });
   v.scrollTop = top;
   weightGate();
 }
@@ -453,6 +454,7 @@ function viewToday() {
   const full = fromIso(ui.date).toLocaleDateString("de-DE", { day: "numeric", month: "short" });
   return `<header class="top"><div class="brand"><img class="logo" src="icons/logo.svg" alt="">FoodPro</div><button class="ghost" data-act="pickDate" aria-label="Datum wählen">${icon("cal", 20)}</button></header>
   ${weekStrip()}
+  ${isExcl(ui.date) ? `<div class="exbanner exkeep"><b>Ausnahmetag</b><span>Zählt nicht in Durchschnitte. Alles ist ausgegraut.</span><button class="btn sec" data-act="exclOff">Aufheben</button></div>` : ""}
   <section class="hero ${g.kcal > 0 && t.kcal >= g.kcal ? "over" : ""}" data-act="dayChart" role="button" tabindex="0" aria-label="Tagesübersicht öffnen"><div class="ht"><span>${niceDate(ui.date) === full ? full : niceDate(ui.date) + ", " + full}</span><span class="hchev">Ziel ${fmt(g.kcal)} ${icon("right", 16, 2.4)}</span></div>
     <div class="hn"><b>${fmt(Math.abs(left))}</b><span>${left >= 0 ? "kcal übrig" : "kcal drüber"}</span></div>
     <div class="hbar"><i style="width:${pct}%"></i></div><div class="hf">${fmt(t.kcal)} kcal gegessen</div></section>
@@ -461,7 +463,7 @@ function viewToday() {
   ${coffeeCard(ui.date)}
   <button class="btn sec block gapbtn" data-act="nutri">Nährstoffe im Detail</button>
   <button class="btn block gapbtn" data-act="gaps">${icon("plus", 18, 2.4)}KI-Vorschläge für eine Mahlzeit</button>
-  <label class="xrow" style="margin-top:14px"><input type="checkbox" id="exclDay" ${isExcl(ui.date) ? "checked" : ""}><span class="grow"><b>Ausnahmetag</b><div class="muted tiny">Zählt nicht in Durchschnitte (z. B. Feier). Einträge bleiben erhalten.</div></span></label>
+  <label class="xrow exkeep" style="margin-top:14px"><input type="checkbox" id="exclDay" ${isExcl(ui.date) ? "checked" : ""}><span class="grow"><b>Ausnahmetag</b><div class="muted tiny">Zählt nicht in Durchschnitte (z. B. Feier). Einträge bleiben erhalten.</div></span></label>
   <section class="exportcard"><b>Tag exportieren</b><div class="muted small">Alles, was du an diesem Tag gegessen hast, inkl. Rezept-Zutaten, als Textdatei – z. B. für eine KI-Analyse.</div>
     <div class="grid2"><button class="btn" data-act="exportDay">Als Datei</button><button class="btn sec" data-act="copyDay">Kopieren</button></div></section>
   <section class="exportcard"><b>Kosten des Tages</b><div class="muted small">Was dein Tag gekostet hat, berechnet aus den Preisen deiner Lebensmittel (bei Rezepten anteilig pro Zutat).</div>
@@ -635,7 +637,7 @@ function exclSheet() {
   const days = curDays().filter(d => dayEntries(d).length), g = goals();
   const s = sheet(`<h3>Tage aus dem Durchschnitt nehmen</h3><div class="muted small" style="margin:-6px 0 12px">Hake Tage an, die nicht zählen sollen, z. B. wenn du feiern warst. Das gilt dauerhaft für alle Durchschnitte. Die Einträge selbst bleiben erhalten.</div><div id="xl"></div><button class="btn block" style="margin-top:14px" id="xDone">Fertig</button>`);
   const draw = () => { $("#xl", s).innerHTML = days.length ? days.map(d => { const k = sum(dayEntries(d)).kcal; return `<label class="xrow"><input type="checkbox" data-xd="${d}" ${isExcl(d) ? "checked" : ""}><span class="grow"><b>${fromIso(d).toLocaleDateString("de-DE", { weekday: "short", day: "numeric", month: "long" })}</b></span><span class="muted small">${fmt(k)} kcal${k > g.kcal * 1.1 ? " · über Ziel" : ""}</span></label>`; }).join("") : `<div class="muted small center" style="padding:18px">Keine Tage mit Einträgen in diesem Zeitraum.</div>`;
-    $$("[data-xd]", s).forEach(c => c.onchange = () => { setExcl(c.dataset.xd, c.checked); render(); }); };
+    $$("[data-xd]", s).forEach(c => c.onchange = () => { const on = c.checked; c.checked = !on; exclAsk(c.dataset.xd, on, draw); }); };
   draw();
   $("#xDone", s).onclick = () => { closeSheet(); render(); };
 }
@@ -796,6 +798,16 @@ function rCur() {
 }
 const rDirty = () => rOpen && rNorm(rCur()) !== rSnap;
 const rGuardNeeded = () => rDirty();
+function confirmAsk(title, text, okLabel, onOk, danger) {
+  if (document.querySelector("#cfmBg")) return;
+  const bg = document.createElement("div"); bg.id = "cfmBg";
+  bg.style.cssText = "position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;padding:24px";
+  bg.innerHTML = `<div class="card" style="max-width:340px;width:100%;padding:20px"><h3 style="margin:0 0 8px">${esc(title)}</h3><div class="muted small" style="margin-bottom:16px">${esc(text)}</div><button class="btn ${danger ? "danger " : ""}block" id="cfmOk">${esc(okLabel)}</button><button class="btn sec block" style="margin-top:8px" id="cfmNo">Abbrechen</button></div>`;
+  document.body.append(bg);
+  bg.querySelector("#cfmNo").onclick = () => bg.remove();
+  bg.querySelector("#cfmOk").onclick = () => { bg.remove(); onOk(); };
+}
+const exclAsk = (d, on, onDone) => confirmAsk(on ? "Als Ausnahmetag markieren?" : "Ausnahmetag aufheben?", on ? `${fromIso(d).toLocaleDateString("de-DE", { weekday: "long", day: "numeric", month: "long" })} zählt dann nicht mehr in deine Durchschnitte. Die Einträge bleiben erhalten.` : "Der Tag zählt danach wieder in deine Durchschnitte.", on ? "Ja, Ausnahmetag" : "Ja, aufheben", () => { setExcl(d, on); render(); if (onDone) onDone(); });
 function discardAsk() {
   if (document.querySelector("#discBg")) return;
   const bg = document.createElement("div"); bg.id = "discBg";
@@ -2720,6 +2732,7 @@ document.addEventListener("click", async ev => {
   }
   else if (a === "goDay") { ui.date = t.dataset.d; setTab("today"); render(); }
   else if (a === "exclSheet") exclSheet();
+  else if (a === "exclOff") exclAsk(ui.date, false);
   else if (a === "topSheet") topSheet();
   else if (a === "wRange") { ui.wRange = +t.dataset.v; render(); }
   else if (a === "wcmp") { ui.wcOff = Math.max(0, (ui.wcOff || 0) + (+t.dataset.d)); render(); }
@@ -2800,7 +2813,7 @@ document.addEventListener("keydown", ev => { if ((ev.key === "Enter" || ev.key =
 document.addEventListener("change", async ev => {
   const ct = ev.target;
   if (ct && ct.id === "fSugT") { const w = $("#fSugAw"); if (w) w.style.display = ct.value === "m" ? "" : "none"; return; }
-  if (ct && ct.id === "exclDay") { setExcl(ui.date, ct.checked); render(); return; }
+  if (ct && ct.id === "exclDay") { const on = ct.checked; ct.checked = !on; exclAsk(ui.date, on); return; }
   if (ct && ct.id === "cfSrc") { ui.cfSrc = ct.value; D.settings.cfLast = ct.value; save(); render(); return; }
   if (ct && ["cfSleep", "cfMl", "cfMg"].includes(ct.id)) {
     if (ct.id !== "cfSleep") ui.cfOpen = true;
