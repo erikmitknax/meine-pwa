@@ -1871,7 +1871,15 @@ function contribSheet(list, ek, back) {
   let flt = "all";
   const typeOf = n => { const t = sugTypeOf(n); return t ? t.t : "u"; };
   const TL = { n: "Natürlich", a: "Zugesetzt / frei", m: "Gemischt", u: "Nicht eingeordnet" };
-  const s = sheet(`<button class="linkbtn" id="ctBack" style="margin:-4px 0 6px">‹ Zurück</button><h3>${mk.name}: Quellen</h3><div id="ctBody"></div><button class="btn sec block" style="margin-top:14px" id="ctClose">Fertig</button>`);
+  const s = sheet(`<button class="linkbtn" id="ctBack" style="margin:-4px 0 6px">‹ Zurück</button><h3>${mk.name}: Quellen</h3><div id="ctBody"></div><div class="grid2" style="margin-top:14px"><button class="btn" id="ctFile">Als Datei</button><button class="btn sec" id="ctCopy">Kopieren</button></div><button class="btn sec block" style="margin-top:8px" id="ctClose">Fertig</button>`);
+  const report = () => {
+    const all = contribOf(list, ek), tot = all.reduce((a, o) => a + o.v, 0), ds = list.map(e => e.date).filter(Boolean).sort(), dl = x => fromIso(x).toLocaleDateString("de-DE");
+    const out = [`FoodPro: ${mk.name}, Quellen`, ds.length ? (ds[0] === ds[ds.length - 1] ? "Datum: " + dl(ds[0]) : "Zeitraum: " + dl(ds[0]) + " bis " + dl(ds[ds.length - 1])) : "", `Gesamt: ${nde(tot, 1)} g aus ${all.length} Quellen`, "Spalten: Lebensmittel | Menge des Nährstoffs | Anteil | gegessen | Wert pro 100 g" + (isS ? " | Zuckerart" : ""), ""];
+    all.forEach(o => { const t = isS ? sugTypeOf(o.name) : null, ty = t ? (t.t === "m" ? "Gemischt (" + nde(t.a || 0, 1) + " g/100 g zugesetzt)" : TL[t.t]) : TL.u; out.push(`${o.name} | ${nde(o.v, 2)} g | ${Math.round(o.v / (tot || 1) * 100)} % | ${nde(o.grams, 0)} g | ${o.grams > 0 ? nde(o.v / o.grams * 100, 2) : "–"} g` + (isS ? " | " + ty : "")); });
+    return out.filter((x, i) => x !== "" || i === out.length - 1 || i === 3 + 1).join("\n") + "\n";
+  };
+  $("#ctCopy", s).onclick = async () => toast(await copyText(report()) ? "Liste kopiert" : "Kopieren nicht möglich");
+  $("#ctFile", s).onclick = () => exportFile("foodpro-" + mk.fk + "-quellen-" + iso(new Date()) + ".txt", new Blob([report()], { type: "text/plain" }));
   const draw = () => {
     const all = contribOf(list, ek), tot = all.reduce((a, o) => a + o.v, 0) || 1;
     const rows = all.filter(o => !isS || flt === "all" || typeOf(o.name) === flt);
@@ -1879,7 +1887,7 @@ function contribSheet(list, ek, back) {
     $("#ctBody", s).innerHTML = `<div class="muted small" style="margin:-6px 0 10px">${all.length} ${all.length === 1 ? "Quelle" : "Quellen"}, zusammen ${nde(tot, 1)} g. Bei Rezepten siehst du die einzelnen Zutaten.</div>
       ${isS ? `<div class="tcchips">${chip("all", "Alle")}${chip("a", "Zugesetzt")}${chip("n", "Natürlich")}${chip("u", "Offen")}</div><div class="muted tiny" style="margin:-2px 0 10px">Stimmt eine Zuckerart nicht? Ändere sie direkt hier, sie gilt für alle Tage.</div>` : ""}
       ${rows.map((o, k) => { const t = isS ? sugTypeOf(o.name) : null, ty = typeOf(o.name); return `<div class="card" style="margin-bottom:8px"><div class="row between" style="gap:10px"><b style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(o.name)}</b><b style="flex:none">${nde(o.v, 2)} g</b></div>
-        <div class="muted tiny">${Math.round(o.v / tot * 100)} % · ${fmt(o.grams)} g gegessen${o.n > 1 ? " · " + o.n + "×" : ""}</div>
+        <div class="muted tiny">${Math.round(o.v / tot * 100)} % · ${fmt(o.grams)} g gegessen · ${o.grams > 0 ? nde(o.v / o.grams * 100, 1) : "–"} g pro 100 g${o.n > 1 ? " · " + o.n + "×" : ""}</div>
         ${isS ? `<select data-cs="${k}" aria-label="Zuckerart von ${esc(o.name)}" style="margin-top:6px"><option value="u" ${ty === "u" ? "selected" : ""}>Nicht eingeordnet</option><option value="n" ${ty === "n" ? "selected" : ""}>Natürlich</option><option value="a" ${ty === "a" ? "selected" : ""}>Zugesetzt / frei</option><option value="m" ${ty === "m" ? "selected" : ""}>Gemischt</option></select>
         <div data-cw="${k}" style="${ty === "m" ? "" : "display:none"}"><label>davon zugesetzt (g pro 100 g)</label><input type="text" inputmode="decimal" data-ca="${k}" value="${t && t.t === "m" ? String(t.a ?? "").replace(".", ",") : ""}" placeholder="z. B. 8"></div>` : ""}</div>`; }).join("") || `<div class="muted center" style="padding:20px 10px">Nichts in dieser Auswahl.</div>`}`;
     $$("[data-f]", s).forEach(b => b.onclick = () => { flt = b.dataset.f; draw(); });
