@@ -428,13 +428,32 @@ function macroCol(label, val, goal, k) {
   return `<div class="mc"><div class="mv"><b>${r0(val)}</b><span>/ ${r0(goal)} g</span></div><div class="track"><i class="${k}" style="width:${pct}%"></i></div><div class="ml">${label}</div></div>`;
 }
 
+/* Monatskalender: Tag wählen, Tage mit Einträgen (Punkt) und Ausnahmetage (grau) sind markiert */
+function calSheet(ym) {
+  const base = fromIso(ym || ui.date), Y = base.getFullYear(), M = base.getMonth(), today = iso(new Date());
+  const first = new Date(Y, M, 1), off = (first.getDay() + 6) % 7, dim = new Date(Y, M + 1, 0).getDate();
+  const pad = n => String(n).padStart(2, "0"), dstr = n => `${Y}-${pad(M + 1)}-${pad(n)}`;
+  const has = new Set(D.entries.map(e => e.date));
+  const cells = Array(off).fill('<span></span>').concat(Array.from({ length: dim }, (_, k) => { const d = dstr(k + 1);
+    return `<button class="cd ${d === ui.date ? "on" : ""} ${d === today ? "td" : ""} ${isExcl(d) ? "ex" : ""}" data-cd="${d}"><b>${k + 1}</b><i class="${has.has(d) ? "has" : ""}"></i></button>`; }));
+  const s = sheet(`<div class="row between" style="margin:-4px 0 10px"><button class="iconbtn" id="cmPrev" aria-label="Vorheriger Monat">${icon("left", 18)}</button><h3 style="margin:0">${first.toLocaleDateString("de-DE", { month: "long", year: "numeric" })}</h3><button class="iconbtn" id="cmNext" aria-label="Nächster Monat">${icon("right", 18)}</button></div>
+    <div class="calgrid cwd">${["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"].map(x => `<span>${x}</span>`).join("")}</div>
+    <div class="calgrid">${cells.join("")}</div>
+    <div class="muted tiny" style="margin-top:10px"><span class="lgd"></span> Eintrag vorhanden &nbsp;·&nbsp; <span class="lgx"></span> Ausnahmetag (zählt nicht in Durchschnitte)</div>
+    <div class="grid2" style="margin-top:14px"><button class="btn sec" id="cmToday">Heute</button><button class="btn sec" id="cmClose">Schließen</button></div>`);
+  $("#cmPrev", s).onclick = () => { const d = new Date(Y, M - 1, 1); calSheet(d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-01"); };
+  $("#cmNext", s).onclick = () => { const d = new Date(Y, M + 1, 1); calSheet(d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-01"); };
+  $("#cmToday", s).onclick = () => { ui.date = today; closeSheet(); render(); };
+  $("#cmClose", s).onclick = closeSheet;
+  $$("[data-cd]", s).forEach(b => b.onclick = () => { ui.date = b.dataset.cd; closeSheet(); render(); });
+}
 function weekStrip() {
   const d = fromIso(ui.date), mon = addDays(ui.date, -((d.getDay() + 6) % 7)), today = iso(new Date());
   const days = Array.from({ length: 7 }, (_, i) => addDays(mon, i));
   return `<div class="strip"><button class="sn" data-act="day" data-d="-7" aria-label="Vorherige Woche">${icon("left", 18)}</button>` +
     days.map(x => {
       const dd = fromIso(x), has = D.entries.some(e => e.date === x);
-      return `<button class="sd ${x === ui.date ? "on" : ""} ${x === today ? "td" : ""}" data-act="setDay" data-d="${x}"><span>${WD[dd.getDay()]}</span><b>${dd.getDate()}</b><i class="${has ? "has" : ""}"></i></button>`;
+      return `<button class="sd ${x === ui.date ? "on" : ""} ${x === today ? "td" : ""} ${isExcl(x) ? "ex" : ""}" data-act="setDay" data-d="${x}"><span>${WD[dd.getDay()]}</span><b>${dd.getDate()}</b><i class="${has ? "has" : ""}"></i></button>`;
     }).join("") +
     `<button class="sn" data-act="day" data-d="7" aria-label="Nächste Woche">${icon("right", 18)}</button></div>`;
 }
@@ -2690,14 +2709,7 @@ document.addEventListener("click", async ev => {
   const a = t.dataset.act;
   if (a === "day") { ui.date = addDays(ui.date, +t.dataset.d); render(); }
   else if (a === "setDay") { ui.date = t.dataset.d; render(); }
-  else if (a === "pickDate") {
-    const sh = sheet(`<h3>Tag wählen</h3><div class="muted small" style="margin-bottom:10px">Springe zu einem beliebigen Datum, um Einträge anzusehen oder nachzutragen.</div>
-      <input type="date" id="pdDate" value="${ui.date}" max="2100-12-31"><div class="grid2" style="margin-top:14px"><button class="btn sec" id="pdToday">Heute</button><button class="btn" id="pdGo">Anzeigen</button></div>`);
-    const go = v => { if (v) { ui.date = v; closeSheet(); render(); } };
-    $("#pdGo", sh).onclick = () => go($("#pdDate", sh).value);
-    $("#pdToday", sh).onclick = () => go(iso(new Date()));
-    $("#pdDate", sh).onchange = e => go(e.target.value);
-  }
+  else if (a === "pickDate") calSheet();
   else if (a === "gaps") openGaps();
   else if (a === "toggleMeal") { ui.open[t.dataset.meal] = !ui.open[t.dataset.meal]; render(); }
   else if (a === "add") openAdd(t.dataset.meal);
