@@ -436,6 +436,7 @@ function calSheet(ym) {
   const has = new Set(D.entries.map(e => e.date));
   const cells = Array(off).fill('<span></span>').concat(Array.from({ length: dim }, (_, k) => { const d = dstr(k + 1);
     return `<button class="cd ${d === ui.date ? "on" : ""} ${d === today ? "td" : ""} ${isExcl(d) ? "ex" : ""}" data-cd="${d}"><b>${k + 1}</b><i class="${has.has(d) ? "has" : ""}"></i></button>`; }));
+  while (cells.length < 42) cells.push('<span></span>'); // immer 6 Zeilen, damit die Höhe nie springt
   const s = sheet(`<div class="row between" style="margin:-4px 0 10px"><button class="iconbtn" id="cmPrev" aria-label="Vorheriger Monat">${icon("left", 18)}</button><h3 style="margin:0">${first.toLocaleDateString("de-DE", { month: "long", year: "numeric" })}</h3><button class="iconbtn" id="cmNext" aria-label="Nächster Monat">${icon("right", 18)}</button></div>
     <div class="calgrid cwd">${["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"].map(x => `<span>${x}</span>`).join("")}</div>
     <div class="calgrid">${cells.join("")}</div>

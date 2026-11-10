@@ -356,9 +356,9 @@ textarea::placeholder{color:var(--muted);opacity:.8}
 .exbanner{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;margin:10px 0;padding:12px 14px;border-radius:16px;background:var(--card2);border:1.5px dashed var(--muted)}
 .exbanner b{flex:1 1 100%}.exbanner span{flex:1;font-size:13px;color:var(--muted)}.exbanner .btn{flex:none;padding:8px 14px}
 
-.calgrid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
+.calgrid{display:grid;grid-template-columns:repeat(7,1fr);grid-auto-rows:46px;gap:4px}.cwd{grid-auto-rows:auto}
 .cwd span{text-align:center;font-size:12px;font-weight:600;color:var(--muted);padding-bottom:2px}
-.cd{border:0;background:none;color:var(--text);border-radius:12px;padding:8px 0 6px;display:flex;flex-direction:column;align-items:center;gap:2px;font:inherit}
+.cd{border:0;background:none;color:var(--text);border-radius:12px;padding:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;font:inherit}
 .cd b{font-size:16px;font-weight:600}.cd i{width:5px;height:5px;border-radius:50%;background:transparent}.cd i.has{background:var(--accent)}
 .cd.td{box-shadow:inset 0 0 0 1.5px var(--accent)}
 .cd.on{background:var(--accent);color:#fff}.cd.on i.has{background:#fff}
