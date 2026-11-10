@@ -1748,6 +1748,7 @@ function nutrientBody(list, dayList) {
     return `<div class="nrow"><div class="row between"><b>${isSug ? "Zugesetzter / freier Zucker" : x.name}</b><span><b ${bad ? 'class="warn"' : ""}>${nde(v, 2)} g</b> <span class="muted small">${isMin ? "von mind." : "von max."} ${nde(lim, 0)} g</span></span></div>
       <div class="nbar"><i class="${bad ? "warn" : good ? "good" : ""}" style="width:${pct}%"></i></div>
       <div class="muted tiny">${dayList ? (share != null ? `${share} % des Tageswerts · ` : "") + (isMin ? "Tagesziel" : "Tageslimit") + " " + nde(lim, 0) + " g" : isSug ? sugHint() : microHint(x.ek)}</div>${top ? `<div class="muted tiny">Meist aus: ${top}</div>` : ""}
+      ${m[x.ek] > 0.004 ? `<button class="linkbtn" data-contrib="${x.ek}">Welche Lebensmittel zählen dazu? ›</button>` : ""}
       ${x.ek === "s" && m[x.ek] > 0 ? (() => { const sp = spL; return `<div class="tiny" style="margin-top:4px">Gesamtzucker <b>${nde(m.s, 1)} g</b> · ${sugLine(sp)}</div>${Object.keys(sp.names).length ? `<button class="linkbtn" data-sugcls="1">Zuckerarten einordnen (${Object.keys(sp.names).length}) ›</button>` : ""}`; })() : ""}
       ${miss ? `<div class="warn tiny">Für ${miss} von ${list.length} Einträgen ist diese Angabe nicht bekannt.</div><button class="linkbtn" data-miss="${x.ek}">Fehlende ansehen und nachtragen ›</button>` : ""}</div>`;
   }).join("");
@@ -1852,7 +1853,47 @@ function sugarClassSheet(list, back) {
     back();
   };
 }
+/* Quellen eines Nährstoffs: welche Lebensmittel (bei Rezepten: Zutaten) tragen wie viel bei, bei Zucker mit Zuckerart zum Korrigieren */
+function contribOf(list, ek) {
+  const mk = MICRO.find(m => m.ek === ek), map = {};
+  const add = (name, v, grams) => { if (!(v > 0)) return; const k = sugKey(name), o = map[k] = map[k] || { name, v: 0, grams: 0, n: 0 }; o.v += v; o.grams += grams; o.n++; };
+  list.forEach(e => {
+    if (!(e.grams > 0)) return;
+    const ings = entryIngs(e); let got = 0;
+    if (ings) ings.forEach(i => { if (i.off || !hasN(i[mk.fk])) return; const v = i[mk.fk] * i.grams / 100; got += v; add(i.name, v, i.grams); });
+    else if (hasN(e[ek])) { got = e[ek]; add(e.name, e[ek], e.grams); }
+    if (ings && hasN(e[ek]) && e[ek] - got > 0.05) add(e.name, e[ek] - got, e.grams);
+  });
+  return Object.values(map).sort((a, b) => b.v - a.v);
+}
+function contribSheet(list, ek, back) {
+  const mk = MICRO.find(m => m.ek === ek), isS = ek === "s";
+  let flt = "all";
+  const typeOf = n => { const t = sugTypeOf(n); return t ? t.t : "u"; };
+  const TL = { n: "Natürlich", a: "Zugesetzt / frei", m: "Gemischt", u: "Nicht eingeordnet" };
+  const s = sheet(`<button class="linkbtn" id="ctBack" style="margin:-4px 0 6px">‹ Zurück</button><h3>${mk.name}: Quellen</h3><div id="ctBody"></div><button class="btn sec block" style="margin-top:14px" id="ctClose">Fertig</button>`);
+  const draw = () => {
+    const all = contribOf(list, ek), tot = all.reduce((a, o) => a + o.v, 0) || 1;
+    const rows = all.filter(o => !isS || flt === "all" || typeOf(o.name) === flt);
+    const chip = (v, l) => `<button class="tcchip ${flt === v ? "on" : ""}" style="--cc:var(--accent)" data-f="${v}">${l}</button>`;
+    $("#ctBody", s).innerHTML = `<div class="muted small" style="margin:-6px 0 10px">${all.length} ${all.length === 1 ? "Quelle" : "Quellen"}, zusammen ${nde(tot, 1)} g. Bei Rezepten siehst du die einzelnen Zutaten.</div>
+      ${isS ? `<div class="tcchips">${chip("all", "Alle")}${chip("a", "Zugesetzt")}${chip("n", "Natürlich")}${chip("u", "Offen")}</div><div class="muted tiny" style="margin:-2px 0 10px">Stimmt eine Zuckerart nicht? Ändere sie direkt hier, sie gilt für alle Tage.</div>` : ""}
+      ${rows.map((o, k) => { const t = isS ? sugTypeOf(o.name) : null, ty = typeOf(o.name); return `<div class="card" style="margin-bottom:8px"><div class="row between" style="gap:10px"><b style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(o.name)}</b><b style="flex:none">${nde(o.v, 2)} g</b></div>
+        <div class="muted tiny">${Math.round(o.v / tot * 100)} % · ${fmt(o.grams)} g gegessen${o.n > 1 ? " · " + o.n + "×" : ""}</div>
+        ${isS ? `<select data-cs="${k}" aria-label="Zuckerart von ${esc(o.name)}" style="margin-top:6px"><option value="u" ${ty === "u" ? "selected" : ""}>Nicht eingeordnet</option><option value="n" ${ty === "n" ? "selected" : ""}>Natürlich</option><option value="a" ${ty === "a" ? "selected" : ""}>Zugesetzt / frei</option><option value="m" ${ty === "m" ? "selected" : ""}>Gemischt</option></select>
+        <div data-cw="${k}" style="${ty === "m" ? "" : "display:none"}"><label>davon zugesetzt (g pro 100 g)</label><input type="text" inputmode="decimal" data-ca="${k}" value="${t && t.t === "m" ? String(t.a ?? "").replace(".", ",") : ""}" placeholder="z. B. 8"></div>` : ""}</div>`; }).join("") || `<div class="muted center" style="padding:20px 10px">Nichts in dieser Auswahl.</div>`}`;
+    $$("[data-f]", s).forEach(b => b.onclick = () => { flt = b.dataset.f; draw(); });
+    $$("[data-cs]", s).forEach(sel => {
+      const o = rows[+sel.dataset.cs], inp = $(`[data-ca="${sel.dataset.cs}"]`, s), w = $(`[data-cw="${sel.dataset.cs}"]`, s);
+      sel.onchange = () => { w.style.display = sel.value === "m" ? "" : "none"; if (sel.value === "m") return inp.focus(); setSugType(o.name, sel.value === "u" ? "" : sel.value); save(); render(); draw(); };
+      inp.onchange = () => { const a = num(inp.value); if (a >= 0 && inp.value.trim()) { setSugType(o.name, "m", a); save(); render(); draw(); } };
+    });
+  };
+  $("#ctBack", s).onclick = $("#ctClose", s).onclick = back;
+  draw();
+}
 function wireMiss(s, list, back) {
+  $$("[data-contrib]", s).forEach(b => b.onclick = () => contribSheet(list, b.dataset.contrib, back));
   $$("[data-sugcls]", s).forEach(b => b.onclick = () => sugarClassSheet(list, back));
   $$("[data-miss]", s).forEach(b => b.onclick = () => missingSheet(list, b.dataset.miss, back));
 }
