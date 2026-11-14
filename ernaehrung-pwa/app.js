@@ -468,8 +468,8 @@ function viewToday() {
     return `<section class="meal ${op ? "open" : ""}"><div class="mh ${es.length ? "tg" : ""}" ${es.length ? `data-act="toggleMeal" data-meal="${m.id}" role="button" tabindex="0" aria-expanded="${op}"` : ""}><h3>${m.name}${es.length ? `<span class="cnt">${es.length}</span>` : ""}</h3>${es.length ? `<span class="kc">${fmt(s.kcal)} kcal</span><span class="chev">${icon("right", 16, 2.4)}</span>` : ""}<button class="addbtn" data-act="add" data-meal="${m.id}" aria-label="${m.name} hinzufügen">${icon("plus", 18, 2.6)}</button></div>` +
       (es.length ? (op ? `<div class="list">${es.map(e => `<div class="entry" data-act="editEntry" data-id="${e.id}"><div class="nm"><div class="t">${esc(e.name)}</div>
         <div class="s"><span class="g">${nde(e.grams, 2)} g</span><span class="cp">E ${r0(e.p)}</span><span class="cc">KH ${r0(e.c)}</span><span class="cf">F ${r0(e.f)}</span></div></div>
-        <div class="kcal">${fmt(e.kcal)}<small>kcal</small></div></div>`).join("")}</div><div class="mealtools">${es.length > 1 ? `<button class="linkbtn" data-act="mealToRecipe" data-meal="${m.id}">Als Rezept speichern</button>` : ""}<button class="linkbtn del" data-act="clearMeal" data-meal="${m.id}">${es.length > 1 ? "Alle " + es.length + " Einträge löschen" : "Eintrag löschen"}</button></div>` : "")
-        : `<button class="empty" data-act="add" data-meal="${m.id}">${icon("plus", 18, 2.4)}${m.name} eintragen</button>`) + `</section>`;
+        <div class="kcal">${fmt(e.kcal)}<small>kcal</small></div></div>`).join("")}</div><div class="mealtools">${hasPrev(m.id) ? `<button class="linkbtn" data-act="copyPrev" data-meal="${m.id}">Vom Vortag ergänzen</button>` : ""}${es.length > 1 ? `<button class="linkbtn" data-act="mealToRecipe" data-meal="${m.id}">Als Rezept speichern</button>` : ""}<button class="linkbtn del" data-act="clearMeal" data-meal="${m.id}">${es.length > 1 ? "Alle " + es.length + " Einträge löschen" : "Eintrag löschen"}</button></div>` : "")
+        : `<button class="empty" data-act="add" data-meal="${m.id}">${icon("plus", 18, 2.4)}${m.name} eintragen</button>` + (hasPrev(m.id) ? `<button class="linkbtn" style="margin:2px 0 8px 4px" data-act="copyPrev" data-meal="${m.id}">Vom Vortag kopieren</button>` : "")) + `</section>`;
   }).join("");
   const full = fromIso(ui.date).toLocaleDateString("de-DE", { day: "numeric", month: "short" });
   return `<header class="top"><div class="brand"><img class="logo" src="icons/logo.svg" alt="">FoodPro</div><button class="ghost" data-act="pickDate" aria-label="Datum wählen">${icon("cal", 20)}</button></header>
@@ -1747,6 +1747,28 @@ function recipeArchive() {
   swipeRows(s, id => { archiveRecipe(id, false); toast("Wiederhergestellt"); recipeArchive(); });
   $("#raBack", s).onclick = recipeManage;
 }
+/* Mahlzeit von einem früheren Tag (Standard: Vortag) in den angezeigten Tag kopieren */
+const hasPrev = meal => D.entries.some(e => e.date === addDays(ui.date, -1) && e.meal === meal);
+function copyPrevSheet(meal, src) {
+  src = src || addDays(ui.date, -1);
+  const mn = (MEALS.find(m => m.id === meal) || {}).name || "Mahlzeit", list = D.entries.filter(e => e.date === src && e.meal === meal);
+  const sel = new Set(list.map(e => e.id));
+  const lab = fromIso(src).toLocaleDateString("de-DE", { weekday: "short", day: "numeric", month: "long" });
+  const s = sheet(`<h3>${mn} kopieren</h3><div class="row between" style="margin:0 0 10px"><button class="iconbtn" id="cpPrev" aria-label="Früherer Tag">${icon("left", 18)}</button><b>${src === addDays(ui.date, -1) ? "Vortag · " : ""}${lab}</b><button class="iconbtn" id="cpNext" aria-label="Späterer Tag" ${addDays(src, 1) >= ui.date ? "disabled" : ""}>${icon("right", 18)}</button></div>
+    <div id="cpList">${list.length ? list.map(e => `<label class="xrow"><input type="checkbox" data-cp="${e.id}" checked><span class="grow"><b>${esc(e.name)}</b><div class="muted tiny">${nde(e.grams, 2)} g</div></span><span class="muted small">${fmt(e.kcal)} kcal</span></label>`).join("") : `<div class="muted center" style="padding:22px 10px">An diesem Tag gibt es kein ${esc(mn)}.</div>`}</div>
+    <button class="btn block" style="margin-top:14px" id="cpGo" ${list.length ? "" : "disabled"}></button><button class="btn sec block" style="margin-top:8px" id="cpNo">Abbrechen</button>`);
+  const upd = () => { const b = $("#cpGo", s); b.textContent = sel.size ? sel.size + (sel.size === 1 ? " Eintrag" : " Einträge") + " nach " + mn + " kopieren" : "Nichts ausgewählt"; b.disabled = !sel.size; };
+  $$("[data-cp]", s).forEach(c => c.onchange = () => { c.checked ? sel.add(c.dataset.cp) : sel.delete(c.dataset.cp); upd(); });
+  upd();
+  $("#cpPrev", s).onclick = () => copyPrevSheet(meal, addDays(src, -1));
+  $("#cpNext", s).onclick = () => copyPrevSheet(meal, addDays(src, 1));
+  $("#cpNo", s).onclick = closeSheet;
+  $("#cpGo", s).onclick = () => {
+    const n = list.filter(e => sel.has(e.id)).map(e => { const c = JSON.parse(JSON.stringify(e)); delete c.t; return { ...c, id: uid(), date: ui.date, meal, ...stamp() }; });
+    if (!n.length) return;
+    D.entries.push(...n); ui.open[meal] = true; save(); closeSheet(); render(); toast(n.length + (n.length === 1 ? " Eintrag kopiert" : " Einträge kopiert"));
+  };
+}
 function mealToRecipe(meal) {
   const es = dayEntries(ui.date).filter(e => e.meal === meal && e.grams > 0);
   if (!es.length) return;
@@ -2777,6 +2799,7 @@ document.addEventListener("click", async ev => {
   else if (a === "accent") { D.settings.accent = t.dataset.v; save(); applyTheme(); render(); }
   else if (a === "saveAI") { D.settings.geminiKey = $("#sKey").value.trim(); D.settings.geminiModel = $("#sModel").value.trim() || "gemini-2.5-flash"; save(); toast("Gespeichert"); }
   else if (a === "mealToRecipe") mealToRecipe(t.dataset.meal);
+  else if (a === "copyPrev") copyPrevSheet(t.dataset.meal);
   else if (a === "clearMeal") {
     const meal = t.dataset.meal, ids = new Set(dayEntries(ui.date).filter(e => e.meal === meal).map(e => e.id)), sm = sum(D.entries.filter(e => ids.has(e.id)));
     if (!ids.size) return;
