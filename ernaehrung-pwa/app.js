@@ -85,17 +85,23 @@ const archiveRecipe = (id, on) => { const r = D.recipes.find(x => x.id === id); 
 /* Zuckerarten: pro Lebensmittel-Name (klein geschrieben) in D.settings.sugType, auch für Zutaten ohne Datenbank-Eintrag.
    { t: "n" } natürlich (ganzes Obst/Gemüse, Milch pur) · { t: "a" } zugesetzt/frei (Süßes, Saft, Honig, Softdrinks) · { t: "m", a: g pro 100 g } gemischt */
 const sugKey = n => String(n || "").trim().toLowerCase();
-const sugTypeOf = name => (D.settings.sugType || {})[sugKey(name)] || null;
+const SUG_ADD = /zucker|haribo|gummi|bonbon|lutscher|schoko|riegel|keks|kuchen|torte|donut|muffin|waffel|gebäck|plätzchen|cola|fanta|sprite|limo|energy|red ?bull|monster|eistee|saft|nektar|schorle|smoothie|sirup|honig|marmelade|konfitüre|nutella|nougat|marzipan|pudding|süßigkeit|lakritz|kaugummi|götterspeise|ketchup|eiscreme|speiseeis|\beis\b|snickers|twix|mars\b|oreo|kinder/i;
+const SUG_NAT = /apfel|äpfel|birne|banane|orange|mandarine|clementine|traube|beere|kirsche|pfirsich|nektarine|mango|ananas|melone|kiwi|pflaume|zwetschge|feige|dattel|granatapfel|zitrone|grapefruit|papaya|avocado|tomate|gurke|karotte|möhre|paprika|brokkoli|spinat|salat|zwiebel|kürbis|zucchini|kartoffel|reis|haferflocken|milch|naturjoghurt|joghurt natur|quark|skyr|hüttenkäse|frischkäse|käse|kefir|buttermilch|nuss|nüsse|mandel|cashew|hähnchen|fleisch|fisch|lachs|thunfisch|rosine|trockenfrucht|linse|bohne|kichererbse|mais\b|\bei\b|eier\b/i;
+/* Automatischer Vorschlag nur nach Name, nur bei eindeutigen Stichwörtern; „zugesetzt“ hat Vorrang (z. B. Milchschokolade, Apfelsaft) */
+function suggestSug(name) { const n = String(name || ""); if (SUG_ADD.test(n)) return { t: "a" }; if (SUG_NAT.test(n)) return { t: "n" }; return null; }
+/* Eigene Einordnung hat Vorrang; ohne sie gilt der Vorschlag (auto: true). { t: "u" } = bewusst nicht eingeordnet */
+function sugTypeOf(name) { const st = (D.settings.sugType || {})[sugKey(name)]; if (st) return st.t === "u" ? null : st; const sg = suggestSug(name); return sg ? { ...sg, auto: true } : null; }
 function setSugType(name, t, a, oldName) {
   const m = D.settings.sugType = D.settings.sugType || {};
   if (oldName && sugKey(oldName) !== sugKey(name)) delete m[sugKey(oldName)];
-  if (t === "n" || t === "a") m[sugKey(name)] = { t }; else if (t === "m" && a >= 0) m[sugKey(name)] = { t: "m", a }; else delete m[sugKey(name)];
+  if (t === "n" || t === "a") m[sugKey(name)] = { t }; else if (t === "m" && a >= 0) m[sugKey(name)] = { t: "m", a }; else if (suggestSug(name)) m[sugKey(name)] = { t: "u" }; else delete m[sugKey(name)];
 }
 /* Aufteilung des Zuckers einer Eintragsliste: nat (natürlich), add (zugesetzt/frei), unk (nicht eingeordnet) in g */
 function sugarSplit(list) {
-  const r = { nat: 0, add: 0, unk: 0, names: {} };
+  const r = { nat: 0, add: 0, unk: 0, names: {}, auto: {} };
   const put = (name, sg, grams) => {
     if (!(sg > 0)) return; const t = sugTypeOf(name);
+    if (t && t.auto) r.auto[name] = (r.auto[name] || 0) + sg;
     if (t && t.t === "n") r.nat += sg; else if (t && t.t === "a") r.add += sg;
     else if (t && t.t === "m") { const a = Math.min(sg, (t.a || 0) * grams / 100); r.add += a; r.nat += sg - a; }
     else { r.unk += sg; r.names[name] = (r.names[name] || 0) + sg; }
@@ -911,6 +917,35 @@ function bodySearch(b) {
   q.onkeydown = e => { if (e.key === "Enter") { e.preventDefault(); online(); } };
 }
 
+/* Plausibilitätsprüfung der Nährwerte pro 100 g */
+function plausIssues(f) {
+  const n = v => (typeof v === "number" && isFinite(v) ? v : 0), out = [];
+  const kcal = n(f.kcal), p = n(f.protein), c = n(f.carbs), fa = n(f.fat), su = n(f.sugar), fi = n(f.fiber), sa = n(f.sat), sl = n(f.salt);
+  if ([kcal, p, c, fa, su, fi, sa, sl].some(v => v < 0)) out.push("Ein Wert ist negativ.");
+  if (su > c + 0.5) out.push(`Zucker (${nde(su, 1)} g) ist höher als die Kohlenhydrate (${nde(c, 1)} g).`);
+  if (sa > fa + 0.5) out.push(`Gesättigte Fettsäuren (${nde(sa, 1)} g) sind höher als das Gesamtfett (${nde(fa, 1)} g).`);
+  const sumM = p + c + fa + fi;
+  if (sumM > 102) out.push(`Eiweiß, Kohlenhydrate, Fett und Ballaststoffe ergeben zusammen ${nde(sumM, 0)} g pro 100 g, mehr als 100 g sind nicht möglich.`);
+  if (kcal > 900) out.push(`${nde(kcal, 0)} kcal pro 100 g sind zu viel (reines Fett hat etwa 900).`);
+  if (sl > 100) out.push(`${nde(sl, 1)} g Salz pro 100 g sind nicht möglich.`);
+  const exp = 4 * p + 4 * c + 9 * fa + 2 * fi;
+  if (p + c + fa > 0 && (kcal > 20 || exp > 20) && Math.abs(kcal - exp) > Math.max(40, 0.25 * Math.max(kcal, exp))) {
+    if (kcal > 0 && exp > 0 && Math.abs(kcal / 4.184 - exp) < 0.2 * exp) out.push(`Die Energie (${nde(kcal, 0)}) sieht nach kJ statt kcal aus (≈ ${nde(kcal / 4.184, 0)} kcal).`);
+    else out.push(`Die Kalorien (${nde(kcal, 0)} kcal) passen nicht zu den Nährwerten (erwartet etwa ${nde(exp, 0)} kcal). Bei Alkohol ist das normal.`);
+  }
+  return out;
+}
+const plausBox = f => { const li = plausIssues(f); return li.length ? `<div class="card" style="margin-top:10px;border:1.5px solid var(--danger)"><b class="warn">⚠ Auffällige Werte</b><ul style="margin:6px 0 0 18px;padding:0" class="small">${li.map(x => `<li>${esc(x)}</li>`).join("")}</ul><div class="muted tiny" style="margin-top:6px">Vergleiche mit der Packung. Solche Fehler kommen in der Online-Datenbank vor.</div></div>` : ""; };
+/* Vor dem Speichern: bei auffälligen Werten nachfragen */
+function plausGate(food, go) {
+  const li = plausIssues(food); if (!li.length || document.querySelector("#plBg")) return li.length ? undefined : go();
+  const bg = document.createElement("div"); bg.id = "plBg";
+  bg.style.cssText = "position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;padding:24px";
+  bg.innerHTML = `<div class="card" style="max-width:360px;width:100%;padding:20px"><h3 style="margin:0 0 8px">Werte prüfen</h3><ul class="small" style="margin:0 0 8px 18px;padding:0">${li.map(x => `<li>${esc(x)}</li>`).join("")}</ul><div class="muted small" style="margin-bottom:14px">Stimmen die Werte auf der Packung?</div><button class="btn block" id="plFix">Korrigieren</button><button class="btn sec block" style="margin-top:8px" id="plGo">Trotzdem speichern</button></div>`;
+  document.body.append(bg);
+  bg.querySelector("#plFix").onclick = () => bg.remove();
+  bg.querySelector("#plGo").onclick = () => { bg.remove(); go(); };
+}
 /* Open Food Facts */
 function mapOff(p) {
   const n = p.nutriments || {};
@@ -946,7 +981,7 @@ function fetchT(url, opt = {}, ms = 15000) {
 function pickFood(f, fromOnline) {
   if (!f) return;
   const serving = f.serving || 100;
-  const s = sheet(`<h3>${esc(f.name)}</h3><div class="muted small">${f.brand ? esc(f.brand) + " · " : ""}pro 100 g: ${r0(f.kcal)} kcal · E ${r1(f.protein)} · KH ${r1(f.carbs)} · F ${r1(f.fat)}</div>
+  const s = sheet(`<h3>${esc(f.name)}</h3><div class="muted small">${f.brand ? esc(f.brand) + " · " : ""}pro 100 g: ${r0(f.kcal)} kcal · E ${r1(f.protein)} · KH ${r1(f.carbs)} · F ${r1(f.fat)}</div>${plausBox(f)}
     <label>Menge (g oder ml)</label><div class="row"><input type="text" inputmode="decimal" id="gr" value="${gS(serving)}">
     <button class="chip" data-m="0.5">½</button><button class="chip" data-m="1">1×</button><button class="chip" data-m="2">2×</button></div>
     <div class="row" style="margin-top:8px;gap:8px"><label style="margin:0;flex:none">oder Stück</label><input type="text" inputmode="decimal" id="gs" style="max-width:90px" aria-label="Anzahl Stück"><span class="muted small">à ${gS(serving)} g</span></div>
@@ -1476,7 +1511,7 @@ function bodyManual(b) {
   bindPaste(b, () => { addTab = "search"; openAdd(); });
   $("#fSave", b).onclick = () => {
     const f = readFoodForm(b); if (!f) return;
-    D.foods.push(f); save(); pickFood(f);
+    plausGate(f, () => { D.foods.push(f); save(); pickFood(f); });
   };
 }
 
@@ -1686,7 +1721,7 @@ function newFoodSheet(onPick, again, barcode) {
   const f = sheet(`<h3>Neues Lebensmittel</h3>${foodForm({ barcode })}<button class="btn block" style="margin-top:14px" id="nSave">Speichern & Menge wählen</button><button class="btn sec block" style="margin-top:8px" id="nBack">Zurück</button>`);
   $("#nBack", f).onclick = again;
   bindPaste(f, again);
-  $("#nSave", f).onclick = () => { const n = readFoodForm(f); if (!n) return; D.foods.push(n); save(); pickAmount(n, onPick, again); };
+  $("#nSave", f).onclick = () => { const n = readFoodForm(f); if (!n) return; plausGate(n, () => { D.foods.push(n); save(); pickAmount(n, onPick, again); }); };
 }
 /* Zutat per Barcode: Kamera oder Nummer eintippen */
 function pickerScan(onPick, onBack) {
@@ -1803,7 +1838,7 @@ function nutrientBody(list, dayList) {
       <div class="nbar"><i class="${bad ? "warn" : good ? "good" : ""}" style="width:${pct}%"></i></div>
       <div class="muted tiny">${dayList ? (share != null ? `${share} % des Tageswerts · ` : "") + (isMin ? "Tagesziel" : "Tageslimit") + " " + nde(lim, 0) + " g" : isSug ? sugHint() : microHint(x.ek)}</div>${top ? `<div class="muted tiny">Meist aus: ${top}</div>` : ""}
       ${m[x.ek] > 0.004 ? `<button class="linkbtn" data-contrib="${x.ek}">Welche Lebensmittel zählen dazu? ›</button>` : ""}
-      ${x.ek === "s" && m[x.ek] > 0 ? (() => { const sp = spL; return `<div class="tiny" style="margin-top:4px">Gesamtzucker <b>${nde(m.s, 1)} g</b> · ${sugLine(sp)}</div>${Object.keys(sp.names).length ? `<button class="linkbtn" data-sugcls="1">Zuckerarten einordnen (${Object.keys(sp.names).length}) ›</button>` : ""}`; })() : ""}
+      ${x.ek === "s" && m[x.ek] > 0 ? (() => { const sp = spL; return `<div class="tiny" style="margin-top:4px">Gesamtzucker <b>${nde(m.s, 1)} g</b> · ${sugLine(sp)}</div>${Object.keys(sp.names).length + Object.keys(sp.auto).length ? `<button class="linkbtn" data-sugcls="1">Zuckerarten prüfen und einordnen (${Object.keys(sp.names).length + Object.keys(sp.auto).length}) ›</button>` : ""}`; })() : ""}
       ${miss ? `<div class="warn tiny">Für ${miss} von ${list.length} Einträgen ist diese Angabe nicht bekannt.</div><button class="linkbtn" data-miss="${x.ek}">Fehlende ansehen und nachtragen ›</button>` : ""}</div>`;
   }).join("");
   return `<div class="card nsum"><div><b>${fmt(t.kcal)}</b><span class="muted tiny">kcal</span></div><div><b>${r0(t.p)} g</b><span class="muted tiny">Eiweiß</span></div>
@@ -1890,11 +1925,12 @@ function missingSheet(list, ek, back) {
   const first = $("[data-mi], [data-me]", s); if (first) first.focus();
 }
 function sugarClassSheet(list, back) {
-  const sp = sugarSplit(list), names = Object.keys(sp.names).sort((a, b) => sp.names[b] - sp.names[a]);
-  const rows = names.map((n, k) => `<div class="card" style="margin-bottom:10px"><div class="row between"><b style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(n)}</b><span class="muted small">${nde(sp.names[n], 1)} g Zucker</span></div>
-    <select data-sn="${k}" aria-label="Zuckerart von ${esc(n)}"><option value="">Nicht eingeordnet</option><option value="n">Natürlich</option><option value="a">Zugesetzt / frei</option><option value="m">Gemischt</option></select>
+  const sp = sugarSplit(list), amt = n => (sp.names[n] || 0) + (sp.auto[n] || 0), names = [...new Set([...Object.keys(sp.names), ...Object.keys(sp.auto)])].sort((a, b) => amt(b) - amt(a));
+  const rows = names.map((n, k) => `<div class="card" style="margin-bottom:10px"><div class="row between"><b style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(n)}</b><span class="muted small">${nde(amt(n), 1)} g Zucker</span></div>
+    ${sp.auto[n] ? `<div class="muted tiny">Automatisch vorgeschlagen, bitte prüfen</div>` : ""}
+    <select data-sn="${k}" aria-label="Zuckerart von ${esc(n)}"><option value="">Nicht eingeordnet</option><option value="n" ${sp.auto[n] && (sugTypeOf(n) || {}).t === "n" ? "selected" : ""}>Natürlich</option><option value="a" ${sp.auto[n] && (sugTypeOf(n) || {}).t === "a" ? "selected" : ""}>Zugesetzt / frei</option><option value="m">Gemischt</option></select>
     <div data-sw="${k}" style="display:none"><label>davon zugesetzt (g pro 100 g)</label><input type="text" inputmode="decimal" data-sa="${k}" placeholder="z. B. 8"></div></div>`).join("");
-  const s = sheet(`<button class="linkbtn" id="scBack" style="margin:-4px 0 6px">‹ Zurück</button><h3>Zuckerarten einordnen</h3>
+  const s = sheet(`<button class="linkbtn" id="scBack" style="margin:-4px 0 6px">‹ Zurück</button><h3>Zuckerarten prüfen</h3>
     <div class="muted small" style="margin:-6px 0 12px"><b>Natürlich:</b> Zucker in ganzem Obst, Gemüse, Milch, Naturjoghurt. <b>Zugesetzt / frei:</b> Haushaltszucker, Süßes, Gebäck, Softdrinks, Säfte, Smoothies, Honig. <b>Gemischt:</b> z. B. Fruchtjoghurt, dort gibst du an, wie viel pro 100 g zugesetzt ist. Die Einordnung gilt für alle Tage, auch rückwirkend.</div>
     ${rows || `<div class="muted center" style="padding:24px 10px">Alles eingeordnet.</div>`}
     <button class="btn block" style="margin-top:12px" id="scSave">Speichern</button><button class="btn sec block" style="margin-top:8px" id="scCancel">Abbrechen</button>`);
@@ -1902,7 +1938,7 @@ function sugarClassSheet(list, back) {
   $("#scBack", s).onclick = $("#scCancel", s).onclick = back;
   $("#scSave", s).onclick = () => {
     let n = 0;
-    $$("[data-sn]", s).forEach(sel => { if (!sel.value) return; const nm = names[+sel.dataset.sn], a = num($(`[data-sa="${sel.dataset.sn}"]`, s).value); setSugType(nm, sel.value, a); n++; });
+    $$("[data-sn]", s).forEach(sel => { const nm = names[+sel.dataset.sn]; if (!sel.value && !sp.auto[nm]) return; const a = num($(`[data-sa="${sel.dataset.sn}"]`, s).value); setSugType(nm, sel.value, a); n++; });
     if (n) { save(); render(); toast(n + (n === 1 ? " Zuckerart gespeichert" : " Zuckerarten gespeichert")); }
     back();
   };
@@ -1941,7 +1977,7 @@ function contribSheet(list, ek, back) {
     $("#ctBody", s).innerHTML = `<div class="muted small" style="margin:-6px 0 10px">${all.length} ${all.length === 1 ? "Quelle" : "Quellen"}, zusammen ${nde(tot, 1)} g. Bei Rezepten siehst du die einzelnen Zutaten.</div>
       ${isS ? `<div class="tcchips">${chip("all", "Alle")}${chip("a", "Zugesetzt")}${chip("n", "Natürlich")}${chip("u", "Offen")}</div><div class="muted tiny" style="margin:-2px 0 10px">Stimmt eine Zuckerart nicht? Ändere sie direkt hier, sie gilt für alle Tage.</div>` : ""}
       ${rows.map((o, k) => { const t = isS ? sugTypeOf(o.name) : null, ty = typeOf(o.name); return `<div class="card" style="margin-bottom:8px"><div class="row between" style="gap:10px"><b style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(o.name)}</b><b style="flex:none">${nde(o.v, 2)} g</b></div>
-        <div class="muted tiny">${Math.round(o.v / tot * 100)} % · ${fmt(o.grams)} g gegessen · ${o.grams > 0 ? nde(o.v / o.grams * 100, 1) : "–"} g pro 100 g${o.n > 1 ? " · " + o.n + "×" : ""}</div>
+        <div class="muted tiny">${isS && t && t.auto ? "Automatisch vorgeschlagen · " : ""}${Math.round(o.v / tot * 100)} % · ${fmt(o.grams)} g gegessen · ${o.grams > 0 ? nde(o.v / o.grams * 100, 1) : "–"} g pro 100 g${o.n > 1 ? " · " + o.n + "×" : ""}</div>
         ${isS ? `<select data-cs="${k}" aria-label="Zuckerart von ${esc(o.name)}" style="margin-top:6px"><option value="u" ${ty === "u" ? "selected" : ""}>Nicht eingeordnet</option><option value="n" ${ty === "n" ? "selected" : ""}>Natürlich</option><option value="a" ${ty === "a" ? "selected" : ""}>Zugesetzt / frei</option><option value="m" ${ty === "m" ? "selected" : ""}>Gemischt</option></select>
         <div data-cw="${k}" style="${ty === "m" ? "" : "display:none"}"><label>davon zugesetzt (g pro 100 g)</label><input type="text" inputmode="decimal" data-ca="${k}" value="${t && t.t === "m" ? String(t.a ?? "").replace(".", ",") : ""}" placeholder="z. B. 8"></div>` : ""}</div>`; }).join("") || `<div class="muted center" style="padding:20px 10px">Nichts in dieser Auswahl.</div>`}`;
     $$("[data-f]", s).forEach(b => b.onclick = () => { flt = b.dataset.f; draw(); });
@@ -2204,6 +2240,9 @@ function foodEdit(f, after, draft) {
   bindPaste(s, () => { closeSheet(); render(); });
   $("#fs", s).onclick = () => {
     const n = readFoodForm(s, existing ? f : null); if (!n) return;
+    plausGate(n, () => doSave(n));
+  };
+  const doSave = n => {
     const oldName = existing ? String(f.name).toLowerCase() : "";
     const nutKey = x => [x.name, x.kcal || 0, x.protein || 0, x.carbs || 0, x.fat || 0, ...MICRO.map(m => x[m.fk] || 0)].join("|");
     const changed = existing && nutKey(f) !== nutKey(n);
