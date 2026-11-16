@@ -1528,9 +1528,17 @@ function recipePortion(r) {
   const t = recipeTotals(r), n = Math.max(r.servings || 1, 0.01);
   return { kcal: t.kcal / n, p: t.p / n, c: t.c / n, f: t.f / n, grams: t.grams / n };
 }
+/* Kosten eines Rezepts aus den Preisen der Zutaten (über den Namen in „Meine Lebensmittel“); fehlende Preise werden gezählt */
+function recipeCost(r) {
+  let total = 0, known = 0, missing = 0;
+  (r.items || []).forEach(i => { const v = priceOf(foodByName(i.name), i.grams); if (v == null) missing++; else { total += v; known++; } });
+  const n = Math.max(r.servings || 1, 0.01);
+  return { total, per: total / n, known, missing };
+}
+const costTxt = (c, v) => c.known ? (c.missing ? "ab " : "≈ ") + eurFmt(v) : "";
 function recipeLine(r) {
-  const p = recipePortion(r);
-  return `${r.img ? `<img class="rthumb" src="${r.img}" alt="">` : ""}<div class="grow"><div style="font-weight:600">${esc(r.name)}</div><div class="muted tiny">${r.items.length} ${r.items.length === 1 ? "Zutat" : "Zutaten"}, pro Portion ${r0(p.kcal)} kcal (E ${r0(p.p)} / KH ${r0(p.c)} / F ${r0(p.f)})</div>${(r.cats || []).length ? `<div class="tiny" style="margin-top:3px;color:var(--accent);font-weight:600">${r.cats.map(esc).join(" · ")}</div>` : ""}</div>`;
+  const p = recipePortion(r), rc = recipeCost(r);
+  return `${r.img ? `<img class="rthumb" src="${r.img}" alt="">` : ""}<div class="grow"><div style="font-weight:600">${esc(r.name)}</div><div class="muted tiny">${r.items.length} ${r.items.length === 1 ? "Zutat" : "Zutaten"}, pro Portion ${r0(p.kcal)} kcal (E ${r0(p.p)} / KH ${r0(p.c)} / F ${r0(p.f)})${rc.known ? ` · <b style="color:var(--text)">${costTxt(rc, rc.per)}</b>` : ""}</div>${(r.cats || []).length ? `<div class="tiny" style="margin-top:3px;color:var(--accent);font-weight:600">${r.cats.map(esc).join(" · ")}</div>` : ""}</div>`;
 }
 function storeFood(f) {
   let st = D.foods.find(x => x.id === f.id) || (f.barcode && D.foods.find(x => x.barcode === f.barcode));
@@ -1553,9 +1561,9 @@ function bodyRecipes(b) {
 
 function pickRecipe(r) {
   if (!r) return;
-  const p = recipePortion(r), tot = recipeTotals(r), W0 = recipeWeight(r);
+  const p = recipePortion(r), tot = recipeTotals(r), W0 = recipeWeight(r), rc = recipeCost(r);
   let mode = "p";
-  const s = sheet(`<h3>${esc(r.name)}</h3>${r.img ? `<img class="rpick" src="${r.img}" alt="">` : ""}<div class="muted small">Pro Portion: ${r0(p.kcal)} kcal, Eiweiß ${r1(p.p)} g, Kohlenhydrate ${r1(p.c)} g, Fett ${r1(p.f)} g</div>
+  const s = sheet(`<h3>${esc(r.name)}</h3>${r.img ? `<img class="rpick" src="${r.img}" alt="">` : ""}<div class="muted small">Pro Portion: ${r0(p.kcal)} kcal, Eiweiß ${r1(p.p)} g, Kohlenhydrate ${r1(p.c)} g, Fett ${r1(p.f)} g${rc.known ? ` · ${costTxt(rc, rc.per)}` : ""}</div>
     <div class="seg" style="margin-top:14px"><button data-md="p" class="on">Portionen</button><button data-md="g">Gramm</button></div>
     <div id="mP"><label>Portionen</label><div class="row"><input type="text" inputmode="decimal" id="rp" value="1"><button class="chip" data-m="0.5">½</button><button class="chip" data-m="1">1</button><button class="chip" data-m="2">2</button></div></div>
     <div id="mG" style="display:none"><label>Gesamtgewicht des Gerichts (g)</label><input type="text" inputmode="decimal" id="rw" value="${r0(W0)}">
@@ -1575,7 +1583,7 @@ function pickRecipe(r) {
   const upd = () => {
     const { f, g, n } = calcF();
     $("#rv", s).innerHTML = `<div class="row between"><b style="font-size:22px">${r0(tot.kcal * f)} kcal</b><span class="small"><span class="cp">E ${r1(tot.p * f)}</span> &nbsp;<span class="cc">KH ${r1(tot.c * f)}</span> &nbsp;<span class="cf">F ${r1(tot.f * f)}</span></span></div>
-      <div class="muted tiny" style="margin-top:6px">${mode === "g" ? `≈ ${nde(n, 2)} ${Math.abs(n - 1) < 0.005 ? "Portion" : "Portionen"} (${r0(f * 100)} % des Gerichts)` : `≈ ${r0(g)} g`}</div>`;
+      ${rc.known ? `<div class="row between" style="margin-top:8px"><span class="muted small">Kosten</span><b>${costTxt(rc, rc.total * f)}</b></div>${rc.missing ? `<div class="warn tiny">Bei ${rc.missing} von ${r.items.length} Zutaten fehlt der Preis.</div>` : ""}` : ""}<div class="muted tiny" style="margin-top:6px">${mode === "g" ? `≈ ${nde(n, 2)} ${Math.abs(n - 1) < 0.005 ? "Portion" : "Portionen"} (${r0(f * 100)} % des Gerichts)` : `≈ ${r0(g)} g`}</div>`;
   };
   rp.oninput = upd; rw.oninput = upd; rg.oninput = upd; upd();
   $$("[data-m]", s).forEach(b => b.onclick = () => { rp.value = b.dataset.m; upd(); });
@@ -1645,6 +1653,7 @@ function drawRecipeEditor() {
     $$(".ing", s).forEach(row => { const i = d.items[+row.dataset.k]; $("[data-kc]", row).textContent = r0(calc(i, i.grams).kcal) + " kcal"; });
     $("#rsum", s).innerHTML = `<div class="row between"><span class="muted small">Gesamt</span><b>${r0(t.kcal)} kcal</b></div>
       <div class="row between" style="margin-top:6px"><span class="muted small">Pro Portion</span><b style="font-size:22px">${r0(t.kcal / n)} kcal</b></div>
+      ${(() => { const rc = recipeCost({ items: d.items, servings: n }); return rc.known ? `<div class="row between" style="margin-top:6px"><span class="muted small">Kosten gesamt / pro Portion</span><b>${costTxt(rc, rc.total)} / ${costTxt(rc, rc.per)}</b></div>${rc.missing ? `<div class="warn tiny">Bei ${rc.missing} von ${d.items.length} Zutaten fehlt der Preis (Preis im Lebensmittel eintragen).</div>` : ""}` : d.items.length ? `<div class="muted tiny" style="margin-top:6px">Kosten: Trage bei den Zutaten unter „Meine Lebensmittel“ einen Preis ein, dann siehst du hier die Kosten.</div>` : ""; })()}
       <div class="small" style="margin-top:6px"><span class="cp">E ${r1(t.p / n)} g</span> &nbsp;<span class="cc">KH ${r1(t.c / n)} g</span> &nbsp;<span class="cf">F ${r1(t.f / n)} g</span></div>`;
   };
   const phUpd = () => { const g = recipeTotals(d).grams; $("#rw", s).placeholder = g ? r0(g) : "z. B. 850"; };
