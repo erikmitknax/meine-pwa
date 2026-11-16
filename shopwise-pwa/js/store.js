@@ -71,6 +71,27 @@ export function addItem(listId, name, qty = '') {
   return updateList(listId, (l) => l.items.push({ id: newId(), name, qty, checked: false, created: Date.now() }));
 }
 
+// Mehrere Artikel auf einmal (Import): ein Speichervorgang, bereits vorhandene Namen werden übersprungen.
+export function addItems(listId, items) {
+  const key = (s) => String(s || '').toLowerCase().trim().replace(/\s+/g, ' ');
+  let added = 0, existing = 0;
+  const lists = loadLists();
+  const list = lists.find((l) => l.id === listId);
+  if (!list) return { added, existing };
+  const have = new Set(list.items.map((i) => key(i.name)));
+  for (const it of items) {
+    const name = String(it.name || '').slice(0, 60).trim();
+    if (!name) continue;
+    if (have.has(key(name))) { existing++; continue; }
+    have.add(key(name));
+    list.items.push({ id: newId(), name, qty: String(it.qty || '').slice(0, 12), checked: false, created: Date.now() });
+    added++;
+  }
+  save(lists);
+  for (const it of items) recordHistory(it.name, it.qty || '');
+  return { added, existing };
+}
+
 /* ---------- Verlauf: alles, was du je eingetippt hast (bleibt auch nach dem Löschen) → Vorschläge ---------- */
 const HIST_KEY = 'shopwise.history';
 const HIST_MAX = 500;

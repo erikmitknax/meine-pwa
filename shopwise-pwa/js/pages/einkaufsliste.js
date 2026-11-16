@@ -6,6 +6,7 @@ import { h } from '../dom.js';
 import { uiIcon } from '../icons.js';
 import { mountItems } from './einkaufsliste-artikel.js';
 import { mountRestock, restockSummary } from './nachkaufen.js';
+import { openImportDialog } from '../import.js';
 
 // Welche Listen aufgeklappt sind, bleibt gemerkt (auch nach Neuladen und bei Änderungen von anderen Geräten).
 const OPEN_KEY = 'shopwise.openLists';
@@ -121,6 +122,13 @@ function renderOverview(el) {
     add.appendChild(h('span', '', 'Neue Liste'));
     add.addEventListener('click', openDialog);
     wrap.appendChild(add);
+
+    const imp = h('button', 'btn-wide import-btn', 'Liste importieren (CSV / KI)');
+    imp.type = 'button';
+    imp.addEventListener('click', () => openImportDialog((id) => {
+      const open = loadOpen(); open.add(id); saveOpen(open); draw();
+    }));
+    wrap.appendChild(imp);
   }
 
   function openDialog() {
