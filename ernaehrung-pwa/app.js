@@ -1635,6 +1635,7 @@ function drawRecipeEditor() {
     <div class="catrow" style="margin-top:8px">${catChips(recCats(), c => d.cats.includes(c), "data-cat", c => ui.catEdit ? ` <span aria-label="Kategorie entfernen" data-catdel="${esc(c)}" style="margin-left:4px;font-weight:700">×</span>` : "")}</div>
     <div class="row" style="gap:8px;margin-top:8px"><input type="text" id="rcNew" placeholder="Neue Kategorie" autocomplete="off" maxlength="30"><button class="btn sec" id="rcAdd" style="flex:none">Hinzufügen</button></div>
     <label>Ergibt Portionen</label><input type="text" inputmode="decimal" id="rs" value="${d.servings}">
+    <div class="card" id="rcTop" style="margin-top:10px;display:none"></div>
     <label>Gesamtgewicht fertig (g, optional)</label><input type="text" inputmode="decimal" id="rw" value="${d.weight > 0 ? r0(d.weight) : ""}" placeholder="${r0(recipeTotals(d).grams) || "z. B. 850"}">
     <div class="muted tiny" style="margin:6px 2px 0">Gewicht des fertigen Gerichts auf der Waage. Damit trägst du später einfach ein, wie viel Gramm du genommen hast. Leer = Summe der Zutaten.</div>
     <h2 style="margin:20px 2px 6px">Zutaten</h2>
@@ -1650,7 +1651,10 @@ function drawRecipeEditor() {
   const capture = () => { d.name = $("#rn", s).value.trim(); d.servings = num($("#rs", s).value) || 1; d.weight = Math.max(0, num($("#rw", s).value) || 0); };
   const sumUpd = () => {
     const t = recipeTotals(d), n = Math.max(num($("#rs", s).value) || 1, 0.01);
-    $$(".ing", s).forEach(row => { const i = d.items[+row.dataset.k]; $("[data-kc]", row).textContent = r0(calc(i, i.grams).kcal) + " kcal"; });
+    $$(".ing", s).forEach(row => { const i = d.items[+row.dataset.k], pv = priceOf(foodByName(i.name), i.grams); $("[data-kc]", row).textContent = r0(calc(i, i.grams).kcal) + " kcal" + (pv == null ? " · Preis fehlt" : pv === 0 ? " · kostenlos" : " · " + eurFmt(pv)); });
+    const rcT = recipeCost({ items: d.items, servings: n }), top = $("#rcTop", s);
+    top.style.display = d.items.length ? "" : "none";
+    top.innerHTML = rcT.known ? `<div class="row between"><span class="muted small">Kosten gesamt</span><b>${costTxt(rcT, rcT.total)}</b></div><div class="row between" style="margin-top:4px"><span class="muted small">Pro Portion</span><b style="font-size:20px">${costTxt(rcT, rcT.per)}</b></div>${rcT.missing ? `<div class="warn tiny" style="margin-top:4px">Bei ${rcT.missing} von ${d.items.length} Zutaten fehlt der Preis.</div>` : ""}` : `<div class="muted small">Kosten: Bei keiner Zutat ist ein Preis hinterlegt (unter „Meine Lebensmittel“ eintragen).</div>`;
     $("#rsum", s).innerHTML = `<div class="row between"><span class="muted small">Gesamt</span><b>${r0(t.kcal)} kcal</b></div>
       <div class="row between" style="margin-top:6px"><span class="muted small">Pro Portion</span><b style="font-size:22px">${r0(t.kcal / n)} kcal</b></div>
       ${(() => { const rc = recipeCost({ items: d.items, servings: n }); return rc.known ? `<div class="row between" style="margin-top:6px"><span class="muted small">Kosten gesamt / pro Portion</span><b>${costTxt(rc, rc.total)} / ${costTxt(rc, rc.per)}</b></div>${rc.missing ? `<div class="warn tiny">Bei ${rc.missing} von ${d.items.length} Zutaten fehlt der Preis (Preis im Lebensmittel eintragen).</div>` : ""}` : d.items.length ? `<div class="muted tiny" style="margin-top:6px">Kosten: Trage bei den Zutaten unter „Meine Lebensmittel“ einen Preis ein, dann siehst du hier die Kosten.</div>` : ""; })()}
