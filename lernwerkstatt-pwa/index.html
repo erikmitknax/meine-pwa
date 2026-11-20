@@ -262,6 +262,13 @@ html.pv-lock,html.pv-lock body{overflow:hidden}
 .srsbox{display:grid;gap:8px;padding:12px;border:1px solid var(--line);border-radius:12px;background:var(--surface2)}
 .ivgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
 .cardmeta .cm-edit+.cm-edit{margin-left:-4px}
+.tagline{display:flex;flex-wrap:wrap;gap:6px;width:100%;max-width:620px}
+.tagline:empty{display:none}
+.tagchip{padding:3px 10px;border:1px solid var(--line);border-radius:999px;background:var(--surface);color:inherit;font:inherit;font-size:.8rem;cursor:pointer}
+.tagchip.static{cursor:default;border-color:color-mix(in srgb,var(--accent) 55%,var(--line))}
+.tagchip.on{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 16%,var(--surface))}
+.tagedit{display:grid;gap:8px}
+.tagedit input{flex:1;min-width:0}
 .pausedbar{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 14px;border:1px dashed var(--line);border-radius:12px;background:var(--surface);cursor:pointer;width:100%;text-align:left;font:inherit;color:inherit}
 .pausedbar b{font-weight:600}.pausedbar small{color:var(--muted)}
 .pgroup{display:grid;gap:6px}.pgroup>.pgh{display:flex;align-items:center;gap:10px;font-weight:600}
@@ -410,10 +417,13 @@ html.pv-lock,html.pv-lock body{overflow:hidden}
     </div>
     <div class="cardmeta" id="cardMeta">
       <span class="cm-deck"><small>Stapel</small><b id="cardDeck"></b></span>
+      <button class="btn small cm-edit" id="cardTag" type="button" aria-label="Tags dieser Karte" title="Tags vergeben, z. B. schwer">🏷</button>
       <button class="btn small cm-edit" id="cardKnown" type="button" aria-label="Karte ist sicher (1 Sekunde gedrückt halten)" title="Sicher gewusst: 1 Sekunde gedrückt halten">✓</button>
       <button class="btn small cm-edit" id="cardPause" type="button" aria-label="Karte pausieren (1 Sekunde gedrückt halten)" title="Zum Pausieren 1 Sekunde gedrückt halten">⏸</button>
       <button class="btn small cm-edit" id="cardEdit" type="button" aria-label="Karte bearbeiten" title="Karte bearbeiten">✎</button>
     </div>
+    <div class="tagline" id="cardTags"></div>
+    <div class="panel grid cm-editor" id="tagBox" hidden></div>
     <div class="panel grid cm-editor" id="cardEditor" hidden></div>
     <div class="rate" id="rate" hidden>
       <button class="r0" id="r0" type="button">Nochmal<small id="i0"></small></button>
@@ -597,7 +607,8 @@ function normalize(){
   S.topics.forEach(t=>{t.parent=(t.parent&&t.parent!==t.id&&tids.has(t.parent))?t.parent:"";t.pdfs=Array.isArray(t.pdfs)?t.pdfs.filter(e=>e&&e.id&&e.name):[]});
   S.topics.forEach(t=>{const seen=new Set([t.id]);let p=t.parent;while(p){if(seen.has(p)){t.parent="";break}seen.add(p);const pt=S.topics.find(x=>x.id===p);p=pt?pt.parent:""}});
   S.decks=Array.isArray(S.decks)?S.decks:[];
-  S.decks.forEach(d=>{d.topic=d.topic||"";d.cards=Array.isArray(d.cards)?d.cards:[];d.cards.forEach(c=>{if(c.k){c.k=1;delete c.p}else{delete c.k;if(c.p)c.p=1;else delete c.p}c.box=Math.max(0,Math.min(MAXBOX,c.box|0));c.due=c.due||0;c.ok=c.ok||0;c.bad=c.bad||0})});
+  S.decks.forEach(d=>{d.topic=d.topic||"";d.cards=Array.isArray(d.cards)?d.cards:[];d.cards.forEach(c=>{if(c.k){c.k=1;delete c.p}else{delete c.k;if(c.p)c.p=1;else delete c.p}
+    if(Array.isArray(c.t)){c.t=[...new Set(c.t.map(cleanTag).filter(Boolean))].slice(0,12);if(!c.t.length)delete c.t}else delete c.t;c.box=Math.max(0,Math.min(MAXBOX,c.box|0));c.due=c.due||0;c.ok=c.ok||0;c.bad=c.bad||0})});
   S.sets=(Array.isArray(S.sets)?S.sets:[]).filter(s=>s&&s.id).map(s=>({id:s.id,name:s.name||"Lernstapel",topics:Array.isArray(s.topics)?s.topics:[],decks:Array.isArray(s.decks)?s.decks:[]}));
   S.log=S.log||{};S.set=Object.assign({work:25,short:5,long:15},S.set||{});S.v=2;
 }
@@ -824,6 +835,44 @@ const isDue=c=>!off(c)&&(c.due||0)<=Date.now();
 const liveN=d=>d.cards.reduce((a,c)=>a+(off(c)?0:1),0);   /* ohne pausierte und sichere Karten */
 const flagCards=k=>S.decks.flatMap(d=>d.cards.filter(c=>c[k]).map(c=>({c,d})));
 const pausedCards=()=>flagCards("p"),knownCards=()=>flagCards("k");
+/* ---------- Tags: frei vergebene Schlagwörter pro Karte (c.t), z. B. „schwer“ ---------- */
+function cleanTag(t){return String(t||"").replace(/\s+/g," ").trim().slice(0,24)}
+const tagKey=t=>String(t||"").trim().toLowerCase();
+const cardTags=c=>Array.isArray(c.t)?c.t:[];
+const hasTag=(c,t)=>cardTags(c).some(x=>tagKey(x)===tagKey(t));
+function allTags(){
+  const m=new Map();
+  S.decks.forEach(d=>d.cards.forEach(c=>cardTags(c).forEach(t=>{const k=tagKey(t),e=m.get(k)||{name:t,n:0,live:0};e.n++;if(!off(c))e.live++;m.set(k,e)})));
+  return [...m.values()].sort((a,b)=>a.name.localeCompare(b.name,"de"));
+}
+function addTag(c,t){
+  t=cleanTag(t);if(!t||hasTag(c,t)||cardTags(c).length>=12)return false;
+  const ex=allTags().find(x=>tagKey(x.name)===tagKey(t));
+  if(!Array.isArray(c.t))c.t=[];c.t.push(ex?ex.name:t);return true;
+}
+function removeTag(c,t){if(!Array.isArray(c.t))return;c.t=c.t.filter(x=>tagKey(x)!==tagKey(t));if(!c.t.length)delete c.t}
+const tagChip=(t,fn,cls)=>{const b=el("button",{class:"tagchip"+(cls?" "+cls:""),type:"button",text:t});b.addEventListener("click",fn);return b};
+function tagLine(c){const ts=cardTags(c);return ts.length?el("div",{class:"tagline"},...ts.map(t=>el("span",{class:"tagchip static",text:"🏷 "+t}))):null}
+function tagEditor(c,d,after){
+  const box=el("div",{class:"tagedit"});
+  function draw(){
+    box.replaceChildren();
+    const cur=cardTags(c),row=el("div",{class:"tagline"});
+    box.append(el("div",{class:"label",text:"Tags dieser Karte (zum Entfernen antippen)"}),row);
+    if(!cur.length)row.append(el("span",{class:"syncnote",text:"Noch keine."}));
+    cur.forEach(t=>row.append(tagChip("✕ "+t,()=>{removeTag(c,t);commit()},"on")));
+    const names=new Map([["schwer","schwer"]]);allTags().forEach(t=>names.set(tagKey(t.name),t.name));
+    const sug=[...names.values()].filter(n=>!hasTag(c,n));
+    if(sug.length){const r=el("div",{class:"tagline"});box.append(el("div",{class:"label",text:"Vorhandene Tags"}),r);sug.forEach(n=>r.append(tagChip("+ "+n,()=>add(n))))}
+    const inp=el("input",{type:"text",maxlength:"24",placeholder:"Neuer Tag, z. B. schwer oder Prüfung"}),go=el("button",{class:"btn small primary",type:"button"},"Hinzufügen");
+    go.addEventListener("click",()=>add(inp.value));
+    inp.addEventListener("keydown",e=>{if(e.key==="Enter"){e.preventDefault();add(inp.value)}});
+    box.append(el("div",{class:"row",style:"flex-wrap:nowrap;margin-top:6px"},inp,go));
+  }
+  function commit(){d.updated=Date.now();saveDeck(d);draw();if(after)after()}
+  function add(t){if(!cleanTag(t))return;if(addTag(c,t)){commit();const i=box.querySelector("input");if(i&&window.matchMedia&&matchMedia("(pointer:fine)").matches)i.focus()}else if(!hasTag(c,t))toast("Mehr als 12 Tags pro Karte sind nicht möglich")}
+  draw();return box;
+}
 const dueCount=d=>d.cards.filter(isDue).length;
 /* Einstellbar: pro Knopf die Wirkung aufs Fach und ein Abstands-Faktor, dazu die Tage je Fach */
 const SRS_ACTS=[["reset","Zurück auf Neu (Fach 0)"],["back","Ein Fach zurück"],["stay","Im Fach bleiben"],["up1","Ein Fach vor"],["up2","Zwei Fächer vor"]];
@@ -1224,6 +1273,7 @@ function cardsOf(src){
   if(src.kind==="deck")ds=S.decks.filter(d=>d.id===src.id);
   else if(src.kind==="topic"){const cv=descIds(src.id);ds=S.decks.filter(d=>cv.has(d.topic))}
   else if(src.kind==="set"){const s=S.sets.find(x=>x.id===src.id);ds=s?decksOfSet(s):[]}
+  else if(src.kind==="tag")return S.decks.flatMap(d=>d.cards.filter(c=>!off(c)&&hasTag(c,src.id)).map(c=>({c,d})));
   else ds=S.decks.slice();
   return ds.flatMap(d=>d.cards.filter(c=>!off(c)).map(c=>({c,d})));
 }
@@ -1233,6 +1283,7 @@ function fillSrc(){
   sel.replaceChildren(el("option",{value:"all",text:"Alles (alle Themen gemischt)"}));
   if(S.sets.length){const g=el("optgroup",{label:"Lernstapel"});S.sets.forEach(s=>g.append(el("option",{value:"set:"+s.id,text:s.name})));sel.append(g)}
   if(S.topics.length){const g=el("optgroup",{label:"Einzelne Themen (mit Unterthemen)"});flatTopics().forEach(x=>g.append(el("option",{value:"topic:"+x.t.id,text:topicPath(x.t.id)})));sel.append(g)}
+  {const ts=allTags();if(ts.length){const g=el("optgroup",{label:"Tags"});ts.forEach(t=>g.append(el("option",{value:"tag:"+t.name,text:"🏷 "+t.name+" ("+t.live+")"})));sel.append(g)}}
   if([...sel.options].some(o=>o.value===old))sel.value=old;
   $("#noteOpt").checked=S.note!==false;
   srcInfo();
@@ -1276,7 +1327,7 @@ function showCard(){
   fillCard($("#cardQ"),x.c.f);fillCard($("#cardA"),x.c.b);
   [["#cardQ",x.c.f],["#cardA",x.c.b]].forEach(([s,t])=>{const e=$(s),n=t.length;e.classList.remove("l1","l2","l3");if(n>500)e.classList.add("l3");else if(n>250)e.classList.add("l2");else if(n>110)e.classList.add("l1")});
   const src=[topicPath(x.d.topic),x.d.title].filter(Boolean).join(" · ");
-  $("#cardDeck").textContent=src;closeCardEditor();
+  $("#cardDeck").textContent=src;closeCardEditor();closeTagBox();syncCardTags();
   $("#srcF").textContent=src;$("#srcB").textContent=src;
   const docs=pdfsFor(x.d.topic),dbox=$("#studyDocs");dbox.replaceChildren();
   if(docs.length){dbox.hidden=false;dbox.append(el("span",{text:"Unterlagen:"}));docs.forEach(e=>dbox.append(linkFor(e)))}else dbox.hidden=true;
@@ -1290,6 +1341,13 @@ function showCard(){
 }
 /* Karte während des Lernens bearbeiten oder löschen */
 function closeCardEditor(){const b=$("#cardEditor");b.hidden=true;b.replaceChildren()}
+function closeTagBox(){const b=$("#tagBox");b.hidden=true;b.replaceChildren()}
+function syncCardTags(){const x=Q.map&&Q.map[Q.queue[0]],e=$("#cardTags");e.replaceChildren();if(!x)return;cardTags(x.c).forEach(t=>e.append(el("span",{class:"tagchip static",text:"🏷 "+t})))}
+$("#cardTag").addEventListener("click",()=>{
+  if(!Q.active)return;const x=Q.map[Q.queue[0]];if(!x)return;
+  const b=$("#tagBox");if(!b.hidden){closeTagBox();return}
+  b.replaceChildren(tagEditor(x.c,x.d,()=>{syncCardTags();refreshAll()}));b.hidden=false;b.scrollIntoView({block:"nearest"});
+});
 function openCardEditor(){
   if(!Q.active)return;
   const x=Q.map[Q.queue[0]];if(!x)return;
@@ -1793,7 +1851,7 @@ let lib={view:"list",deckId:null};
 function renderLib(){
   const v=lib.view;
   if(v==="import")renderImport();else if(v==="topics")renderTopics();else if(v==="deck")renderDeck();
-  else if(v==="newdeck")renderNewDeck();else if(v==="paused")renderPaused("p");else if(v==="known")renderPaused("k");else renderLibList();
+  else if(v==="newdeck")renderNewDeck();else if(v==="paused")renderPaused("p");else if(v==="known")renderPaused("k");else if(v==="tags")renderTags();else renderLibList();
 }
 function goLib(view,deckId){lib.view=view;lib.deckId=deckId||null;renderLib();window.scrollTo(0,0)}
 const backBtn=()=>el("div",{class:"row"},el("button",{class:"btn small",type:"button",onclick:()=>goLib("list")},"← Bibliothek"));
@@ -1838,6 +1896,8 @@ function renderLibList(){
   }
   const np=pausedCards().length;
   b.append(el("button",{class:"pausedbar",type:"button",onclick:()=>goLib("paused")},el("span",null,el("b",{text:"⏸ Pausiert"}),el("br"),el("small",{text:np?np+(np===1?" Karte wird nicht abgefragt":" Karten werden nicht abgefragt"):"Keine pausierten Karten. Pausieren geht beim Lernen mit ⏸."})),el("span",{class:"chev","aria-hidden":"true",text:">"})));
+  const ntg=allTags().length;
+  b.append(el("button",{class:"pausedbar",type:"button",onclick:()=>goLib("tags")},el("span",null,el("b",{text:"🏷 Tags"}),el("br"),el("small",{text:ntg?ntg+(ntg===1?" Tag":" Tags")+", jeden einzeln lernen":"Noch keine. Vergib Tags beim Lernen mit 🏷 oder bei den Karten."})),el("span",{class:"chev","aria-hidden":"true",text:">"})));
   const nk=knownCards().length;
   b.append(el("button",{class:"pausedbar",type:"button",onclick:()=>goLib("known")},el("span",null,el("b",{text:"✅ Sicher gewusst"}),el("br"),el("small",{text:nk?nk+(nk===1?" Karte wird nicht mehr abgefragt":" Karten werden nicht mehr abgefragt"):"Noch keine. Beim Lernen markierst du sichere Karten mit ✓."})),el("span",{class:"chev","aria-hidden":"true",text:">"})));
   const sorted=S.decks.slice().sort((a,b)=>dueCount(b)-dueCount(a)||(b.updated||b.created||0)-(a.updated||a.created||0));
@@ -2056,6 +2116,55 @@ function renderTopics(){
 }
 
 
+/* ---------- Tags verwalten und einzeln lernen ---------- */
+let tagRen=null;
+function renderTags(){
+  const b=$("#libBody");b.replaceChildren();
+  b.append(backBtn(),el("h2",{text:"🏷 Tags"}),
+    el("p",{class:"syncnote",style:"margin:0",text:"Tags sind frei wählbare Schlagwörter für einzelne Karten, zum Beispiel „schwer“ oder „Prüfung“. Vergeben kannst du sie beim Lernen mit 🏷 unter der Karte oder in der Kartenliste eines Stapels. Jeden Tag kannst du hier als eigene Lernrunde starten, er steht auch unter „Lernen“ in der Auswahl."}));
+  const auto=el("button",{class:"btn",type:"button"},"Schwierige Karten automatisch als „schwer“ taggen");
+  auto.addEventListener("click",()=>{
+    let n=0;const ds=new Set();
+    S.decks.forEach(d=>d.cards.forEach(c=>{if((c.bad||0)>=2&&(c.bad||0)>=(c.ok||0)&&addTag(c,"schwer")){n++;ds.add(d)}}));
+    ds.forEach(d=>{d.updated=Date.now();saveDeck(d)});refreshAll();renderTags();
+    toast(n?n+(n===1?" Karte":" Karten")+" mit „schwer“ getaggt":"Keine neuen schwierigen Karten gefunden (mindestens 2× nochmal und öfter nochmal als gewusst).");
+  });
+  b.append(el("div",{class:"row"},auto),el("span",{class:"syncnote",text:"Als schwierig gilt: mindestens 2× „Nochmal“ und nicht öfter gewusst als „Nochmal“."}));
+  const ts=allTags();
+  if(!ts.length){b.append(el("div",{class:"empty",text:"Noch keine Tags. Tippe beim Lernen auf 🏷 unter der Karte."}));return}
+  ts.forEach(t=>{
+    const due=cardsOf({kind:"tag",id:t.name}).filter(x=>isDue(x.c)).length;
+    const row=el("div",{class:"panel grid",style:"gap:8px"});
+    if(tagRen===tagKey(t.name)){
+      const inp=el("input",{type:"text",maxlength:"24"});inp.value=t.name;
+      const ok=el("button",{class:"btn small primary",type:"button"},"Speichern"),no=el("button",{class:"btn small",type:"button"},"Abbrechen");
+      const save=()=>{
+        const nn=cleanTag(inp.value);if(!nn){toast("Der Name darf nicht leer sein");return}
+        const ds=new Set();
+        S.decks.forEach(d=>d.cards.forEach(c=>{if(hasTag(c,t.name)){removeTag(c,t.name);if(!hasTag(c,nn)){if(!Array.isArray(c.t))c.t=[];c.t.push(nn)}ds.add(d)}}));
+        ds.forEach(d=>{d.updated=Date.now();saveDeck(d)});tagRen=null;refreshAll();renderTags();toast("Tag umbenannt");
+      };
+      ok.addEventListener("click",save);inp.addEventListener("keydown",e=>{if(e.key==="Enter")save()});
+      no.addEventListener("click",()=>{tagRen=null;renderTags()});
+      row.append(el("div",{class:"row",style:"flex-wrap:nowrap"},inp,ok,no));
+    }else{
+      row.append(el("div",{class:"row between"},el("b",{text:"🏷 "+t.name}),el("span",{class:"syncnote",text:t.live+(t.live===1?" Karte":" Karten")+(due?", "+due+" fällig":"")+(t.n>t.live?" · "+(t.n-t.live)+" pausiert/sicher":"")})));
+      const go=el("button",{class:"btn primary small",type:"button"},"Alle lernen"),gd=el("button",{class:"btn small",type:"button"},"Nur fällige"+(due?" ("+due+")":""));
+      go.disabled=!t.live;gd.disabled=!due;
+      go.addEventListener("click",()=>startFrom("bib",{kind:"tag",id:t.name},"all",0));
+      gd.addEventListener("click",()=>startFrom("bib",{kind:"tag",id:t.name},"due",0));
+      const ren=el("button",{class:"btn small",type:"button"},"Umbenennen"),del=el("button",{class:"btn small danger",type:"button"},"Tag löschen");
+      ren.addEventListener("click",()=>{tagRen=tagKey(t.name);renderTags()});
+      del.addEventListener("click",()=>armConfirm(del,"Von "+t.n+" Karten entfernen?",()=>{
+        const ds=new Set();S.decks.forEach(d=>d.cards.forEach(c=>{if(hasTag(c,t.name)){removeTag(c,t.name);ds.add(d)}}));
+        ds.forEach(d=>{d.updated=Date.now();saveDeck(d)});refreshAll();renderTags();toast("Tag gelöscht, die Karten bleiben erhalten");
+      }));
+      row.append(el("div",{class:"row"},go,gd,ren,del));
+    }
+    b.append(row);
+  });
+}
+
 /* ---------- Pausierte Karten ---------- */
 const pSel=new Set();
 function renderPaused(kind){
@@ -2098,7 +2207,7 @@ function renderPaused(kind){
 }
 
 /* ---------- Stapel-Details ---------- */
-let editCard=null;
+let editCard=null,tagOpen=null;
 function renderDeck(){
   const d=S.decks.find(x=>x.id===lib.deckId);
   if(!d){lib.view="list";return renderLib()}
@@ -2133,8 +2242,8 @@ function renderDeck(){
     x.addEventListener("click",()=>armConfirm(x,"Löschen?",()=>{d.cards=d.cards.filter(k=>k.id!==c.id);d.updated=Date.now();saveDeck(d);refreshAll();renderDeck()}));
     list.append(el("div",{class:"cardrow"},
       el("div",{style:"min-width:0;display:grid;gap:3px"},el("div",{class:"f",text:c.f}),el("div",{class:"b",text:c.b}),
-        el("div",{class:"lv",text:(c.p?"⏸ pausiert · ":"")+(c.k?"✅ sicher · ":"")+(c.box?"Fach "+c.box:"Neu")+(c.ok||c.bad?" · "+c.ok+"× gewusst, "+c.bad+"× nochmal":"")})),
-      el("div",{class:"row",style:"flex-wrap:nowrap"},el("button",{class:"btn small",type:"button",onclick:()=>{editCard=c.id;renderDeck()}},"Bearbeiten"),
+        el("div",{class:"lv",text:(c.p?"⏸ pausiert · ":"")+(c.k?"✅ sicher · ":"")+(c.box?"Fach "+c.box:"Neu")+(c.ok||c.bad?" · "+c.ok+"× gewusst, "+c.bad+"× nochmal":"")}),tagLine(c),tagOpen===c.id?tagEditor(c,d,()=>{renderDeck();refreshAll()}):null),
+      el("div",{class:"row",style:"flex-wrap:wrap"},el("button",{class:"btn small",type:"button",title:"Tags",onclick:()=>{tagOpen=tagOpen===c.id?null:c.id;renderDeck()}},"🏷"+(cardTags(c).length?" "+cardTags(c).length:"")),el("button",{class:"btn small",type:"button",onclick:()=>{editCard=c.id;renderDeck()}},"Bearbeiten"),
         el("button",{class:"btn small",type:"button",title:off(c)?"Wieder aktivieren":"Pausieren",onclick:()=>{if(off(c)){delete c.p;delete c.k}else c.p=1;d.updated=Date.now();saveDeck(d);refreshAll();renderDeck();toast(off(c)?"Karte pausiert":"Karte aktiviert")}},off(c)?"▶ Aktivieren":"⏸ Pausieren"),
         c.k?null:el("button",{class:"btn small",type:"button",title:"Sicher gewusst, nicht mehr abfragen",onclick:()=>{delete c.p;c.k=1;d.updated=Date.now();saveDeck(d);refreshAll();renderDeck();toast("Karte als sicher markiert")}},"✅ Sicher"),x)));
   });
@@ -2166,7 +2275,7 @@ function planRestore(obj){
   for(const d of obj.decks){
     if(!d||typeof d.id!=="string"||!d.id||!Array.isArray(d.cards))continue;
     const cards=d.cards.filter(c=>c&&typeof c.f==="string"&&typeof c.b==="string"&&c.f.trim()&&c.b.trim())
-      .map(c=>({id:typeof c.id==="string"&&c.id?c.id:uidGen("c"),f:c.f,b:c.b,box:clampInt(c.box,0,MAXBOX),due:Number(c.due)||0,ok:Number(c.ok)||0,bad:Number(c.bad)||0,...(c.k?{k:1}:c.p?{p:1}:{})}));
+      .map(c=>({id:typeof c.id==="string"&&c.id?c.id:uidGen("c"),f:c.f,b:c.b,box:clampInt(c.box,0,MAXBOX),due:Number(c.due)||0,ok:Number(c.ok)||0,bad:Number(c.bad)||0,...(c.k?{k:1}:c.p?{p:1}:{}),...(Array.isArray(c.t)&&c.t.length?{t:c.t.map(cleanTag).filter(Boolean).slice(0,12)}:{})}));
     din.push({id:d.id,title:String(d.title||"Ohne Titel").slice(0,200),topic:typeof d.topic==="string"?d.topic:"",created:Number(d.created)||Date.now(),updated:Number(d.updated)||0,cards});
   }
   if(!din.length&&!bt.length)return {error:"In dieser Sicherung sind keine Stapel enthalten."};
@@ -2494,6 +2603,7 @@ function labRender(){
   sel.append(el("option",{value:"all",text:"Alles (alle Themen gemischt)"}));
   if(S.sets.length){const g=el("optgroup",{label:"Lernstapel"});S.sets.forEach(s=>g.append(el("option",{value:"set:"+s.id,text:s.name})));sel.append(g)}
   if(S.topics.length){const g=el("optgroup",{label:"Einzelne Themen (mit Unterthemen)"});flatTopics().forEach(x=>g.append(el("option",{value:"topic:"+x.t.id,text:topicPath(x.t.id)})));sel.append(g)}
+  {const ts=allTags();if(ts.length){const g=el("optgroup",{label:"Tags"});ts.forEach(t=>g.append(el("option",{value:"tag:"+t.name,text:"🏷 "+t.name+" ("+t.live+")"})));sel.append(g)}}
   if([...sel.options].some(o=>o.value===L.src))sel.value=L.src;else L.src="all";
   const nsel=el("select",{});[10,20,30].forEach(n=>nsel.append(el("option",{value:n,text:n+" Fragen"})));nsel.value=L.n;
   const info=el("span",{class:"syncnote"}),grid=el("div",{class:"labmodes"});
